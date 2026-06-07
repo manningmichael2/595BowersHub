@@ -1,0 +1,18 @@
+{
+  "name": "Recall Fact",
+  "hubId": "recall",
+  "description": "Searches the user's personal knowledge base for previously-saved facts. Use this when the user asks about themselves, their accounts, their preferences, their tools, or anything else they may have shared in a prior conversation. Returns matching lines grouped by topic file. If no matches are found, tell the user nothing has been saved on that topic yet. Required: query (a keyword or short phrase to search for, e.g., 'ally savings', 'manon allergies', 'dewalt planer').",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "query": {
+        "description": "A keyword or short phrase to search the knowledge base for (case-insensitive substring match). Use the most distinctive word or two from what you're looking for. Examples: 'ally', 'emergency fund', 'shellfish', 'planer'. Required.",
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Ask Finance Anything",
+  "hubId": "ask-finance",
+  "description": "Answers ANY finance question by having an LLM translate it to SQL and query the finance database. Use this as a catch-all for questions the specific skills (get-transactions, get-balances, filter-transactions, spending-summary) don't cover. Perfect for nuanced questions like 'how much did I spend on coffee in March', 'what's my average grocery bill', 'recurring subscriptions', 'month-over-month comparisons', or any custom analysis. The question parameter is required.",
+  "author": "Michael",
+  "version": "1.0.1",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "question": {
+        "description": "A natural language question about finances. Be specific - include date ranges, categories, accounts, or amounts when relevant. Examples: 'How much did I spend at Starbucks last month?', 'What are my recurring subscriptions?', 'Compare my April and May spending by category'.",
+        "type": "string"
+      }
+    }
+  }
+}

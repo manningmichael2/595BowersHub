@@ -1,0 +1,22 @@
+{
+  "name": "Spending Summary",
+  "hubId": "spending-summary",
+  "description": "Generates a spending summary with totals by category for a given date range. Use this when the user asks about spending breakdowns, where their money is going, budget overview, or category totals.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "start_date": {
+        "description": "Start date in YYYY-MM-DD format. Defaults to 30 days ago.",
+        "type": "string"
+      },
+      "end_date": {
+        "description": "End date in YYYY-MM-DD format. Defaults to today.",
+        "type": "string"
+      }
+    }
+  }
+}

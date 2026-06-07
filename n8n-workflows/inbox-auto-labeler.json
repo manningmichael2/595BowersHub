@@ -1,0 +1,528 @@
+{
+  "name": "Inbox Auto-Labeler",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "options": {},
+        "format": "resolved",
+        "downloadAttachments": true,
+        "postProcessAction": "read"
+      },
+      "id": "n-imap",
+      "name": "IMAP Trigger (Inbox)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        200,
+        500
+      ],
+      "credentials": {
+        "imap": {
+          "id": "ISns0rRRRmIETF2F",
+          "name": "Gmail IMAP (App Password)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const msg = item.json;\n  const subj = msg.subject || \"\";\n  const from = (msg.from && (msg.from.value?.[0]?.address || msg.from.text)) || \"\";\n  const messageId = msg.messageId || msg.uid || msg.headers?.[\"message-id\"] || \"\";\n  const uid = msg.uid;\n\n  // Get body text (strip HTML)\n  const html = msg.html || msg.textAsHtml || \"\";\n  const text = msg.text || \"\";\n  const stripped = html.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();\n  const bodyPreview = (stripped || text).slice(0, 1000);\n\n  // Check attachments\n  const bin = item.binary || {};\n  const attachmentNames = Object.keys(bin)\n    .map(k => bin[k].fileName || bin[k].mimeType || 'unknown')\n    .filter(n => n);\n\n  out.push({\n    json: {\n      message_id: messageId,\n      uid: uid,\n      subject: subj,\n      from_address: from,\n      body_preview: bodyPreview,\n      body_html: html,\n      body_text: stripped || text,\n      has_attachments: attachmentNames.length > 0,\n      attachment_names: attachmentNames.join(', '),\n    },\n    // Pass binary through for attachment processing later\n    binary: item.binary || {},\n  });\n}\nreturn out;\n"
+      },
+      "id": "n-extract",
+      "name": "Extract Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\n\nconst prompt = `Classify this email. Is it a purchase receipt, order confirmation, payment notification, or invoice?\n\nSubject: ${ctx.subject}\nFrom: ${ctx.from_address}\nHas attachments: ${ctx.has_attachments}${ctx.attachment_names ? ' (' + ctx.attachment_names + ')' : ''}\nBody preview:\n---\n${ctx.body_preview.slice(0, 800)}\n---\n\nRespond with ONLY a JSON object:\n{\n  \"is_receipt\": true/false,\n  \"confidence\": \"high\"/\"medium\"/\"low\",\n  \"reason\": \"one sentence explanation\"\n}\n\nRules:\n- \"is_receipt\" = true for: purchase receipts, order confirmations with totals, payment confirmations, invoices, subscription charges, e-receipts\n- \"is_receipt\" = false for: shipping notifications without totals, marketing emails, newsletters, account alerts, password resets, social notifications, promotional offers, delivery updates without charges\n- When in doubt, lean toward false (we'd rather miss a receipt than create false transactions)`;\n\nconst payload = {\n  model: \"claude-haiku-4-5-20251001\",\n  max_tokens: 256,\n  messages: [{ role: \"user\", content: prompt }]\n};\n\nreturn [{\n  json: {\n    ...ctx,\n    classify_payload: payload,\n  }\n}];\n"
+      },
+      "id": "n-classify-prompt",
+      "name": "Build Classify Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.classify_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-classify-call",
+      "name": "Haiku Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Classify Prompt').first().json;\nconst resp = $json;\nlet text = \"\";\ntry { text = (resp.content && resp.content[0] && resp.content[0].text) || \"\"; }\ncatch (e) { /* fall through */ }\n\ntext = text.trim().replace(/^```(?:json)?/, \"\").replace(/```$/, \"\").trim();\n\nlet classification = { is_receipt: false, confidence: \"low\", reason: \"parse error\" };\ntry {\n  classification = JSON.parse(text);\n} catch (e) {\n  classification = { is_receipt: false, confidence: \"low\", reason: `parse error: ${text.slice(0, 100)}` };\n}\n\n// Only process as receipt if confidence is high or medium\nconst shouldProcess = classification.is_receipt === true\n  && (classification.confidence === \"high\" || classification.confidence === \"medium\");\n\nreturn [{\n  json: {\n    ...ctx,\n    is_receipt: !!classification.is_receipt,\n    confidence: classification.confidence || \"unknown\",\n    reason: classification.reason || \"\",\n    should_process: shouldProcess,\n  }\n}];\n"
+      },
+      "id": "n-parse-classify",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "should-process",
+              "leftValue": "={{$json.should_process}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-if-receipt",
+      "name": "Is Receipt?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    action: \"skipped\",\n    message_id: ctx.message_id,\n    subject: ctx.subject,\n    from: ctx.from_address,\n    is_receipt: ctx.is_receipt,\n    confidence: ctx.confidence,\n    reason: ctx.reason,\n  }\n}];\n"
+      },
+      "id": "n-sum-skip",
+      "name": "Summarize (skip)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Classification').first().json;\n\n// Skip if body is too short\nif ((ctx.body_text || \"\").length < 200) {\n  return [{ json: { ...ctx, skip_body: true, reason_skip: \"body too short\" } }];\n}\n\nconst idHash = (ctx.message_id || String(Date.now()))\n  .replace(/[^A-Za-z0-9]/g, '')\n  .slice(0, 24) || `t${Date.now()}`;\nconst inboxName = `autolabel-body-${idHash}.html`;\nconst inboxPath = `/files/inbox/${inboxName}`;\n\nconst content = ctx.body_html || ctx.body_text;\nconst b64 = Buffer.from(content, 'utf-8').toString('base64');\n\nreturn [{\n  json: {\n    ...ctx,\n    skip_body: false,\n    inbox_full_path: inboxPath,\n    inbox_rel_path:  `inbox/${inboxName}`,\n    original_name:   `${ctx.subject || 'email-receipt'}.html`,\n    base64:          b64,\n    mime:            'text/html',\n    size_bytes:      Buffer.byteLength(content, 'utf-8'),\n    write_payload:   { path: inboxPath, base64: b64, overwrite: true },\n    probe_payload:   { path: inboxPath },\n  }\n}];\n"
+      },
+      "id": "n-prep-body",
+      "name": "Prep Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/write-base64",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.write_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-write-body",
+      "name": "Write Body",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/probe",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep Body').first().json.probe_payload) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-probe-body",
+      "name": "Probe Body",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prep Body').first().json;\nconst probe = $json;\nif (!probe.ok || !probe.exists) {\n  throw new Error(`Body file not found: ${ctx.inbox_full_path}`);\n}\n\n// Truncate body for prompt\nconst bodyForPrompt = (ctx.body_text || \"\").slice(0, 8000);\n\nconst extractPrompt = `You are extracting receipt/purchase information from an email body.\nThe email subject was: \"${ctx.subject || 'unknown'}\"\nThe sender was: ${ctx.from_address || 'unknown'}\n\nHere is the email body text:\n---\n${bodyForPrompt}\n---\n\nReturn ONLY a JSON object with these keys:\n- merchant (string|null): the store/service name\n- total (number|null): the total amount charged (as a positive number, e.g. 17.49)\n- currency (string|null): e.g. \"USD\"\n- date (string|null): purchase date in YYYY-MM-DD format\n- payment_method (string|null): e.g. \"Visa ending 1234\"\n- line_items (array|null): array of {description, qty, price} if visible\n- notes (string|null): any other relevant info (order number, shipping, etc.)\n\nIf this email does NOT appear to be a purchase receipt or order confirmation, return:\n{\"merchant\": null, \"total\": null, \"not_a_receipt\": true}\n\nReturn the JSON object and nothing else.`;\n\nconst payload = {\n  model: \"claude-haiku-4-5-20251001\",\n  max_tokens: 1024,\n  messages: [{ role: \"user\", content: extractPrompt }]\n};\n\nreturn [{\n  json: {\n    ...ctx,\n    sha256:          probe.sha256,\n    size_bytes:      probe.size_bytes || ctx.size_bytes,\n    haiku_payload:   payload,\n  }\n}];\n"
+      },
+      "id": "n-parse-body-prompt",
+      "name": "Parse Body and Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.haiku_payload) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "n-extract-body",
+      "name": "Haiku Extract Body",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        650
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Body and Prompt').first().json;\nconst resp = $json;\nlet text = \"\";\ntry { text = (resp.content && resp.content[0] && resp.content[0].text) || \"\"; }\ncatch (e) { /* fall through */ }\n\ntext = text.trim().replace(/^```(?:json)?/, \"\").replace(/```$/, \"\").trim();\n\nlet extracted = null;\nlet isReceipt = false;\ntry {\n  extracted = JSON.parse(text);\n  if (extracted.not_a_receipt) {\n    isReceipt = false;\n  } else if (extracted.merchant && typeof extracted.total === 'number') {\n    isReceipt = true;\n  }\n} catch (e) {\n  extracted = { _raw: text, _parse_error: String(e) };\n}\n\nconst summary = isReceipt\n  ? `${extracted.merchant} - ${extracted.total}`\n  : (extracted?.merchant || text.slice(0, 80));\n\nreturn [{\n  json: {\n    ...ctx,\n    ai_summary:   summary,\n    ai_extracted: extracted,\n    ai_model:     \"claude-haiku-4-5-20251001\",\n    is_receipt:   isReceipt,\n    has_total:    isReceipt && typeof extracted?.total === 'number',\n  }\n}];\n"
+      },
+      "id": "n-parse-extract",
+      "name": "Parse Body Extract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO files.assets (path, original_name, mime, size_bytes, sha256, domain, uploaded_by, ai_summary, ai_extracted, ai_model, processed_at) VALUES (  '{{$json.inbox_full_path}}',   '{{($json.original_name || '').replace(/'/g, \"''\")}}',   '{{$json.mime}}',   {{$json.size_bytes}},   '{{$json.sha256}}',   'receipt',   'email:{{($json.from_address || '').replace(/'/g, \"''\")}}',   '{{($json.ai_summary || '').replace(/'/g, \"''\")}}',   '{{JSON.stringify($json.ai_extracted || {}).replace(/'/g, \"''\")}}'::jsonb,   '{{$json.ai_model}}',   now()) ON CONFLICT (sha256) DO NOTHING RETURNING id::text AS id",
+        "options": {}
+      },
+      "id": "n-insert-body",
+      "name": "Insert Body Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2600,
+        650
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Body Extract').first().json;\nconst inserted = $input.first().json;\n// ON CONFLICT DO NOTHING returns no rows if dedup hit\nconst assetId = inserted?.id || null;\n\nreturn [{\n  json: {\n    ...ctx,\n    asset_id: assetId,\n    body_dedup: !assetId,\n    should_create_tx: !!assetId && ctx.has_total,\n    tx_payload: assetId && ctx.has_total\n      ? { asset_id: assetId, uploaded_by: `email:${ctx.from_address || 'unknown'}` }\n      : null,\n  }\n}];\n"
+      },
+      "id": "n-post-insert",
+      "name": "Body Post Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "VGsnOuIM9aLiIxSw"
+        },
+        "workflowInputs": {
+          "value": "={{ $json.tx_payload }}",
+          "mappingMode": "passThrough"
+        },
+        "options": {}
+      },
+      "id": "n-body-tx",
+      "name": "Receipt to Tx (body)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3000,
+        650
+      ],
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    action: \"processed\",\n    message_id: ctx.message_id,\n    subject: ctx.subject,\n    from: ctx.from_address,\n    confidence: ctx.confidence,\n  }\n}];\n"
+      },
+      "id": "n-sum-done",
+      "name": "Summarize (done)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        650
+      ]
+    }
+  ],
+  "connections": {
+    "IMAP Trigger (Inbox)": {
+      "main": [
+        [
+          {
+            "node": "Extract Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Context": {
+      "main": [
+        [
+          {
+            "node": "Build Classify Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Classify Prompt": {
+      "main": [
+        [
+          {
+            "node": "Haiku Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Haiku Classify": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Is Receipt?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Receipt?": {
+      "main": [
+        [
+          {
+            "node": "Summarize (skip)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prep Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Body": {
+      "main": [
+        [
+          {
+            "node": "Write Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Body": {
+      "main": [
+        [
+          {
+            "node": "Probe Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Body": {
+      "main": [
+        [
+          {
+            "node": "Parse Body and Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Body and Prompt": {
+      "main": [
+        [
+          {
+            "node": "Haiku Extract Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Haiku Extract Body": {
+      "main": [
+        [
+          {
+            "node": "Parse Body Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Body Extract": {
+      "main": [
+        [
+          {
+            "node": "Insert Body Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Body Asset": {
+      "main": [
+        [
+          {
+            "node": "Body Post Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Post Insert": {
+      "main": [
+        [
+          {
+            "node": "Receipt to Tx (body)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt to Tx (body)": {
+      "main": [
+        [
+          {
+            "node": "Summarize (done)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

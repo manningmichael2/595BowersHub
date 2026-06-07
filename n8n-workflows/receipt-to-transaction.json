@@ -1,0 +1,301 @@
+{
+  "name": "Receipt to Transaction",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "receipt-to-transaction",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        400
+      ],
+      "webhookId": "receipt-to-transaction-webhook"
+    },
+    {
+      "parameters": {},
+      "id": "n-exec-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst assetId = (body.asset_id || \"\").trim();\nif (!assetId) throw new Error(\"Missing 'asset_id'\");\n\nreturn [{\n  json: {\n    asset_id:    assetId,\n    account_id:  body.account_id || \"EMAIL_RECEIPT\",\n    uploaded_by: body.uploaded_by || \"unknown\",\n    started_at:  Date.now(),\n  }\n}];\n"
+      },
+      "id": "n-validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id::text AS asset_id, domain, ai_extracted, ai_summary, mime, original_name FROM files.assets WHERE id = '{{$json.asset_id}}'::uuid LIMIT 1",
+        "options": {}
+      },
+      "id": "n-fetch",
+      "name": "Fetch Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        600,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r && r.asset_id);\nif (rows.length === 0) {\n  throw new Error(`asset_id ${ctx.asset_id} not found in files.assets`);\n}\nconst a = rows[0];\nif (a.domain !== 'receipt') {\n  throw new Error(`asset domain is '${a.domain}', expected 'receipt'`);\n}\nconst x = a.ai_extracted || {};\n\n// Be defensive: vision can return missing/garbage fields.\nconst merchant = (x.merchant || \"Unknown merchant\").toString().slice(0, 200);\nconst total    = (typeof x.total === 'number') ? x.total : null;\nconst date     = (x.date && /^\\d{4}-\\d{2}-\\d{2}$/.test(x.date)) ? x.date : null;\nconst payment  = (x.payment_method || \"\").toString().slice(0, 80);\n\nif (total === null) {\n  throw new Error(`Receipt has no parseable total. ai_extracted=${JSON.stringify(x)}`);\n}\n\n// Build the transactions row.\n// id: deterministic per-asset so re-imports are idempotent.\nconst txId       = `email:${a.asset_id}`;\nconst amount     = -Math.abs(total);              // spending = negative\nconst postedDate = date || (new Date().toISOString().slice(0,10));\nconst description = merchant;\n// memo holds the extra context.\nconst memoBits = [];\nif (payment) memoBits.push(`paid via ${payment}`);\nif (a.original_name) memoBits.push(`source: ${a.original_name}`);\nif (a.ai_summary) memoBits.push(a.ai_summary);\nconst memo = memoBits.join(' | ').slice(0, 500);\n\nreturn [{\n  json: {\n    ...ctx,\n    asset_id:     a.asset_id,\n    transaction_id: txId,\n    amount:       amount,\n    posted_date:  postedDate,\n    description:  description,\n    memo:         memo,\n    merchant:     merchant,\n    total:        total,\n    payment_method: payment,\n    extracted_date: date,\n  }\n}];\n"
+      },
+      "id": "n-parse",
+      "name": "Parse Asset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id::text AS id FROM public.transactions WHERE id = '{{$json.transaction_id}}' LIMIT 1",
+        "options": {}
+      },
+      "id": "n-exist",
+      "name": "Existence Check",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        900,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Asset').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r && r.id);\nreturn [{ json: { ...ctx, already_exists: rows.length > 0 } }];\n"
+      },
+      "id": "n-exist-branch",
+      "name": "Existence Branch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        950,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.transactions (id, account_id, posted_date, amount, description, memo, source) VALUES (  '{{$json.transaction_id}}',   '{{$json.account_id}}',   '{{$json.posted_date}}',   {{$json.amount}},   '{{($json.description || '').replace(/'/g, \"''\")}}',   '{{($json.memo || '').replace(/'/g, \"''\")}}',   'email') ON CONFLICT (id) DO NOTHING",
+        "options": {}
+      },
+      "id": "n-insert-tx",
+      "name": "Insert Transaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Existence Branch').first().json;\nreturn [{ json: ctx }];\n"
+      },
+      "id": "n-post-insert",
+      "name": "Post Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.transaction_files (transaction_id, asset_id, is_primary) VALUES ('{{$json.transaction_id}}', '{{$json.asset_id}}'::uuid, true) ON CONFLICT (transaction_id, asset_id) DO NOTHING",
+        "options": {}
+      },
+      "id": "n-link",
+      "name": "Link Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1400,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Existence Branch').first().json;\nreturn [{\n  json: {\n    ok: true,\n    transaction_id: ctx.transaction_id,\n    asset_id:       ctx.asset_id,\n    amount:         ctx.amount,\n    merchant:       ctx.merchant,\n    posted_date:    ctx.posted_date,\n    skipped:        !!ctx.already_exists,\n    duration_ms:    Date.now() - (ctx.started_at || Date.now()),\n  }\n}];\n"
+      },
+      "id": "n-format",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Fetch Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Asset": {
+      "main": [
+        [
+          {
+            "node": "Parse Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Asset": {
+      "main": [
+        [
+          {
+            "node": "Existence Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existence Check": {
+      "main": [
+        [
+          {
+            "node": "Existence Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existence Branch": {
+      "main": [
+        [
+          {
+            "node": "Insert Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Transaction": {
+      "main": [
+        [
+          {
+            "node": "Post Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Insert": {
+      "main": [
+        [
+          {
+            "node": "Link Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link Asset": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

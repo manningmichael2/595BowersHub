@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>595BowersHub Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
+        .topbar { display: flex; align-items: center; padding: 1rem 1.5rem; gap: 1rem; border-bottom: 1px solid #21262d; }
+        .topbar h1 { font-size: 1.3rem; font-weight: 600; color: #fff; }
+        .topbar h1 span { color: #58a6ff; }
+        .topbar .datetime { color: #8b949e; font-size: 0.85rem; }
+        .topbar .spacer { flex: 1; }
+        .topbar .views { display: flex; gap: 0.5rem; }
+        .topbar .views button { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .topbar .views button.active { background: #58a6ff; color: #0f1117; border-color: #58a6ff; }
+        .topbar .views button:hover:not(.active) { background: #30363d; }
+        .settings-btn { background: #21262d; border: 1px solid #30363d; color: #8b949e; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .settings-btn:hover { background: #30363d; color: #e1e4e8; }
+        .grid-stack { padding: 1rem; }
+        .grid-stack-item-content { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1rem; overflow: auto; }
+        .grid-stack-item-content h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin-bottom: 0.75rem; }
+        .metric { display: flex; justify-content: space-between; align-items: baseline; padding: 0.35rem 0; border-bottom: 1px solid #21262d; }
+        .metric:last-child { border-bottom: none; }
+        .metric .label { color: #c9d1d9; font-size: 0.85rem; }
+        .metric .value { color: #58a6ff; font-weight: 600; font-size: 1rem; }
+        .metric .value.green { color: #3fb950; }
+        .metric .value.yellow { color: #d29922; }
+        .metric .value.red { color: #f85149; }
+        .metric .value.muted { color: #8b949e; font-weight: 400; font-size: 0.85rem; }
+        .activity-item { padding: 0.4rem 0; border-bottom: 1px solid #21262d; font-size: 0.8rem; color: #c9d1d9; }
+        .activity-item:last-child { border-bottom: none; }
+        .activity-item .time { color: #8b949e; font-size: 0.7rem; }
+        .activity-item .amount { float: right; font-weight: 600; }
+        .activity-item .amount.neg { color: #f85149; }
+        .activity-item .amount.pos { color: #3fb950; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 0.4rem; }
+        .status-dot.green { background: #3fb950; }
+        .status-dot.red { background: #f85149; }
+        .loading { color: #8b949e; font-style: italic; font-size: 0.85rem; }
+        a { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        /* Settings modal */
+        .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:1000; justify-content:center; align-items:center; }
+        .modal-overlay.open { display:flex; }
+        .modal { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:1.5rem; width:400px; max-height:80vh; overflow-y:auto; }
+        .modal h3 { color:#fff; margin-bottom:1rem; }
+        .modal label { display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0; color:#c9d1d9; font-size:0.9rem; cursor:pointer; }
+        .modal input[type=checkbox] { accent-color:#58a6ff; }
+        .modal .actions { margin-top:1rem; display:flex; gap:0.5rem; justify-content:flex-end; }
+        .modal button { padding:0.4rem 1rem; border-radius:4px; border:1px solid #30363d; cursor:pointer; font-size:0.85rem; }
+        .modal .btn-primary { background:#58a6ff; color:#0f1117; border-color:#58a6ff; }
+        .modal .btn-secondary { background:#21262d; color:#c9d1d9; }
+        .footer { text-align:center; padding:1rem; color:#484f58; font-size:0.75rem; border-top:1px solid #21262d; }
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <h1>595<span>BowersHub</span></h1>
+        <span class="datetime" id="datetime"></span>
+        <span class="spacer"></span>
+        <div class="views" id="view-tabs"></div>
+        <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
+    </div>
+    <div class="grid-stack" id="grid"></div>
+    <div class="footer">Last refreshed: <span id="last-refresh">—</span> · Auto-refreshes every 60s</div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal">
+            <h3>Tile Settings</h3>
+            <div id="tile-toggles"></div>
+            <hr style="border-color:#30363d;margin:1rem 0">
+            <h3>Views</h3>
+            <div id="view-manager"></div>
+            <div class="actions">
+                <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+                <button class="btn-primary" onclick="saveSettings()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
+    <script>
+    // ========== TILE DEFINITIONS ==========
+    const TILES = {
+        weather:      { title: 'Weather — Clawson, MI', w:4, h:3, x:0, y:0 },
+        system:       { title: 'System Health', w:4, h:4, x:4, y:0 },
+        containers:   { title: 'Containers', w:4, h:4, x:8, y:0 },
+        finance:      { title: 'Finance', w:4, h:6, x:0, y:3 },
+        transactions: { title: 'Recent Transactions', w:4, h:5, x:4, y:4 },
+        inventory:    { title: 'Inventory', w:4, h:4, x:8, y:4 },
+        inbox:        { title: 'Files Inbox', w:4, h:3, x:0, y:9 },
+        knowledge:    { title: 'Knowledge Base', w:4, h:3, x:4, y:9 },
+        tailscale:    { title: 'Tailscale Devices', w:4, h:3, x:8, y:8 },
+        emails:       { title: 'Recent Emails', w:4, h:4, x:0, y:12 },
+        anthropic:    { title: 'Anthropic API', w:4, h:4, x:4, y:12 },
+        audiobookshelf: { title: 'Audiobookshelf', w:4, h:3, x:8, y:11 },
+        activity:     { title: 'Recent Activity', w:8, h:2, x:0, y:16 },
+    };
+
+    const DEFAULT_VIEWS = {
+        'Overview': Object.keys(TILES),
+        'Finance': ['finance','transactions','anthropic'],
+        'System': ['system','containers','tailscale','inbox'],
+    };
+
+    // ========== STATE ==========
+    let views = JSON.parse(localStorage.getItem('dashboard_views') || 'null') || DEFAULT_VIEWS;
+    let currentView = localStorage.getItem('dashboard_current_view') || 'Overview';
+    let grid = null;
+
+    // ========== GRID SETUP ==========
+    function initGrid() {
+        if (grid) grid.destroy(true);
+        const el = document.getElementById('grid');
+        el.innerHTML = '';
+        grid = GridStack.init({ column: 12, cellHeight: 60, margin: 8, animate: true, float: true }, el);
+
+        const enabledTiles = views[currentView] || Object.keys(TILES);
+        const savedLayout = JSON.parse(localStorage.getItem(`layout_${currentView}`) || 'null');
+
+        for (const id of enabledTiles) {
+            const def = TILES[id];
+            if (!def) continue;
+            const saved = savedLayout ? savedLayout.find(s => s.id === id) : null;
+            const opts = saved || { x: def.x, y: def.y, w: def.w, h: def.h };
+            grid.addWidget(`<div id="tile-${id}"><div class="grid-stack-item-content"><h2>${def.title}</h2><div id="${id}" class="tile-body"><span class="loading">Loading...</span></div></div></div>`, { ...opts, id });
+        }
+
+        grid.on('change', saveLayout);
+    }
+
+    function saveLayout() {
+        const items = grid.getGridItems().map(el => {
+            const node = el.gridstackNode;
+            return { id: node.id, x: node.x, y: node.y, w: node.w, h: node.h };
+        });
+        localStorage.setItem(`layout_${currentView}`, JSON.stringify(items));
+    }
+
+    // ========== VIEW MANAGEMENT ==========
+    function renderViewTabs() {
+        const el = document.getElementById('view-tabs');
+        el.innerHTML = Object.keys(views).map(name =>
+            `<button class="${name===currentView?'active':''}" onclick="switchView('${name}')">${name}</button>`
+        ).join('');
+    }
+
+    function switchView(name) {
+        currentView = name;
+        localStorage.setItem('dashboard_current_view', name);
+        renderViewTabs();
+        initGrid();
+        refresh();
+    }
+
+    // ========== SETTINGS ==========
+    function openSettings() { document.getElementById('settings-modal').classList.add('open'); renderSettings(); }
+    function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
+
+    function renderSettings() {
+        const toggles = document.getElementById('tile-toggles');
+        const enabled = views[currentView] || [];
+        toggles.innerHTML = Object.entries(TILES).map(([id, def]) =>
+            `<label><input type="checkbox" data-tile="${id}" ${enabled.includes(id)?'checked':''}> ${def.title}</label>`
+        ).join('');
+
+        const mgr = document.getElementById('view-manager');
+        mgr.innerHTML = Object.keys(views).map(name =>
+            `<label style="justify-content:space-between"><span>${name}</span>${name!=='Overview'?`<button class="btn-secondary" style="padding:0.2rem 0.5rem;font-size:0.75rem" onclick="deleteView('${name}')">✕</button>`:''}</label>`
+        ).join('') + `<label><input type="text" id="new-view-name" placeholder="New view name..." style="background:#0f1117;border:1px solid #30363d;color:#e1e4e8;padding:0.3rem;border-radius:4px;width:100%"></label><button class="btn-secondary" style="margin-top:0.5rem;width:100%" onclick="addView()">+ Add View</button>`;
+    }
+
+    function saveSettings() {
+        const checks = document.querySelectorAll('#tile-toggles input[type=checkbox]');
+        const enabled = [];
+        checks.forEach(c => { if (c.checked) enabled.push(c.dataset.tile); });
+        views[currentView] = enabled;
+        localStorage.setItem('dashboard_views', JSON.stringify(views));
+        closeSettings();
+        initGrid();
+        refresh();
+    }
+
+    function addView() {
+        const name = document.getElementById('new-view-name').value.trim();
+        if (name && !views[name]) {
+            views[name] = Object.keys(TILES);
+            localStorage.setItem('dashboard_views', JSON.stringify(views));
+            renderSettings();
+            renderViewTabs();
+        }
+    }
+
+    function deleteView(name) {
+        if (name === 'Overview') return;
+        delete views[name];
+        localStorage.setItem('dashboard_views', JSON.stringify(views));
+        if (currentView === name) switchView('Overview');
+        else { renderSettings(); renderViewTabs(); }
+    }
+
+    // ========== DATA LOADERS ==========
+    async function fetchJSON(url, opts={}) { try { const r=await fetch(url,opts); if(!r.ok)return null; return await r.json(); } catch{return null;} }
+
+    async function loadWeather() {
+        const el=document.getElementById('weather'); if(!el)return;
+        const d=await fetchJSON('/api/weather');
+        if(d&&d.ok){el.innerHTML=`<div class="metric"><span class="label">${d.icon} ${d.condition}</span><span class="value">${d.temp_f}°F</span></div><div class="metric"><span class="label">Feels like</span><span class="value muted">${d.feels_like_f}°F</span></div><div class="metric"><span class="label">Humidity</span><span class="value muted">${d.humidity}%</span></div><div class="metric"><span class="label">Wind</span><span class="value muted">${d.wind_mph} mph</span></div>`;}
+        else{el.innerHTML='<span class="loading">Unavailable</span>';}
+    }
+
+    async function loadSystem() {
+        const el=document.getElementById('system'); if(!el)return;
+        const [cpu,ram,disk,uptime,load,net]=await Promise.all(['system.cpu','system.ram','disk_space._','system.uptime','system.load','system.net'].map(c=>fetchJSON(`/api/proxy/netdata?path=api/v1/data%3Fchart=${c}%26points=1%26after=-1`)));
+        let cp='—',rp='—',dp='—',up='—',ld='—',lc='green',nt='—';
+        if(cpu&&cpu.data&&cpu.data[0]){const l=cpu.labels||[],v=cpu.data[0],ii=l.indexOf('idle');let t=0;for(let i=1;i<v.length;i++)if(i!==ii)t+=(v[i]||0);cp=t.toFixed(1);}
+        if(ram&&ram.data&&ram.data[0]){const l=ram.labels||[],v=ram.data[0],ui=l.indexOf('used'),tot=v.slice(1).reduce((a,b)=>a+(b||0),0);rp=tot>0?((v[ui>0?ui:1]/tot)*100).toFixed(1):'—';}
+        if(disk&&disk.data&&disk.data[0]){const l=disk.labels||[],v=disk.data[0],u=v[l.indexOf('used')]||0,a=v[l.indexOf('avail')]||0;dp=(u+a)>0?((u/(u+a))*100).toFixed(1):'—';}
+        if(uptime&&uptime.data&&uptime.data[0]){const s=uptime.data[0][1]||0;const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600);up=d>0?`${d}d ${h}h`:`${h}h`;}
+        if(load&&load.data&&load.data[0]){ld=`${(load.data[0][1]||0).toFixed(1)} / ${(load.data[0][2]||0).toFixed(1)} / ${(load.data[0][3]||0).toFixed(1)}`;if(load.data[0][1]>4)lc='red';else if(load.data[0][1]>2)lc='yellow';}
+        if(net&&net.data&&net.data[0]){const l=net.labels||[],v=net.data[0];nt=`↓${Math.abs(v[l.indexOf('received')]||0).toFixed(0)} ↑${Math.abs(v[l.indexOf('sent')]||0).toFixed(0)} kbps`;}
+        const cc=parseFloat(cp)>80?'red':parseFloat(cp)>50?'yellow':'green';
+        const rc=parseFloat(rp)>80?'red':parseFloat(rp)>60?'yellow':'green';
+        const dc=parseFloat(dp)>80?'red':parseFloat(dp)>60?'yellow':'green';
+        el.innerHTML=`<div class="metric"><span class="label">CPU</span><span class="value ${cc}">${cp}%</span></div><div class="metric"><span class="label">RAM</span><span class="value ${rc}">${rp}%</span></div><div class="metric"><span class="label">Disk</span><span class="value ${dc}">${dp}%</span></div><div class="metric"><span class="label">Load</span><span class="value ${lc}">${ld}</span></div><div class="metric"><span class="label">Network</span><span class="value muted">${nt}</span></div><div class="metric"><span class="label">Uptime</span><span class="value green">${up}</span></div>`;
+    }
+
+    async function loadContainers() {
+        const el=document.getElementById('containers'); if(!el)return;
+        const cs=[{n:'BowersHub AI',u:'https://595bowershub.tailc4d58a.ts.net'},{n:'n8n',u:'http://100.106.180.101:5678'},{n:'postgres'},{n:'filewriter'},{n:'db-admin',u:'http://100.106.180.101:5002'},{n:'📸 Upload to Inbox',u:'http://100.106.180.101:5002/upload'},{n:'netdata',u:'http://100.106.180.101:19999'},{n:'portainer',u:'https://100.106.180.101:9443'},{n:'audiobookshelf',u:'http://100.106.180.101:13378'},{n:'ollama'},{n:'dashboard',u:'http://100.106.180.101:8080'}];
+        el.innerHTML=cs.map(c=>`<div class="metric"><span class="label">${c.u?`<a href="${c.u}" target="_blank"><span class="status-dot green"></span>${c.n}</a>`:`<span class="status-dot green"></span>${c.n}`}</span><span class="value green">●</span></div>`).join('');
+    }
+
+    async function loadFinance() {
+        const el=document.getElementById('finance'); if(!el)return;
+        const now=new Date(),ms=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+        const [spending,balances]=await Promise.all([
+            fetchJSON('/api/proxy/n8n',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:'finance-query',payload:{question:`total spending this month since ${ms}, excluding transfers, as a single positive number`}})}),
+            fetchJSON('/api/proxy/n8n',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:'balances',method:'GET'})})
+        ]);
+        const fmt=v=>{const n=parseFloat(v);return isNaN(n)?'—':'$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});};
+        let sp='—';if(spending&&spending.results&&spending.results[0])sp=fmt(Object.values(spending.results[0])[0]);
+        let html=`<div class="metric"><span class="label">MTD Spending</span><span class="value yellow">${sp}</span></div>`;
+        if(balances&&balances.accounts){
+            let ta=0,tl=0,ah='',lh='';
+            const sorted=[...balances.accounts].sort((a,b)=>(b.balance||0)-(a.balance||0));
+            for(const a of sorted){const b=parseFloat(a.balance)||0;const nm=(a.name||'?').slice(0,22);if(b>=0){ta+=b;ah+=`<div class="metric"><span class="label" style="font-size:0.8rem">${nm}</span><span class="value muted" style="font-size:0.8rem">${fmt(b)}</span></div>`;}else{tl+=b;lh+=`<div class="metric"><span class="label" style="font-size:0.8rem">${nm}</span><span class="value muted" style="font-size:0.8rem;color:#f85149">${fmt(b)}</span></div>`;}}
+            html+=`<div class="metric"><span class="label"><strong>Net Worth</strong></span><span class="value ${(ta+tl)>=0?'green':'red'}">${fmt(ta+tl)}</span></div><div class="metric"><span class="label">Assets</span><span class="value green">${fmt(ta)}</span></div>${ah}<div class="metric" style="margin-top:0.3rem"><span class="label">Liabilities</span><span class="value red">${fmt(tl)}</span></div>${lh}`;
+        }
+        el.innerHTML=html;
+    }
+
+    async function loadTransactions() {
+        const el=document.getElementById('transactions'); if(!el)return;
+        const d=await fetchJSON('/api/proxy/n8n',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:'finance-query',payload:{question:'show the 7 most recent non-transfer transactions with posted_date, description, amount. Order by posted_date desc.'}})});
+        if(d&&d.results&&d.results.length>0){el.innerHTML=d.results.map(r=>{const a=parseFloat(r.amount||0),s=(a<0?'-':'+')+`$${Math.abs(a).toFixed(2)}`;return`<div class="activity-item"><span class="amount ${a<0?'neg':'pos'}">${s}</span>${(r.description||'—').slice(0,25)}<br><span class="time">${r.posted_date||''}</span></div>`;}).join('');}
+        else{el.innerHTML='<span class="loading">No data</span>';}
+    }
+
+    async function loadInventory() {
+        const el=document.getElementById('inventory'); if(!el)return;
+        const d=await fetchJSON('/api/proxy/n8n',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:'finance-query',payload:{question:'count of active non-archived records in each inventory table: tools, router_bits, saw_blades, wood, albums, manuals. One row per table.'}})});
+        if(d&&d.results&&d.results.length>0){el.innerHTML=d.results.map(r=>{const n=r.table_name||Object.keys(r)[0],c=r.count||Object.values(r).pop();return`<div class="metric"><span class="label">${n}</span><span class="value">${c}</span></div>`;}).join('');}
+        else{el.innerHTML='<span class="loading">No data</span>';}
+    }
+
+    async function loadInbox() {
+        const el=document.getElementById('inbox'); if(!el)return;
+        const d=await fetchJSON('/api/proxy/filewriter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'list',payload:{path:'/files/inbox'}})});
+        if(d&&d.ok&&d.files){const f=d.files.filter(x=>!x.is_dir),t=f.length;el.innerHTML=`<div class="metric"><span class="label">Unprocessed</span><span class="value ${t>0?'yellow':'green'}">${t} files</span></div>${f.slice(0,4).map(x=>`<div class="metric"><span class="label" style="font-size:0.75rem;color:#8b949e">${x.name.slice(0,35)}</span></div>`).join('')}${t>4?`<div class="metric"><span class="label" style="color:#484f58;font-size:0.75rem">+${t-4} more</span></div>`:''}`;}
+        else{el.innerHTML='<span class="loading">Unavailable</span>';}
+    }
+
+    async function loadKnowledge() {
+        const el=document.getElementById('knowledge'); if(!el)return;
+        const d=await fetchJSON('/api/proxy/filewriter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'list',payload:{path:'/knowledge'}})});
+        if(d&&d.ok&&d.files){const md=d.files.filter(f=>!f.is_dir&&f.name.endsWith('.md')),dirs=d.files.filter(f=>f.is_dir&&!f.name.startsWith('.'));el.innerHTML=`<div class="metric"><span class="label">Fact files</span><span class="value">${md.length}</span></div><div class="metric"><span class="label">Topics</span><span class="value">${dirs.length}</span></div>${dirs.slice(0,4).map(x=>`<div class="metric"><span class="label" style="font-size:0.8rem;color:#8b949e">📁 ${x.name}</span></div>`).join('')}`;}
+        else{el.innerHTML='<span class="loading">Unavailable</span>';}
+    }
+
+    async function loadTailscale() {
+        const el=document.getElementById('tailscale'); if(!el)return;
+        const d=await fetchJSON('/api/tailscale');
+        if(d&&d.ok&&d.peers){el.innerHTML=d.peers.map(p=>`<div class="metric"><span class="label"><span class="status-dot ${p.online?'green':'red'}"></span>${p.name}${p.is_self?' (server)':''}</span><span class="value muted">${p.os}</span></div>`).join('');}
+        else{el.innerHTML='<span class="loading">Unavailable</span>';}
+    }
+
+    async function loadEmails() {
+        const el=document.getElementById('emails'); if(!el)return;
+        const d=await fetchJSON('/api/emails');
+        if(d&&d.ok&&d.emails&&d.emails.length>0){el.innerHTML=d.emails.map(e=>`<div class="activity-item"><strong>${e.subject.slice(0,45)}</strong><br><span class="time">${e.from.slice(0,30)} · ${e.date}</span></div>`).join('');}
+        else{el.innerHTML='<span class="loading">No emails</span>';}
+    }
+
+    async function loadAnthropic() {
+        const el=document.getElementById('anthropic'); if(!el)return;
+        const d=await fetchJSON('/api/anthropic-spend?days=30');
+        if(d&&d.ok){
+            const fmt=v=>'$'+v.toFixed(2);
+            let html=`<div class="metric"><span class="label">30-Day Spend</span><span class="value yellow">${fmt(d.total_cost_usd)}</span></div><div class="metric"><span class="label">API Calls</span><span class="value">${d.total_calls}</span></div>`;
+            if(d.by_workflow){const sorted=Object.entries(d.by_workflow).sort((a,b)=>b[1].cost-a[1].cost);for(const [wf,s] of sorted.slice(0,5)){html+=`<div class="metric"><span class="label" style="font-size:0.8rem">${wf.slice(0,25)}</span><span class="value muted" style="font-size:0.8rem">${fmt(s.cost)} (${s.calls})</span></div>`;}}
+            el.innerHTML=html;
+        } else {el.innerHTML=`<div class="metric"><span class="label">Est. monthly</span><span class="value">~$2-5</span></div><div class="metric"><span class="label">Status</span><span class="value muted"><a href="https://console.anthropic.com/settings/billing" target="_blank">Console →</a></span></div>`;}
+    }
+
+    async function loadAudiobookshelf() {
+        const el=document.getElementById('audiobookshelf'); if(!el)return;
+        const d=await fetchJSON('/api/audiobookshelf');
+        if(d&&d.ok){
+            let html=`<div class="metric"><span class="label">Library</span><span class="value">${d.total_items} books</span></div><div class="metric"><span class="label">Authors</span><span class="value muted">${d.total_authors}</span></div><div class="metric"><span class="label">Total Duration</span><span class="value muted">${d.total_hours} hrs</span></div><div class="metric"><span class="label">Size</span><span class="value muted">${d.total_size_gb} GB</span></div>`;
+            if(d.in_progress&&d.in_progress.length>0){html+=`<div style="margin-top:0.5rem;border-top:1px solid #21262d;padding-top:0.5rem"><h2 style="margin-bottom:0.4rem">Currently Reading</h2>`;for(const b of d.in_progress){html+=`<div class="metric"><span class="label" style="font-size:0.8rem">${b.title.slice(0,30)}</span><span class="value muted" style="font-size:0.8rem">${b.progress_pct}%</span></div>`;}html+=`</div>`;}
+            html+=`<div class="metric" style="margin-top:0.5rem"><span class="label"><a href="http://100.106.180.101:13378" target="_blank">Open Audiobookshelf →</a></span></div>`;
+            el.innerHTML=html;
+        } else {el.innerHTML=`<div class="metric"><span class="label">Service</span><span class="value green"><a href="http://100.106.180.101:13378" target="_blank">Open →</a></span></div><div class="metric"><span class="label">Status</span><span class="value muted">${d?d.error:'Unavailable'}</span></div>`;}
+    }
+
+    async function loadActivity() {
+        const el=document.getElementById('activity'); if(!el)return;
+        el.innerHTML=`<div class="activity-item">Activity feed — coming in daily digest workflow. <a href="http://100.106.180.101:5678/executions" target="_blank">n8n executions →</a></div>`;
+    }
+
+    // ========== REFRESH ==========
+    async function refresh() {
+        document.getElementById('datetime').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'});
+        await Promise.all([loadWeather(),loadSystem(),loadContainers(),loadFinance(),loadTransactions(),loadInventory(),loadInbox(),loadKnowledge(),loadTailscale(),loadEmails(),loadAnthropic(),loadAudiobookshelf(),loadActivity()]);
+        document.getElementById('last-refresh').textContent=new Date().toLocaleTimeString();
+    }
+
+    // ========== INIT ==========
+    renderViewTabs();
+    initGrid();
+    refresh();
+    setInterval(refresh, 60000);
+    </script>
+</body>
+</html>

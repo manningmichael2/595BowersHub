@@ -1,0 +1,21 @@
+# DB Admin — database browser + inbox processing
+# Deploy: docker compose up -d --build
+
+services:
+  db-admin:
+    build: .
+    container_name: db-admin
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    volumes:
+      - /home/michael/files:/files
+      - /home/michael/knowledge:/knowledge
+    env_file: /home/michael/db-admin/.env
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    external: true
+    name: ai-services_ai-network

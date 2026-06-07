@@ -1,0 +1,22 @@
+{
+  "name": "Remember Fact",
+  "hubId": "remember",
+  "description": "Saves a durable fact about the user to a personal knowledge base. Use this when the user shares context worth keeping across conversations: account purposes, preferences, recurring people, household details, tools they own, recipes they like, pet names, schedules, etc. Do NOT use for transient task-related information. Before calling, you should usually ASK the user 'Want me to remember that?' and only call after they confirm. The skill auto-deduplicates via Haiku — if the fact is already covered, it returns saved=false with a note. Required: topic (free-form short slug like 'finance/accounts' or 'cooking-preferences'), fact (the durable statement to save).",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "topic": {
+        "description": "A short free-form topic slug. Use lowercase, hyphens for spaces, slashes for sub-categories. Examples: 'finance/accounts', 'finance/preferences', 'woodshop/tools', 'cooking/manon-allergies', 'household/people', 'health/medications'. The skill normalizes whatever you pass; pick something descriptive and consistent over time. Required.",
+        "type": "string"
+      },
+      "fact": {
+        "description": "The durable fact to save, written as a complete sentence in the third person about the user. Examples: 'Ally Savings is the emergency fund, holding ~6 months of expenses.', 'Manon is allergic to shellfish.', 'The DeWalt DW735 planer is in the garage workshop and uses 6.5x12.5 inch blades.'. Be specific enough to be useful later. Required.",
+        "type": "string"
+      }
+    }
+  }
+}

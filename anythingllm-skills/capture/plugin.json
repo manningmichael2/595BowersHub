@@ -1,0 +1,29 @@
+{
+  "name": "Smart Capture",
+  "hubId": "capture",
+  "description": "Universal capture skill. Extracts structured intent(s) from a user's text and/or image and returns a draft list of intents (tool, recipe, shopping_list, knowledge_fact, project, room, album, wood, manual, saw_blade, cook_log, or other). Use this whenever the user wants to ADD/CAPTURE/INVENTORY/REMEMBER/TRACK something concrete. The skill DOES NOT write anything by itself — it returns extraction results. After receiving the results, present them to the user, ask for any corrections or missing fields, then call the `capture-commit` skill once per intent to actually save. Compound captures (e.g., 'add this recipe AND put ingredients on shopping list') return multiple intents — confirm and commit each one. If the user provides an image, pass its absolute path or path relative to /files in the image_path parameter.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "text": {
+        "description": "What the user said about the thing they want to capture. Free-form. Either text or image_path is required.",
+        "type": "string",
+        "default": ""
+      },
+      "image_path": {
+        "description": "Path to an image file to include in the extraction. Either an absolute /files/... path or a relative inbox/foo.jpg path. Optional. Vision will run if provided.",
+        "type": "string",
+        "default": ""
+      },
+      "domain_hint": {
+        "description": "Optional bias for the classifier. One of: tool, saw_blade, wood, album, manual, house_room, recipe, cook_log, shopping_list, knowledge_fact, project, other. Leave blank to let the AI decide.",
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}

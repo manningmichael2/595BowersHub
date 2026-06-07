@@ -1,0 +1,91 @@
+{
+  "name": "Categorize Now",
+  "description": "Webhook that triggers the Categorizer on-demand",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "categorize-now",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-cn",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "categorize-now-webhook"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "onU76wM0FSSeMJ9h"
+        },
+        "workflowInputs": {
+          "value": {
+            "trigger": "manual"
+          },
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "exec-cat",
+      "name": "Run Categorizer",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { success: true, triggered_at: new Date().toISOString() } }];"
+      },
+      "id": "done-cn",
+      "name": "Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run Categorizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Categorizer": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

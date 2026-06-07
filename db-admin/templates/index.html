@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB Admin — 595BowersHub</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+    <!-- Sidebar: schema/table navigation -->
+    <aside class="sidebar" id="sidebar">
+        <h1>DB Admin <span>595BowersHub</span></h1>
+        <div id="conn-status" style="display:none; background:var(--danger); color:var(--bg); padding:0.4rem 0.6rem; border-radius:var(--radius); font-size:0.75rem; margin-bottom:0.75rem; text-align:center;">⚠ Connection lost</div>
+        <button class="btn btn-primary" id="btn-new-table" style="width:100%; margin-bottom:0.5rem;">＋ New Table</button>
+        <button class="btn" id="btn-new-schema" style="width:100%; margin-bottom:1rem;">＋ New Schema</button>
+        <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+            <a href="/inbox" class="btn" style="flex:1; text-align:center; text-decoration:none; font-size:0.8rem;">📥 Inbox</a>
+            <a href="/upload" class="btn" style="flex:1; text-align:center; text-decoration:none; font-size:0.8rem;">📸 Upload</a>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+            <a href="/settings" class="btn" style="flex:1; text-align:center; text-decoration:none; font-size:0.8rem;">⚙ Field Settings</a>
+        </div>
+        <div id="schema-nav">Loading...</div>
+    </aside>
+
+    <!-- Main content area -->
+    <main class="main" id="main">
+        <div class="empty-state" id="empty-state">
+            <h2>Select a table</h2>
+            <p>Pick a schema and table from the sidebar to browse data.</p>
+        </div>
+
+        <!-- Table view (hidden until a table is selected) -->
+        <div id="table-view" style="display:none;">
+            <div class="toolbar">
+                <h2 id="table-title"></h2>
+                <span class="badge" id="row-count"></span>
+                <button class="btn btn-primary" id="btn-add-row">+ Add Row</button>
+                <button class="btn" id="btn-columns">⚙ Columns</button>
+                <button class="btn" id="btn-filter">⊕ Filter</button>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search..." />
+                </div>
+            </div>
+            <div id="filter-bar" class="filter-bar"></div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead id="table-head"></thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+
+        <!-- Row detail/edit view -->
+        <div class="row-detail" id="row-detail">
+            <div class="toolbar">
+                <button class="btn" id="btn-back">← Back to table</button>
+                <h2 id="detail-title">Edit Row</h2>
+                <div style="margin-left:auto; display:flex; gap:0.5rem;">
+                    <button class="btn" id="btn-layout">⚙ Layout</button>
+                    <button class="btn" id="btn-reset-layout">↺ Reset</button>
+                    <button class="btn" id="btn-duplicate">⧉ Duplicate</button>
+                    <button class="btn btn-success" id="btn-save">Save Changes</button>
+                    <button class="btn" id="btn-archive">Archive</button>
+                    <button class="btn btn-danger" id="btn-delete">Delete</button>
+                </div>
+            </div>
+
+            <!-- Images section -->
+            <div id="images-section" style="display:none; margin-bottom:1.5rem;">
+                <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem;">
+                    <h3 style="font-size:0.9rem; color:var(--text-muted);">Images</h3>
+                    <label class="btn btn-primary" style="cursor:pointer;">
+                        📷 Upload Image
+                        <input type="file" id="file-upload" accept="image/*" style="display:none;" />
+                    </label>
+                    <span id="upload-status" style="font-size:0.8rem; color:var(--text-muted);"></span>
+                </div>
+                <div id="images-grid" class="images-grid"></div>
+            </div>
+
+            <div class="detail-grid" id="detail-grid"></div>
+        </div>
+    </main>
+</div>
+
+<!-- Insert/Add row modal -->
+<div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal">
+        <h3 id="modal-title">Add Row</h3>
+        <div id="modal-fields"></div>
+        <div class="actions">
+            <button class="btn" id="modal-cancel">Cancel</button>
+            <button class="btn btn-primary" id="modal-save">Insert</button>
+        </div>
+    </div>
+</div>
+
+<!-- Create Table modal -->
+<div class="modal-overlay" id="create-table-overlay">
+    <div class="modal" id="create-table-modal" style="max-width:700px;">
+        <h3>＋ Create New Table</h3>
+
+        <div class="form-group">
+            <label>Schema</label>
+            <select id="ct-schema" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:0.4rem 0.6rem; color:var(--text); font-size:0.85rem;">
+                <option value="inventory">inventory</option>
+                <option value="cook">cook</option>
+                <option value="house">house</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Table Name (lowercase, underscores OK)</label>
+            <input type="text" id="ct-name" placeholder="e.g. clamps, hand_planes, spices" style="width:100%;" />
+        </div>
+
+        <div style="margin:1rem 0 0.5rem; display:flex; align-items:center; gap:0.75rem;">
+            <label style="font-weight:500;">Columns</label>
+            <button class="btn" id="ct-add-col" style="font-size:0.75rem;">+ Add Column</button>
+        </div>
+        <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:0.5rem;">
+            Auto-included: id (PK), notes, created_at, updated_at, archived_at
+        </div>
+        <div id="ct-columns"></div>
+
+        <div class="form-group" style="margin-top:1rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                <input type="checkbox" id="ct-files" checked style="width:auto;" />
+                Create _files link table (enables image uploads)
+            </label>
+        </div>
+
+        <!-- SQL Preview -->
+        <div id="ct-preview" style="display:none; margin-top:1rem;">
+            <label style="font-size:0.75rem; color:var(--text-muted);">SQL Preview</label>
+            <pre id="ct-preview-sql" style="background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:0.75rem; font-size:0.75rem; overflow-x:auto; max-height:200px; color:var(--text); font-family:var(--mono); white-space:pre-wrap;"></pre>
+        </div>
+
+        <div class="actions" style="margin-top:1rem;">
+            <button class="btn" id="ct-cancel">Cancel</button>
+            <button class="btn" id="ct-preview-btn">Preview SQL</button>
+            <button class="btn btn-primary" id="ct-create">Create Table</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/app.js"></script>
+
+<!-- Schema action modal (rename, move, add/delete column) -->
+<div class="modal-overlay" id="schema-action-overlay">
+    <div class="modal" style="max-width:450px;">
+        <h3 id="schema-action-title">Action</h3>
+        <div id="schema-action-fields"></div>
+        <div class="actions" style="margin-top:1rem;">
+            <button class="btn" onclick="closeSchemaActionModal()">Cancel</button>
+            <button class="btn btn-primary" id="schema-action-confirm">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Filter modal -->
+<div class="modal-overlay" id="filter-overlay">
+    <div class="modal" style="max-width:400px;">
+        <h3>Add Filter</h3>
+        <div class="form-group">
+            <label>Column</label>
+            <select id="filter-col" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:0.4rem; color:var(--text); font-size:0.85rem;"></select>
+        </div>
+        <div class="form-group">
+            <label>Condition</label>
+            <select id="filter-op" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:4px; padding:0.4rem; color:var(--text); font-size:0.85rem;">
+                <option value="eq">equals</option>
+                <option value="neq">not equals</option>
+                <option value="like">contains</option>
+                <option value="gt">greater than</option>
+                <option value="lt">less than</option>
+                <option value="gte">≥ greater or equal</option>
+                <option value="lte">≤ less or equal</option>
+                <option value="null">is empty (null)</option>
+                <option value="notnull">has value (not null)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Value</label>
+            <input type="text" id="filter-val" style="width:100%;" placeholder="filter value" />
+        </div>
+        <div class="actions">
+            <button class="btn" id="filter-cancel">Cancel</button>
+            <button class="btn btn-primary" id="filter-apply">Apply Filter</button>
+        </div>
+    </div>
+</div>
+
+<!-- Column picker modal -->
+<div class="modal-overlay" id="col-picker-overlay">
+    <div class="modal" style="max-width:400px;">
+        <h3>List Columns</h3>
+        <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.75rem;">Drag to reorder. Uncheck to hide from the table view.</p>
+        <div id="col-picker-list" style="max-height:50vh; overflow-y:auto;"></div>
+        <div class="actions" style="margin-top:1rem;">
+            <button class="btn" id="col-picker-reset">Reset</button>
+            <button class="btn btn-primary" id="col-picker-close">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox for full-size image viewing -->
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('active')">
+    <img id="lightbox-img" src="" alt="Full size" />
+</div>
+</body>
+</html>

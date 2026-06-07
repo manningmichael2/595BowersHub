@@ -1,0 +1,49 @@
+{
+  "name": "Inventory Admin",
+  "hubId": "inventory-admin",
+  "description": "Manage inventory records and schema. Actions: 'update' (change fields on a record), 'archive' (soft-delete), 'unarchive', 'delete' (permanent — confirm first), 'merge' (combine duplicates), 'list_columns' (show all columns on a table — use to check what exists before suggesting new ones), 'add_column' (add a new column to a table — ALWAYS confirm with user first). Tables: tools, saw_blades, wood, albums, manuals, router_bits. Use list_columns to check existing schema, then add_column when the user confirms a new field is needed.",
+  "author": "Michael",
+  "version": "2.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "action": {
+        "description": "Required. One of: update, archive, unarchive, delete, merge, add_column, list_columns.",
+        "type": "string",
+        "default": ""
+      },
+      "table": {
+        "description": "Required. One of: tools, saw_blades, wood, albums, manuals, router_bits.",
+        "type": "string",
+        "default": ""
+      },
+      "id": {
+        "description": "Required for update/archive/unarchive/delete. The integer ID of the record to act on.",
+        "type": "number",
+        "default": 0
+      },
+      "fields": {
+        "description": "Required for update. Object of column names to new values. Only include fields you want to change.",
+        "type": "object",
+        "default": {}
+      },
+      "merge_into_id": {
+        "description": "Required for merge. The ID of the record to keep (the 'winner').",
+        "type": "number",
+        "default": 0
+      },
+      "column_name": {
+        "description": "Required for add_column. The name of the new column (lowercase, underscores, e.g. 'manufacturer' or 'motor_amps').",
+        "type": "string",
+        "default": ""
+      },
+      "column_type": {
+        "description": "Required for add_column. One of: text, number, integer, decimal, boolean, date, timestamp. Default: text.",
+        "type": "string",
+        "default": "text"
+      }
+    }
+  }
+}

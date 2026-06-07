@@ -1,0 +1,636 @@
+{
+  "name": "Process Asset",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "process-asset",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "n-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        400
+      ],
+      "webhookId": "process-asset-webhook"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "n-exec-trigger",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate the incoming request and normalize fields.\nconst body = $input.first().json.body || $input.first().json;\nconst relPath = (body.path || \"\").trim();\nif (!relPath) throw new Error(\"Missing 'path' (relative to /files)\");\nif (relPath.includes(\"..\") || relPath.startsWith(\"/\")) {\n  throw new Error(\"Invalid path: must be relative and not contain '..'\");\n}\n\nconst fullPath = `/files/${relPath}`;\n\nreturn [{\n  json: {\n    rel_path:       relPath,\n    full_path:      fullPath,\n    domain_hint:    body.domain_hint || null,\n    uploaded_by:    body.uploaded_by || \"unknown\",\n    original_name:  body.original_name || relPath.split(\"/\").pop(),\n    started_at:     Date.now(),\n  }\n}];\n"
+      },
+      "id": "n-validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/probe",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $json.full_path }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-probe",
+      "name": "Probe File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filewriter returned probe info. Merge with context.\nconst ctx = $('Validate').first().json;\nconst probe = $json;\nif (!probe.ok || !probe.exists) {\n  throw new Error(`File not found: ${ctx.full_path} (${JSON.stringify(probe)})`);\n}\nreturn [{\n  json: {\n    ...ctx,\n    size_bytes: probe.size_bytes,\n    sha256:     probe.sha256,\n    mime:       probe.mime,\n  }\n}];\n"
+      },
+      "id": "n-parse-probe",
+      "name": "Parse Probe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id::text AS id, path, domain, ai_summary, ai_extracted FROM files.assets WHERE sha256 = '{{$json.sha256}}' LIMIT 1",
+        "options": {}
+      },
+      "id": "n-dedup",
+      "name": "Dedup Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Probe').first().json;\n// Postgres node returns 0 rows when nothing matched; with alwaysOutputData=true\n// it still passes one empty item through. Treat anything without an `id` as \"no dup\".\nconst rows = $input.all().map(i => i.json).filter(r => r && r.id);\nif (rows.length === 0) {\n  return [{ json: { ...ctx, dedup: false } }];\n}\nreturn [{\n  json: {\n    ...ctx,\n    dedup: true,\n    asset_id:     rows[0].id,\n    domain:       rows[0].domain,\n    path:         rows[0].path,\n    ai_summary:   rows[0].ai_summary,\n    ai_extracted: rows[0].ai_extracted,\n  }\n}];\n"
+      },
+      "id": "n-dedup-branch",
+      "name": "Dedup Branch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dedup-true",
+              "leftValue": "={{$json.dedup}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-if-dedup",
+      "name": "Is Dedup?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    asset_id:      ctx.asset_id,\n    dedup:         true,\n    domain:        ctx.domain || null,\n    path:          ctx.path || null,\n    ai_summary:    ctx.ai_summary || null,\n    ai_extracted:  ctx.ai_extracted || null,\n    duration_ms:   Date.now() - (ctx.started_at || Date.now()),\n  }\n}];\n"
+      },
+      "id": "n-dedup-resp",
+      "name": "Dedup Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO files.assets (path, original_name, mime, size_bytes, sha256, domain, uploaded_by) VALUES ('{{$json.full_path}}',         '{{($json.original_name || '').replace(/'/g, \"''\")}}',         '{{$json.mime}}',         {{$json.size_bytes}},         '{{$json.sha256}}',         {{$json.domain_hint ? \"'\" + $json.domain_hint + \"'\" : 'NULL'}},         '{{($json.uploaded_by || '').replace(/'/g, \"''\")}}') RETURNING id::text AS id",
+        "options": {}
+      },
+      "id": "n-insert",
+      "name": "Insert Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1600,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Probe').first().json;\nconst inserted = $input.first().json;\nreturn [{ json: { ...ctx, asset_id: inserted.id, dedup: false } }];\n"
+      },
+      "id": "n-post-insert",
+      "name": "Post Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/read-base64",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $json.full_path }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-readb64",
+      "name": "Read Base64",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the Anthropic Vision request payload.\nconst ctx     = $('Post Insert').first().json;\nconst b64resp = $json;\nconst isImage = (ctx.mime || \"\").startsWith(\"image/\");\n\nif (!isImage || !b64resp.ok) {\n  return [{\n    json: {\n      ...ctx,\n      vision_skipped: true,\n      ai_model:       null,\n      ai_summary:     null,\n      ai_extracted:   { reason: isImage ? \"base64 read failed\" : \"non-image input; vision pipeline TODO\" },\n      resolved_domain: ctx.domain_hint || \"unknown\",\n    }\n  }];\n}\n\nconst PROMPTS = {\n  receipt:      \"You are extracting fields from a purchase receipt. Return ONLY a JSON object with keys: merchant (string|null), total (number|null), currency (string|null), date (YYYY-MM-DD|null), payment_method (string|null), line_items (array of {description, qty, price} or null), notes (string|null).\",\n  tool:         \"You are inventorying a tool. Return ONLY JSON: {brand, model, type, name, serial, condition, notes}. Use null when unknown. type is e.g. 'saw', 'drill', 'chisel'.\",\n  saw_blade:    \"Inventorying a saw blade. Return ONLY JSON: {brand, diameter_in, teeth, kerf_in, type, notes}. type is rip|crosscut|combo|dado|other. Use null if unknown.\",\n  wood:         \"Inventorying lumber. Return ONLY JSON: {species, dimensions, quantity, unit, notes}. unit is bf|lf|board|other.\",\n  album:        \"Inventorying a vinyl record. Return ONLY JSON: {title, artist, label, catalog_number, year, condition, notes}.\",\n  manual:       \"Identifying a product manual or spec sheet. Return ONLY JSON: {title, brand, model, doc_type, notes}.\",\n  house_room:   \"Identifying a room photo. Return ONLY JSON: {room_guess, features, orientation_guess, notes}.\",\n  cook_recipe:  \"Looking at a recipe page or finished dish. Return ONLY JSON: {title, source, ingredients, method_summary, is_finished_dish, notes}.\",\n};\nconst FALLBACK_PROMPT = \"Look at this image and return ONLY a JSON object: {summary (one sentence), best_domain_guess (one of: receipt, tool, saw_blade, wood, album, manual, house_room, cook_recipe, other), key_fields (object with anything notable)}.\";\n\nconst domain = ctx.domain_hint;\nconst prompt = PROMPTS[domain] || FALLBACK_PROMPT;\n\nconst payload = {\n  model: \"claude-haiku-4-5-20251001\",\n  max_tokens: 1024,\n  messages: [{\n    role: \"user\",\n    content: [\n      { type: \"image\", source: { type: \"base64\", media_type: ctx.mime, data: b64resp.base64 } },\n      { type: \"text\",  text: prompt + \"\\n\\nReturn the JSON object and nothing else.\" }\n    ]\n  }]\n};\n\nreturn [{\n  json: {\n    ...ctx,\n    vision_skipped: false,\n    vision_payload: payload,\n    domain_for_prompt: domain || \"fallback\",\n  }\n}];\n"
+      },
+      "id": "n-build-prompt",
+      "name": "Build Vision Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "skip-true",
+              "leftValue": "={{$json.vision_skipped}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-if-skip",
+      "name": "Skip Vision?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.vision_payload) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "n-anthropic",
+      "name": "Anthropic Vision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2600,
+        720
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Vision Prompt').first().json;\nconst resp = $json;\nlet text = \"\";\ntry { text = (resp.content && resp.content[0] && resp.content[0].text) || \"\"; }\ncatch (e) { /* fall through */ }\n\ntext = text.trim().replace(/^```(?:json)?/, \"\").replace(/```$/, \"\").trim();\n\nlet extracted = null;\nlet summary   = null;\ntry {\n  extracted = JSON.parse(text);\n  // Build a clean human-readable summary by combining the most useful fields.\n  const parts = [];\n  if (extracted.brand) parts.push(extracted.brand);\n  if (extracted.name) parts.push(extracted.name);\n  else if (extracted.model) parts.push(extracted.model);\n  else if (extracted.title) parts.push(extracted.title);\n  else if (extracted.type) parts.push(extracted.type);\n  if (parts.length > 0) {\n    summary = parts.join(' ');\n  } else if (extracted.summary) {\n    summary = String(extracted.summary);\n  } else if (extracted.merchant && extracted.total != null) {\n    summary = `${extracted.merchant} - ${extracted.total}`;\n  } else {\n    // Last resort: pick any non-null string field\n    const firstStr = Object.values(extracted).find(v => typeof v === 'string' && v.length > 0 && v.length < 100);\n    summary = firstStr || 'unknown item';\n  }\n} catch (e) {\n  summary = text.slice(0, 200);\n  extracted = { _raw: text, _parse_error: String(e) };\n}\n\nlet resolvedDomain = ctx.domain_hint;\nif (!resolvedDomain && extracted && typeof extracted === \"object\" && extracted.best_domain_guess) {\n  resolvedDomain = String(extracted.best_domain_guess);\n}\nif (!resolvedDomain) resolvedDomain = \"unknown\";\n\nreturn [{\n  json: {\n    ...ctx,\n    ai_summary:    summary,\n    ai_extracted:  extracted,\n    ai_model:      \"claude-haiku-4-5-20251001\",\n    resolved_domain: resolvedDomain,\n  }\n}];\n"
+      },
+      "id": "n-parse-vision",
+      "name": "Parse Vision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst year = new Date().getFullYear();\nconst m = ctx.full_path.match(/\\.[A-Za-z0-9]+$/);\nconst ext = m ? m[0].toLowerCase() : \"\";\n\nconst subdirs = {\n  receipt:      `receipts/${year}`,\n  tool:         \"inventory/tools\",\n  saw_blade:    \"inventory/saw_blades\",\n  wood:         \"inventory/wood\",\n  album:        \"inventory/albums\",\n  manual:       \"manuals\",\n  house_room:   \"house\",\n  cook_recipe:  \"cook\",\n};\nconst subdir = subdirs[ctx.resolved_domain] || \"inbox\";\nconst newRel = `${subdir}/${ctx.asset_id}${ext}`;\nconst newFull = `/files/${newRel}`;\n\nreturn [{\n  json: {\n    ...ctx,\n    new_full_path: newFull,\n    new_rel_path:  newRel,\n    move_needed:   newFull !== ctx.full_path,\n    move_payload:  { src: ctx.full_path, dst: newFull },\n  }\n}];\n"
+      },
+      "id": "n-plan-move",
+      "name": "Plan Move",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/move",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.move_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-move",
+      "name": "Move File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Plan Move').first().json;\nreturn [{ json: ctx }];\n"
+      },
+      "id": "n-post-move",
+      "name": "Post Move",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE files.assets SET   path         = '{{$json.new_full_path}}',   domain       = '{{$json.resolved_domain}}',   ai_summary   = {{$json.ai_summary === null ? 'NULL' : \"'\" + ($json.ai_summary || '').replace(/'/g, \"''\") + \"'\"}},   ai_extracted = '{{JSON.stringify($json.ai_extracted || {}).replace(/'/g, \"''\")}}'::jsonb,   ai_model     = {{$json.ai_model === null ? 'NULL' : \"'\" + $json.ai_model + \"'\"}},   processed_at = now() WHERE id = '{{$json.asset_id}}'::uuid",
+        "options": {}
+      },
+      "id": "n-update",
+      "name": "Update Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        3600,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Plan Move').first().json;\nreturn [{\n  json: {\n    ok: true,\n    asset_id:      ctx.asset_id,\n    dedup:         false,\n    domain:        ctx.resolved_domain || null,\n    path:          ctx.new_full_path,\n    ai_summary:    ctx.ai_summary || null,\n    ai_extracted:  ctx.ai_extracted || null,\n    duration_ms:   Date.now() - (ctx.started_at || Date.now()),\n  }\n}];\n"
+      },
+      "id": "n-format",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        560
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Probe File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe File": {
+      "main": [
+        [
+          {
+            "node": "Parse Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Probe": {
+      "main": [
+        [
+          {
+            "node": "Dedup Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Query": {
+      "main": [
+        [
+          {
+            "node": "Dedup Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Branch": {
+      "main": [
+        [
+          {
+            "node": "Is Dedup?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Dedup?": {
+      "main": [
+        [
+          {
+            "node": "Dedup Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Asset": {
+      "main": [
+        [
+          {
+            "node": "Post Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Insert": {
+      "main": [
+        [
+          {
+            "node": "Read Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Base64": {
+      "main": [
+        [
+          {
+            "node": "Build Vision Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Vision Prompt": {
+      "main": [
+        [
+          {
+            "node": "Skip Vision?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Vision?": {
+      "main": [
+        [
+          {
+            "node": "Plan Move",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Anthropic Vision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Vision": {
+      "main": [
+        [
+          {
+            "node": "Parse Vision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Vision": {
+      "main": [
+        [
+          {
+            "node": "Plan Move",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Move": {
+      "main": [
+        [
+          {
+            "node": "Move File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move File": {
+      "main": [
+        [
+          {
+            "node": "Post Move",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Move": {
+      "main": [
+        [
+          {
+            "node": "Update Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Asset": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Inbox — DB Admin</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .inbox-app { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+        .inbox-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .inbox-header h1 { font-size: 1.3rem; color: var(--accent); }
+        .inbox-header .back { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; }
+        .inbox-header .back:hover { color: var(--accent); }
+        .inbox-header .count { color: var(--text-muted); font-size: 0.85rem; margin-left: auto; }
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+        .file-card { position: relative; border-radius: var(--radius); overflow: hidden; border: 2px solid var(--border); cursor: pointer; transition: all 0.15s; aspect-ratio: 1; background: var(--surface); }
+        .file-card:hover { border-color: var(--accent); }
+        .file-card.selected { border-color: var(--success); box-shadow: 0 0 0 2px rgba(158, 206, 106, 0.3); }
+        .file-card img { width: 100%; height: 100%; object-fit: cover; }
+        .file-card .no-preview { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 2.5rem; color: var(--text-muted); }
+        .file-card .name { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.8); padding: 0.3rem 0.5rem; font-size: 0.7rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .file-card .check { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; background: var(--success); color: var(--bg); display: none; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; }
+        .file-card.selected .check { display: flex; }
+        .file-card .idx { position: absolute; top: 6px; left: 6px; min-width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--bg); display: none; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: bold; }
+        .file-card.selected .idx { display: flex; }
+        .process-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+        .process-panel h3 { color: var(--accent); font-size: 0.9rem; margin-bottom: 0.75rem; }
+        .form-row { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
+        .form-row label { font-size: 0.8rem; color: var(--text-muted); min-width: 70px; }
+        .empty-inbox { text-align: center; padding: 3rem; color: var(--text-muted); }
+        .empty-inbox .icon { font-size: 3rem; margin-bottom: 0.5rem; }
+        .status-msg { padding: 0.75rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; font-size: 0.85rem; display: none; }
+        .status-msg.success { display: block; background: rgba(158,206,106,0.1); border: 1px solid var(--success); color: var(--success); }
+        .status-msg.error { display: block; background: rgba(247,118,142,0.1); border: 1px solid var(--danger); color: var(--danger); }
+        .select-actions { display: flex; gap: 0.5rem; font-size: 0.8rem; margin-bottom: 1rem; }
+        .select-actions button { background: none; border: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+<div class="inbox-app">
+    <div class="inbox-header">
+        <a href="/" class="back">← DB Admin</a>
+        <h1>📥 Process Inbox</h1>
+        <span class="count" id="file-count"></span>
+    </div>
+    <div class="status-msg" id="status"></div>
+
+    <div class="process-panel" id="process-panel" style="display:none;">
+        <h3>Process selected photos</h3>
+
+        <!-- Mode switcher -->
+        <div class="form-row" style="margin-bottom:1rem;">
+            <label>Save as:</label>
+            <select id="mode-select" style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem;color:var(--text);font-size:0.85rem;">
+                <option value="record">Inventory record (link to a table)</option>
+                <option value="knowledge">Knowledge note (free-form context, like "Opal is my cat")</option>
+            </select>
+        </div>
+
+        <!-- Inventory record fields (existing) -->
+        <div id="record-mode">
+        <div class="form-row">
+            <label>Table:</label>
+            <select id="target-table" style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem;color:var(--text);font-size:0.85rem;"></select>
+        </div>
+        <div class="form-row">
+            <label>Action:</label>
+            <select id="link-action" style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem;color:var(--text);font-size:0.85rem;">
+                <option value="new">Create new row</option>
+                <option value="existing">Link to existing row (by ID)</option>
+            </select>
+        </div>
+        <div class="form-row" id="row-id-row" style="display:none;">
+            <label>Row ID:</label>
+            <input type="number" id="existing-id" placeholder="e.g. 5" style="background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem;color:var(--text);width:100px;" />
+        </div>
+        <div id="populate-row" style="display:flex;gap:0.5rem;margin:0.75rem 0;flex-wrap:wrap;align-items:center;">
+            <button class="btn" id="btn-ai-fill">🤖 Fill from photo (AI)</button>
+            <span style="color:var(--text-muted);font-size:0.8rem;">or</span>
+            <input type="url" id="product-url" placeholder="Paste product URL..." style="flex:1;min-width:180px;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;color:var(--text);font-size:0.8rem;" />
+            <button class="btn" id="btn-url-fill">🔗 Fill from URL</button>
+        </div>
+        <div id="fill-status" style="font-size:0.8rem;margin-bottom:0.5rem;"></div>
+        <div id="table-form-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin:0.75rem 0;"></div>
+        <div class="form-row" style="margin-top:0.75rem;">
+            <button class="btn btn-primary" id="btn-save-record" style="padding:0.6rem 1.2rem;">💾 Save Record & Link Photos</button>
+            <button class="btn" id="btn-clear-form">Clear Form</button>
+        </div>
+        </div>
+
+        <!-- Knowledge note mode -->
+        <div id="knowledge-mode" style="display:none;">
+            <div class="form-row">
+                <label>Topic:</label>
+                <input type="text" id="kn-topic" placeholder="e.g. household/pets, family, travel/trips" style="flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem;color:var(--text);font-size:0.85rem;" />
+            </div>
+            <div class="form-row">
+                <label>Title:</label>
+                <input type="text" id="kn-title" placeholder="e.g. Opal" style="flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem;color:var(--text);font-size:0.85rem;" />
+            </div>
+            <div class="form-row" style="align-items:flex-start;">
+                <label style="margin-top:0.4rem;">Notes:</label>
+                <textarea id="kn-content" placeholder="What is this? Who is this? Any context worth remembering..." style="flex:1;min-height:120px;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;color:var(--text);font-size:0.85rem;resize:vertical;font-family:inherit;"></textarea>
+            </div>
+            <div class="form-row" style="margin-top:0.75rem;">
+                <button class="btn btn-primary" id="btn-save-knowledge" style="padding:0.6rem 1.2rem;">💾 Save Knowledge Note</button>
+                <button class="btn" id="btn-clear-knowledge">Clear</button>
+            </div>
+            <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">
+                Saves a markdown note at <code>/knowledge/&lt;topic&gt;/&lt;title&gt;.md</code> with photos embedded.
+                Searchable later via <code>recall</code> or <code>ask-db</code>.
+            </p>
+        </div>
+    </div>
+
+    <div class="select-actions" id="select-actions">
+        <button id="btn-select-all">Select All</button>
+        <button id="btn-clear-sel">Clear Selection</button>
+    </div>
+    <div class="file-grid" id="file-grid"></div>
+    <div class="empty-inbox" id="empty-state" style="display:none;">
+        <div class="icon">📭</div>
+        <p>Inbox is empty. <a href="/upload">Upload some photos</a> first.</p>
+    </div>
+</div>
+
+<script>
+var files = [];
+var selected = [];
+var tables = [];
+
+async function load() {
+    try {
+        var fr = await fetch('/api/inbox-files').then(function(r){return r.json();});
+        var tr = await fetch('/api/tables-with-images').then(function(r){return r.json();});
+        files = (fr && fr.files) || [];
+        tables = tr || [];
+        var sel = document.getElementById('target-table');
+        sel.innerHTML = tables.map(function(t){return '<option value="'+t.schema+'.'+t.table+'">'+t.schema+'.'+t.table+'</option>';}).join('');
+        render();
+        loadTableForm();
+    } catch(e) {
+        document.getElementById('status').className = 'status-msg error';
+        document.getElementById('status').textContent = 'Load error: ' + e.message;
+    }
+}
+
+function render() {
+    var grid = document.getElementById('file-grid');
+    var empty = document.getElementById('empty-state');
+    var panel = document.getElementById('process-panel');
+    var countEl = document.getElementById('file-count');
+    countEl.textContent = files.length + ' file' + (files.length !== 1 ? 's' : '') + ' in inbox';
+    if (files.length === 0) {
+        grid.style.display = 'none';
+        empty.style.display = 'block';
+        panel.style.display = 'none';
+        return;
+    }
+    empty.style.display = 'none';
+    grid.style.display = 'grid';
+    panel.style.display = selected.length > 0 ? 'block' : 'none';
+    var html = '';
+    for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var idx = selected.indexOf(f.path);
+        var isSel = idx >= 0;
+        html += '<div class="file-card' + (isSel ? ' selected' : '') + '" data-fi="' + i + '">';
+        if (f.is_image) {
+            html += '<img src="/files/' + encodeURI(f.path) + '" loading="lazy" />';
+        } else {
+            html += '<div class="no-preview">📄</div>';
+        }
+        html += '<span class="name">' + f.name + '</span>';
+        html += '<span class="check">✓</span>';
+        html += '<span class="idx">' + (isSel ? (idx+1) : '') + '</span>';
+        html += '</div>';
+    }
+    grid.innerHTML = html;
+    var cards = grid.querySelectorAll('.file-card');
+    cards.forEach(function(card) {
+        card.addEventListener('click', function() {
+            var fi = parseInt(card.getAttribute('data-fi'));
+            var path = files[fi].path;
+            var si = selected.indexOf(path);
+            if (si >= 0) { selected.splice(si, 1); }
+            else { selected.push(path); }
+            render();
+        });
+    });
+}
+
+var HINTS_LOCAL = {
+    condition: {type:'select',options:['new','excellent','good','fair','worn','damaged','broken']},
+    type: {type:'select',options:['saw','drill','chisel','plane','router','router lift','sander','clamp','jig','measuring','hand tool','power tool','other']},
+    unit: {type:'select',options:['board','bf','lf','piece','sheet','sqft']},
+    doc_type: {type:'select',options:['manual','spec_sheet','warranty','quick_start','parts_list','other']}
+};
+
+async function loadTableForm() {
+    var tableVal = document.getElementById('target-table').value;
+    if (!tableVal) return;
+    var parts = tableVal.split('.');
+    var schema = parts[0], table = parts[1];
+    var container = document.getElementById('table-form-fields');
+    container.innerHTML = '<span style="color:var(--text-muted);font-size:0.8rem">Loading columns...</span>';
+    try {
+        var cols = await fetch('/api/columns/' + schema + '/' + table).then(function(r){return r.json();});
+        var hints = await fetch('/api/field-hints').then(function(r){return r.json();});
+        var skip = ['id','created_at','updated_at','archived_at'];
+        container.innerHTML = '';
+        for (var i = 0; i < cols.length; i++) {
+            var col = cols[i];
+            if (skip.indexOf(col.column_name) >= 0) continue;
+            if (col.column_default && col.column_default.indexOf('nextval') >= 0) continue;
+            var div = document.createElement('div');
+            if (col.column_name === 'notes') div.style.gridColumn = '1/-1';
+            var lbl = document.createElement('label');
+            lbl.style.cssText = 'display:block;font-size:0.7rem;color:var(--text-muted);margin-bottom:0.2rem;';
+            lbl.textContent = col.column_name;
+            div.appendChild(lbl);
+            var hint = hints[col.column_name] || HINTS_LOCAL[col.column_name] || null;
+            var inp = makeInput(col, hint);
+            inp.setAttribute('data-col', col.column_name);
+            inp.id = 'field-' + col.column_name;
+            div.appendChild(inp);
+            container.appendChild(div);
+        }
+    } catch(e) {
+        container.innerHTML = '<span style="color:var(--danger)">Error: ' + e.message + '</span>';
+    }
+}
+
+function makeInput(col, hint) {
+    var s = 'width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:4px;padding:0.35rem 0.5rem;color:var(--text);font-size:0.8rem;';
+    if (hint && hint.type === 'select' && hint.options) {
+        var el = document.createElement('select');
+        el.style.cssText = s;
+        el.innerHTML = '<option value="">—</option>' + hint.options.map(function(o){return '<option value="'+o+'">'+o+'</option>';}).join('');
+        return el;
+    }
+    if (col.column_name === 'notes') {
+        var el = document.createElement('textarea');
+        el.style.cssText = s + 'min-height:60px;resize:vertical;';
+        el.placeholder = 'notes';
+        return el;
+    }
+    if (col.data_type === 'boolean') {
+        var el = document.createElement('select');
+        el.style.cssText = s;
+        el.innerHTML = '<option value="">—</option><option value="true">Yes</option><option value="false">No</option>';
+        return el;
+    }
+    var el = document.createElement('input');
+    el.style.cssText = s;
+    var numTypes = ['numeric','integer','bigint','smallint','real','double precision'];
+    if (numTypes.indexOf(col.data_type) >= 0) { el.type = 'number'; el.step = 'any'; }
+    else if (col.data_type === 'date') { el.type = 'date'; }
+    else { el.type = 'text'; }
+    el.placeholder = (hint && hint.placeholder) || col.column_name;
+    return el;
+}
+
+function fillForm(fields) {
+    for (var key in fields) {
+        if (fields[key] == null) continue;
+        var el = document.getElementById('field-' + key);
+        if (el) { el.value = String(fields[key]); el.style.borderColor = 'var(--success)'; }
+    }
+}
+
+// Event handlers
+document.getElementById('target-table').addEventListener('change', loadTableForm);
+document.getElementById('link-action').addEventListener('change', function(e) {
+    document.getElementById('row-id-row').style.display = e.target.value === 'existing' ? 'flex' : 'none';
+    document.getElementById('table-form-fields').style.display = e.target.value === 'new' ? 'grid' : 'none';
+    document.getElementById('populate-row').style.display = e.target.value === 'new' ? 'flex' : 'none';
+});
+document.getElementById('btn-select-all').addEventListener('click', function() { selected = files.map(function(f){return f.path;}); render(); });
+document.getElementById('btn-clear-sel').addEventListener('click', function() { selected = []; render(); });
+document.getElementById('btn-clear-form').addEventListener('click', function() {
+    document.querySelectorAll('#table-form-fields [data-col]').forEach(function(el){el.value='';el.style.borderColor='';});
+    document.getElementById('fill-status').textContent = '';
+    document.getElementById('product-url').value = '';
+});
+
+// AI fill
+document.getElementById('btn-ai-fill').addEventListener('click', async function() {
+    if (!selected.length) return;
+    var btn = document.getElementById('btn-ai-fill');
+    var fs = document.getElementById('fill-status');
+    btn.disabled = true; btn.textContent = '⏳ Analyzing...';
+    fs.textContent = 'Sending photo to AI...'; fs.style.color = 'var(--accent)';
+    try {
+        var tableVal = document.getElementById('target-table').value;
+        var table = tableVal ? tableVal.split('.')[1] : '';
+        var hintMap = {tools:'tool',saw_blades:'saw_blade',router_bits:'router_bit',wood:'wood',albums:'album',manuals:'manual'};
+        var resp = await fetch('/api/ai-extract', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_path:selected[0],domain_hint:hintMap[table]||''})});
+        var data = await resp.json();
+        var intents = [];
+        if (data.ok && data.intents) intents = data.intents;
+        else if (data.content && data.content[0]) {
+            try { var t = data.content[0].text.replace(/```json\n?/g,'').replace(/```/g,'').trim(); intents = JSON.parse(t).intents || []; } catch(e){}
+        }
+        if (intents.length > 0) {
+            var p = intents[0].payload || {};
+            var ex = p._extra_fields || {}; delete p._extra_fields;
+            var fields = Object.assign({}, p);
+            if (Object.keys(ex).length > 0) {
+                fields.notes = (fields.notes||'') + (fields.notes?'\n':'') + '--- extra fields ---\n' + Object.entries(ex).map(function(e){return e[0]+': '+e[1];}).join('\n');
+            }
+            fillForm(fields);
+            fs.textContent = 'Filled ' + Object.keys(fields).length + ' fields. Review and save.'; fs.style.color = 'var(--success)';
+        } else { fs.textContent = 'Could not extract fields.'; fs.style.color = 'var(--warning)'; }
+    } catch(e) { fs.textContent = 'Error: '+e.message; fs.style.color = 'var(--danger)'; }
+    btn.disabled = false; btn.textContent = '🤖 Fill from photo (AI)';
+});
+
+// URL fill
+document.getElementById('btn-url-fill').addEventListener('click', async function() {
+    var url = document.getElementById('product-url').value.trim();
+    if (!url) return;
+    var tableVal = document.getElementById('target-table').value;
+    var table = tableVal ? tableVal.split('.')[1] : '';
+    var btn = document.getElementById('btn-url-fill');
+    var fs = document.getElementById('fill-status');
+    btn.disabled = true; btn.textContent = '⏳ Scraping...';
+    fs.textContent = 'Fetching page...'; fs.style.color = 'var(--accent)';
+    try {
+        var resp = await fetch('/api/scrape-product',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,table:table})});
+        var data = await resp.json();
+        if (data.ok && data.fields) { fillForm(data.fields); fs.textContent = 'Filled '+Object.keys(data.fields).length+' fields. Review and save.'; fs.style.color='var(--success)'; }
+        else { fs.textContent = data.error||'Could not extract.'; fs.style.color='var(--warning)'; }
+    } catch(e) { fs.textContent = 'Error: '+e.message; fs.style.color='var(--danger)'; }
+    btn.disabled = false; btn.textContent = '🔗 Fill from URL';
+});
+
+// Save record
+document.getElementById('btn-save-record').addEventListener('click', async function() {
+    if (!selected.length) return;
+    var tableVal = document.getElementById('target-table').value;
+    var parts = tableVal.split('.');
+    var schema = parts[0], table = parts[1];
+    var action = document.getElementById('link-action').value;
+    var status = document.getElementById('status');
+    var body = {schema: schema, table: table, files: selected};
+    if (action === 'existing') {
+        var id = parseInt(document.getElementById('existing-id').value);
+        if (!id) { status.className='status-msg error'; status.textContent='Enter a row ID.'; return; }
+        body.existing_row_id = id;
+    } else {
+        var rowData = {};
+        document.querySelectorAll('#table-form-fields [data-col]').forEach(function(el) {
+            var v = el.value.trim();
+            if (v && v !== '—') rowData[el.getAttribute('data-col')] = v;
+        });
+        if (Object.keys(rowData).length > 0) body.row_data = rowData;
+    }
+    var btn = document.getElementById('btn-save-record');
+    btn.disabled = true; btn.textContent = '⏳ Saving...';
+    try {
+        var resp = await fetch('/api/inbox-process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        var data = await resp.json();
+        if (data.ok) {
+            var linked = data.linked.filter(function(l){return l.linked;}).length;
+            status.className = 'status-msg success';
+            status.textContent = 'Saved ' + schema + '.' + table + ' #' + data.row_id + ' with ' + linked + ' photo(s).';
+            files = files.filter(function(f){return selected.indexOf(f.path)<0;});
+            selected = [];
+            document.querySelectorAll('#table-form-fields [data-col]').forEach(function(el){el.value='';el.style.borderColor='';});
+            document.getElementById('fill-status').textContent = '';
+            render();
+        } else { status.className='status-msg error'; status.textContent='Error: '+(data.detail||JSON.stringify(data)); }
+    } catch(e) { status.className='status-msg error'; status.textContent=e.message; }
+    btn.disabled = false; btn.textContent = '💾 Save Record & Link Photos';
+});
+
+// Mode switching
+document.getElementById('mode-select').addEventListener('change', function(e) {
+    var mode = e.target.value;
+    document.getElementById('record-mode').style.display = mode === 'record' ? '' : 'none';
+    document.getElementById('knowledge-mode').style.display = mode === 'knowledge' ? '' : 'none';
+});
+
+// Clear knowledge form
+document.getElementById('btn-clear-knowledge').addEventListener('click', function() {
+    document.getElementById('kn-topic').value = '';
+    document.getElementById('kn-title').value = '';
+    document.getElementById('kn-content').value = '';
+});
+
+// Save knowledge note
+document.getElementById('btn-save-knowledge').addEventListener('click', async function() {
+    var topic = document.getElementById('kn-topic').value.trim();
+    var title = document.getElementById('kn-title').value.trim();
+    var content = document.getElementById('kn-content').value.trim();
+    var status = document.getElementById('status');
+
+    if (!title) { status.className='status-msg error'; status.textContent='Title is required.'; return; }
+    if (!content && selected.length === 0) { status.className='status-msg error'; status.textContent='Add some notes or select at least one photo.'; return; }
+
+    var btn = document.getElementById('btn-save-knowledge');
+    btn.disabled = true; btn.textContent = '⏳ Saving...';
+
+    try {
+        var resp = await fetch('/api/inbox-knowledge', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({topic: topic || 'general', title: title, content: content, files: selected})
+        });
+        var data = await resp.json();
+        if (data.ok) {
+            status.className = 'status-msg success';
+            status.textContent = '✓ Saved knowledge note: ' + data.knowledge_path + ' with ' + data.files_moved + ' photo(s).';
+            // Remove processed files from view
+            files = files.filter(function(f){return selected.indexOf(f.path) < 0;});
+            selected = [];
+            document.getElementById('kn-topic').value = '';
+            document.getElementById('kn-title').value = '';
+            document.getElementById('kn-content').value = '';
+            render();
+        } else {
+            status.className = 'status-msg error';
+            status.textContent = 'Error: ' + (data.detail || JSON.stringify(data));
+        }
+    } catch(e) {
+        status.className = 'status-msg error';
+        status.textContent = e.message;
+    }
+    btn.disabled = false; btn.textContent = '💾 Save Knowledge Note';
+});
+load();
+</script>
+</body>
+</html>

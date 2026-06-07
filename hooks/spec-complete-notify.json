@@ -1,0 +1,12 @@
+{
+  "name": "Log Completed Spec Tasks",
+  "version": "1.0.0",
+  "description": "After a spec task is marked complete, log it to the context log so there's a running record of what's been built.",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A spec task was just completed. Append a brief entry to 'c:\\Users\\manni\\OneDrive\\Homebrew_dev\\context-log.md' noting what was built, in the format:\n- [DONE]: <task description> (spec: <feature-name>)\n\nAdd it under today's date section if one exists, or create a new dated section. Keep it to one line per task."
+  }
+}

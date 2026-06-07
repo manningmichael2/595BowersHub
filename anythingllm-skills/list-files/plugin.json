@@ -1,0 +1,19 @@
+{
+  "name": "List Files",
+  "hubId": "list-files",
+  "description": "Lists files in a directory on the server. Use to find uploaded photos/files before passing them to `capture`. Common paths: '/files/inbox' (drop zone for new uploads), '/files/receipts', '/files/inventory'. Returns file names, sizes, and whether each entry is a directory.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "path": {
+        "description": "Required. Absolute path starting with /files, e.g. '/files/inbox' or '/files/inventory/tools'. Use '/files' to see top-level directories.",
+        "type": "string",
+        "default": "/files/inbox"
+      }
+    }
+  }
+}

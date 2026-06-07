@@ -1,0 +1,30 @@
+{
+  "name": "Override Transaction Category",
+  "hubId": "override-category",
+  "description": "Manually re-categorizes a transaction and teaches the auto-categorizer. When called, it extracts a merchant pattern from the transaction description, counts how many OTHER transactions match that pattern, and returns a confirmation request if there are similar transactions. The user must approve the retroactive update before it applies to similar transactions. On confirmation, updates all matching transactions and saves the pattern as a learning example for future categorization batches. Use when the user says things like 'recategorize this as X', 'that's wrong, it should be Y', 'all my Rockler charges are woodshop'. Required: transaction_id and category_name. Optional: create_if_missing (only with user approval), confirm_retroactive (only after user confirms the count).",
+  "author": "Michael",
+  "version": "2.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "transaction_id": {
+        "description": "The transaction ID to recategorize, e.g. TRN-079dde50-281f-41cf-beb4-b27f3ca4d858. Get this from a prior call to get-transactions, filter-transactions, or ask-db. Required.",
+        "type": "string"
+      },
+      "category_name": {
+        "description": "The new leaf category name (case-insensitive match). Available leaf categories include: ATM, Entertainment, Food_Dining, Food_Groceries, House_Furniture, House_Improvement, House_Maintenance, House_Mortgage, House_Utilities, Income, Insurance, Medical, Other, Shopping, Subscriptions, Trans_Car_Insurance, Trans_Car_Maintenance, Trans_Gas, Trans_Public_Transit, Transfer, Travel, Woodshop. Required.",
+        "type": "string"
+      },
+      "create_if_missing": {
+        "description": "Set to 'true' ONLY after the user has explicitly confirmed creating a new category that doesn't exist yet. Leave unset otherwise. The skill will return an error with the list of valid categories if this flag isn't set and the category doesn't exist.",
+        "type": "string"
+      },
+      "confirm_retroactive": {
+        "description": "Set to 'true' ONLY after you've presented the user with the similar_count from a prior call and they've explicitly confirmed applying the update retroactively. Leave unset on the first call. The skill will return needs_confirmation=true if there are similar transactions, so you can present the count to the user before proceeding.",
+        "type": "string"
+      }
+    }
+  }
+}

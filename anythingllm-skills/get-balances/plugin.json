@@ -1,0 +1,13 @@
+{
+  "name": "Get Account Balances",
+  "hubId": "get-balances",
+  "description": "Fetches current balances for all synced bank accounts. Use this when the user asks about their account balances, net worth, how much money they have, or total debt.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {}
+  }
+}

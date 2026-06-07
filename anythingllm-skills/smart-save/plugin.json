@@ -1,0 +1,29 @@
+{
+  "name": "Smart Save",
+  "hubId": "smart-save",
+  "description": "Saves structured content (recipes, project ideas, tool notes, household info, etc.) to the knowledge base as a properly formatted markdown file. Use this when the user shares something worth keeping that is more than a one-line fact — full recipes, project plans, tool specs, how-to guides, or any structured knowledge. The AI should determine the category, title, and format the content as markdown before calling this skill.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "category": {
+        "description": "The category for routing. One of: recipe, project, tool, household, finance, general",
+        "type": "string",
+        "default": "general"
+      },
+      "title": {
+        "description": "A short descriptive title for the content (e.g., 'Michaels Chili', 'Dovetail Jig Build', 'Miter Saw Specs')",
+        "type": "string",
+        "default": ""
+      },
+      "content": {
+        "description": "The full content to save, formatted as markdown. Include headings, lists, ingredients, steps, specs — whatever is appropriate for the type of content.",
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}

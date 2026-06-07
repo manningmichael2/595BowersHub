@@ -1,0 +1,47 @@
+[
+  {
+    "id": "balance",
+    "rule": "(?i)^(what('s| is) my |show |get )?(account )?balance(s)?",
+    "rule_type": "regex",
+    "skill_name": "balances",
+    "param_template": {},
+    "description": "Check account balances",
+    "priority": 10
+  },
+  {
+    "id": "weather",
+    "rule": "(?i)^(what('s| is) the |how('s| is) the )?weather",
+    "rule_type": "regex",
+    "skill_name": "weather",
+    "param_template": {},
+    "description": "Get current weather",
+    "priority": 10
+  },
+  {
+    "id": "recall",
+    "rule": "(?i)^(what do (you|I) know about |recall |remember .* about )(.+)",
+    "rule_type": "regex",
+    "skill_name": "recall",
+    "param_template": {"query": "$3"},
+    "description": "Search knowledge base",
+    "priority": 20
+  },
+  {
+    "id": "inbox_files",
+    "rule": "(?i)^(what('s| is) in (my |the )?inbox|list (inbox )?files|show inbox)",
+    "rule_type": "regex",
+    "skill_name": "list-files",
+    "param_template": {"path": "inbox"},
+    "description": "List files in inbox",
+    "priority": 10
+  },
+  {
+    "id": "spending_summary",
+    "rule": "(?i)^(how much (have I|did I) spen[dt]|spending (summary|breakdown|this month))",
+    "rule_type": "regex",
+    "skill_name": "spending-summary",
+    "param_template": {},
+    "description": "Monthly spending summary",
+    "priority": 15
+  }
+]

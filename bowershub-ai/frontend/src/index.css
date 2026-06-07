@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Theme token defaults (Dark Navy preset).
+ *
+ * These match the seed values in migration 009_themes_and_branding.sql so
+ * the very first paint — before /api/settings has resolved the user's
+ * effective_theme — looks identical to the default. Once settings load,
+ * App.tsx overwrites these on `document.documentElement.style` from
+ * effectiveTheme.tokens_json. Tailwind's `colors.*` map (tailwind.config.ts)
+ * reads these via var(--color-<token>).
+ *
+ * `--color-surface-light` and `--color-surface-dark` are convenience
+ * variants used by the existing chrome; runtime theme application keeps
+ * them in sync with `--color-surface`.
+ */
+:root {
+  --color-background: #0f0f1a;
+  --color-surface: #1a1a2e;
+  --color-surface-light: #16213e;
+  --color-surface-dark: #0f0f1a;
+  --color-primary: #6366f1;
+  --color-accent: #818cf8;
+  --color-text: #e5e7eb;
+  --color-text-muted: #94a3b8;
+  --color-border: #374151;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+}
+
+/*
+ * Chat-content text-size classes.
+ *
+ * Originally these set explicit font-sizes on a wrapper around the message
+ * list. That left the rest of the app (sidebar, settings, model picker,
+ * conversation list) frozen at whatever font-size the browser default
+ * resolved Tailwind's `text-*` utilities to — which several of us found
+ * uncomfortably small.
+ *
+ * The new approach: leave these classes as harmless markers (still emitted
+ * by `MessageList.tsx`) and drive every `text-*` utility's font-size from
+ * a single CSS variable `--bh-text-base` set on `:root` by App.tsx. We
+ * override Tailwind's utilities below so they compute against the variable
+ * while padding/gap/width values stay tied to the html `rem` unit at its
+ * default 16px — that keeps layout dimensions stable when the user picks a
+ * larger text size (so the page doesn't outgrow the viewport).
+ *
+ * The `bh-text-*` classes themselves are no-ops; they remain in the DOM
+ * for any future scoped tweaks.
+ */
+:root {
+  --bh-text-base: 17px;
+}
+
+.bh-text-small,
+.bh-text-medium,
+.bh-text-large,
+.bh-text-xlarge {
+  font-size: inherit;
+}
+
+/*
+ * Override Tailwind's `text-*` utilities so font-size scales with the user's
+ * preference. The multipliers match Tailwind's defaults relative to a 16px
+ * base (text-xs 0.75, text-sm 0.875, text-base 1.0, text-lg 1.125,
+ * text-xl 1.25, text-2xl 1.5, text-3xl 1.875, text-4xl 2.25). We scope them
+ * inside `:root` so any inline `style={{ fontSize }}` still wins (used by
+ * the live preview in AppearancePanel).
+ */
+.text-xs    { font-size: calc(var(--bh-text-base) * 0.75); }
+.text-sm    { font-size: calc(var(--bh-text-base) * 0.875); }
+.text-base  { font-size: calc(var(--bh-text-base) * 1); }
+.text-lg    { font-size: calc(var(--bh-text-base) * 1.125); }
+.text-xl    { font-size: calc(var(--bh-text-base) * 1.25); }
+.text-2xl   { font-size: calc(var(--bh-text-base) * 1.5); }
+.text-3xl   { font-size: calc(var(--bh-text-base) * 1.875); }
+.text-4xl   { font-size: calc(var(--bh-text-base) * 2.25); }
+
+/* Default body text (for elements without an explicit text-* class) also
+   tracks the user's preference. Body color comes from the theme tokens. */
+body {
+  font-size: var(--bh-text-base);
+}
+
+/*
+ * Code blocks and tables inside markdown content keep their slightly-smaller
+ * proportions but in `em` so they scale alongside the rest of the UI.
+ */
+.bh-chat-content .markdown-content code,
+.bh-chat-content .markdown-content table {
+  font-size: 0.875em;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  /* Lock the page; AppShell uses position:fixed inset:0 to fill the visible viewport. */
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  /* Prevent overscroll bounce / browser pull-to-refresh from interfering with the chat. */
+  overscroll-behavior: none;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+}
+
+/* Markdown content styling */
+.markdown-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+.markdown-content h2 { font-size: 1.25rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
+.markdown-content h3 { font-size: 1.1rem; font-weight: 600; margin: 0.5rem 0 0.25rem; }
+.markdown-content p { margin: 0.5rem 0; }
+.markdown-content ul, .markdown-content ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+.markdown-content li { margin: 0.25rem 0; }
+.markdown-content code { background: #1e293b; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.875rem; }
+.markdown-content pre { background: #0f172a; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 0.75rem 0; }
+.markdown-content pre code { background: none; padding: 0; }
+.markdown-content table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.875rem; }
+.markdown-content th, .markdown-content td { border: 1px solid #374151; padding: 0.5rem 0.75rem; text-align: left; }
+.markdown-content th { background: #1e293b; font-weight: 600; }
+.markdown-content blockquote { border-left: 3px solid #6366f1; padding-left: 1rem; margin: 0.5rem 0; color: #94a3b8; }
+.markdown-content a { color: #818cf8; text-decoration: underline; }
+
+/* Typing indicator animation */
+@keyframes typing-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
+.typing-dot { animation: typing-dot 1.4s infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }

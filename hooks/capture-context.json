@@ -1,0 +1,12 @@
+{
+  "name": "Capture Chat Context",
+  "version": "1.0.0",
+  "description": "When the agent stops, capture any important decisions, discoveries, or notes from the session into the project context log.",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review the conversation that just completed. If any of the following occurred, append a dated entry to 'c:\\Users\\manni\\OneDrive\\Homebrew_dev\\context-log.md' (create it if it doesn't exist):\n- A technical decision was made (e.g. choosing a tool, architecture, approach)\n- A problem was discovered or solved\n- A new idea or feature was discussed\n- A configuration detail was established (IP, port, credential name, service URL)\n- A next step or TODO was identified\n\nFormat the entry as:\n## [YYYY-MM-DD] Session Notes\n- [Decision/Discovery/TODO]: description\n\nIf nothing significant happened (e.g. it was just a simple question), skip the file write. Do not duplicate entries that already exist in the log."
+  }
+}

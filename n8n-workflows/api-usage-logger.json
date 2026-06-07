@@ -1,0 +1,569 @@
+{
+  "updatedAt": "2026-05-26T01:42:00.979Z",
+  "createdAt": "2026-05-26T01:05:35.296Z",
+  "id": "Wuhd8AY1hr2a16SI",
+  "name": "API Usage Logger",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "trigger-log",
+      "name": "Log Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "calc-cost",
+      "name": "Calculate Cost",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Calculate estimated cost from token counts and model\nconst raw = $json;\n// Data may come from Execute Workflow (full item with _usage_log) or webhook (direct fields)\nconst data = raw._usage_log || raw.body || raw;\n\nconst model = (data.model || '').toLowerCase();\nconst inputTok = data.input_tokens || 0;\nconst outputTok = data.output_tokens || 0;\nconst cacheRead = data.cache_read_tokens || 0;\nconst cacheWrite = data.cache_write_tokens || 0;\n\n// Pricing per million tokens (May 2026)\nconst PRICING = {\n  'claude-haiku-4-5-20251001':  { input: 0.80, output: 4.00 },\n  'claude-sonnet-4-5-20250514': { input: 3.00, output: 15.00 },\n  'claude-sonnet-4-20250514':   { input: 3.00, output: 15.00 },\n  'claude-opus-4-20250514':     { input: 15.00, output: 75.00 },\n};\n\n// Find matching pricing (partial match for model variants)\nlet prices = null;\nfor (const [key, val] of Object.entries(PRICING)) {\n  if (model.includes(key) || key.includes(model)) {\n    prices = val;\n    break;\n  }\n}\n\n// Fallback: assume Haiku pricing if unknown\nif (!prices) {\n  // Try to detect from model name\n  if (model.includes('haiku')) prices = PRICING['claude-haiku-4-5-20251001'];\n  else if (model.includes('opus')) prices = PRICING['claude-opus-4-20250514'];\n  else if (model.includes('sonnet')) prices = PRICING['claude-sonnet-4-5-20250514'];\n  else prices = { input: 3.00, output: 15.00 }; // default to Sonnet\n}\n\nconst inputCost = (inputTok / 1_000_000) * prices.input;\nconst outputCost = (outputTok / 1_000_000) * prices.output;\nconst cacheReadCost = (cacheRead / 1_000_000) * (prices.input * 0.1);\nconst cacheWriteCost = (cacheWrite / 1_000_000) * (prices.input * 0.25);\nconst totalCost = inputCost + outputCost + cacheReadCost + cacheWriteCost;\n\nreturn [{\n  json: {\n    workflow_name: data.workflow_name || 'unknown',\n    node_name: data.node_name || 'unknown',\n    model: data.model || 'unknown',\n    input_tokens: inputTok,\n    output_tokens: outputTok,\n    cache_read_tokens: cacheRead,\n    cache_write_tokens: cacheWrite,\n    cost_usd: Math.round(totalCost * 1_000_000) / 1_000_000, // 6 decimal places\n    duration_ms: data.duration_ms || null,\n    metadata: data.metadata || null,\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "insert-log",
+      "name": "Insert Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        640,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.api_usage_log (workflow_name, node_name, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, duration_ms, metadata) VALUES ('{{ $json.workflow_name }}', '{{ $json.node_name }}', '{{ $json.model }}', {{ $json.input_tokens }}, {{ $json.output_tokens }}, {{ $json.cache_read_tokens }}, {{ $json.cache_write_tokens }}, {{ $json.cost_usd }}, {{ $json.duration_ms || 'NULL' }}, {{ $json.metadata ? \"'\" + JSON.stringify($json.metadata).replace(/'/g, \"''\") + \"'::jsonb\" : 'NULL' }})",
+        "options": {}
+      }
+    },
+    {
+      "id": "webhook-query",
+      "name": "Query Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        500
+      ],
+      "parameters": {
+        "path": "api-usage",
+        "httpMethod": "GET",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "api-usage-query"
+    },
+    {
+      "id": "query-stats",
+      "name": "Query Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        420,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT   called_at::date::text AS day,   workflow_name,   model,   COUNT(*)::text AS call_count,   SUM(input_tokens)::text AS total_input,   SUM(output_tokens)::text AS total_output,   SUM(cost_usd)::text AS total_cost FROM public.api_usage_log WHERE called_at > now() - interval '{{ $json.query.days || 7 }} days' GROUP BY day, workflow_name, model ORDER BY day DESC, total_cost DESC",
+        "options": {
+          "alwaysOutputData": true
+        }
+      }
+    },
+    {
+      "id": "format-stats",
+      "name": "Format Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        500
+      ],
+      "parameters": {
+        "jsCode": "// Format the query results for the dashboard\nconst rows = $input.all().map(i => i.json);\n\n// Group by day\nconst byDay = {};\nconst byWorkflow = {};\nconst byModel = {};\nlet totalCost = 0;\nlet totalCalls = 0;\n\nfor (const row of rows) {\n  const day = row.day || 'unknown';\n  const wf = row.workflow_name || 'unknown';\n  const mdl = row.model || 'unknown';\n  const cost = parseFloat(row.total_cost) || 0;\n  const calls = parseInt(row.call_count) || 0;\n\n  if (!byDay[day]) byDay[day] = { cost: 0, calls: 0, input_tokens: 0, output_tokens: 0 };\n  byDay[day].cost += cost;\n  byDay[day].calls += calls;\n  byDay[day].input_tokens += parseInt(row.total_input) || 0;\n  byDay[day].output_tokens += parseInt(row.total_output) || 0;\n\n  if (!byWorkflow[wf]) byWorkflow[wf] = { cost: 0, calls: 0 };\n  byWorkflow[wf].cost += cost;\n  byWorkflow[wf].calls += calls;\n\n  if (!byModel[mdl]) byModel[mdl] = { cost: 0, calls: 0 };\n  byModel[mdl].cost += cost;\n  byModel[mdl].calls += calls;\n\n  totalCost += cost;\n  totalCalls += calls;\n}\n\nreturn [{\n  json: {\n    ok: true,\n    days_queried: Object.keys(byDay).length,\n    total_cost_usd: Math.round(totalCost * 100) / 100,\n    total_calls: totalCalls,\n    by_day: byDay,\n    by_workflow: byWorkflow,\n    by_model: byModel,\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "webhook-log",
+      "name": "Log Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        800
+      ],
+      "parameters": {
+        "path": "log-api-usage",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "log-api-usage"
+    },
+    {
+      "id": "calc-cost-webhook",
+      "name": "Calculate Cost (Webhook)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        800
+      ],
+      "parameters": {
+        "jsCode": "// Calculate estimated cost from token counts and model\nconst raw = $json.body || $json;\n// Data may come from Execute Workflow (full item with _usage_log) or webhook (direct fields)\nconst data = raw._usage_log || raw.body || raw;\n\nconst model = (data.model || '').toLowerCase();\nconst inputTok = data.input_tokens || 0;\nconst outputTok = data.output_tokens || 0;\nconst cacheRead = data.cache_read_tokens || 0;\nconst cacheWrite = data.cache_write_tokens || 0;\n\n// Pricing per million tokens (May 2026)\nconst PRICING = {\n  'claude-haiku-4-5-20251001':  { input: 0.80, output: 4.00 },\n  'claude-sonnet-4-5-20250514': { input: 3.00, output: 15.00 },\n  'claude-sonnet-4-20250514':   { input: 3.00, output: 15.00 },\n  'claude-opus-4-20250514':     { input: 15.00, output: 75.00 },\n};\n\n// Find matching pricing (partial match for model variants)\nlet prices = null;\nfor (const [key, val] of Object.entries(PRICING)) {\n  if (model.includes(key) || key.includes(model)) {\n    prices = val;\n    break;\n  }\n}\n\n// Fallback: assume Haiku pricing if unknown\nif (!prices) {\n  // Try to detect from model name\n  if (model.includes('haiku')) prices = PRICING['claude-haiku-4-5-20251001'];\n  else if (model.includes('opus')) prices = PRICING['claude-opus-4-20250514'];\n  else if (model.includes('sonnet')) prices = PRICING['claude-sonnet-4-5-20250514'];\n  else prices = { input: 3.00, output: 15.00 }; // default to Sonnet\n}\n\nconst inputCost = (inputTok / 1_000_000) * prices.input;\nconst outputCost = (outputTok / 1_000_000) * prices.output;\nconst cacheReadCost = (cacheRead / 1_000_000) * (prices.input * 0.1);\nconst cacheWriteCost = (cacheWrite / 1_000_000) * (prices.input * 0.25);\nconst totalCost = inputCost + outputCost + cacheReadCost + cacheWriteCost;\n\nreturn [{\n  json: {\n    workflow_name: data.workflow_name || 'unknown',\n    node_name: data.node_name || 'unknown',\n    model: data.model || 'unknown',\n    input_tokens: inputTok,\n    output_tokens: outputTok,\n    cache_read_tokens: cacheRead,\n    cache_write_tokens: cacheWrite,\n    cost_usd: Math.round(totalCost * 1_000_000) / 1_000_000, // 6 decimal places\n    duration_ms: data.duration_ms || null,\n    metadata: data.metadata || null,\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "insert-log-webhook",
+      "name": "Insert Log (Webhook)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        640,
+        800
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO public.api_usage_log (workflow_name, node_name, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, duration_ms, metadata) VALUES ('{{ $json.workflow_name }}', '{{ $json.node_name }}', '{{ $json.model }}', {{ $json.input_tokens }}, {{ $json.output_tokens }}, {{ $json.cache_read_tokens }}, {{ $json.cache_write_tokens }}, {{ $json.cost_usd }}, {{ $json.duration_ms || 'NULL' }}, {{ $json.metadata ? \"'\" + JSON.stringify($json.metadata).replace(/'/g, \"''\") + \"'::jsonb\" : 'NULL' }}) RETURNING id::text, cost_usd::text",
+        "options": {}
+      }
+    },
+    {
+      "id": "respond-log-webhook",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        800
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { ok: true, id: $json.id, cost_usd: $json.cost_usd } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Log Trigger": {
+      "main": [
+        [
+          {
+            "node": "Calculate Cost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Cost": {
+      "main": [
+        [
+          {
+            "node": "Insert Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Webhook": {
+      "main": [
+        [
+          {
+            "node": "Query Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Stats": {
+      "main": [
+        [
+          {
+            "node": "Format Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Webhook": {
+      "main": [
+        [
+          {
+            "node": "Calculate Cost (Webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Cost (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Insert Log (Webhook)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Log (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "8ad2c588-2c44-4d9c-863c-ff7b98a647db",
+  "activeVersionId": "8ad2c588-2c44-4d9c-863c-ff7b98a647db",
+  "versionCounter": 9,
+  "triggerCount": 2,
+  "shared": [
+    {
+      "updatedAt": "2026-05-26T01:05:35.298Z",
+      "createdAt": "2026-05-26T01:05:35.298Z",
+      "role": "workflow:owner",
+      "workflowId": "Wuhd8AY1hr2a16SI",
+      "projectId": "sUwwWKPwkXlUE6jF",
+      "project": {
+        "updatedAt": "2026-05-11T01:15:17.027Z",
+        "createdAt": "2026-05-11T01:12:34.580Z",
+        "id": "sUwwWKPwkXlUE6jF",
+        "name": "Michael Manning <manningmichael2@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-26T01:09:30.165Z",
+    "createdAt": "2026-05-26T01:09:30.165Z",
+    "versionId": "8ad2c588-2c44-4d9c-863c-ff7b98a647db",
+    "workflowId": "Wuhd8AY1hr2a16SI",
+    "nodes": [
+      {
+        "id": "trigger-log",
+        "name": "Log Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
+        "position": [
+          200,
+          200
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "calc-cost",
+        "name": "Calculate Cost",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          420,
+          200
+        ],
+        "parameters": {
+          "jsCode": "// Calculate estimated cost from token counts and model\nconst raw = $json;\n// Data may come from Execute Workflow (full item with _usage_log) or webhook (direct fields)\nconst data = raw._usage_log || raw.body || raw;\n\nconst model = (data.model || '').toLowerCase();\nconst inputTok = data.input_tokens || 0;\nconst outputTok = data.output_tokens || 0;\nconst cacheRead = data.cache_read_tokens || 0;\nconst cacheWrite = data.cache_write_tokens || 0;\n\n// Pricing per million tokens (May 2026)\nconst PRICING = {\n  'claude-haiku-4-5-20251001':  { input: 0.80, output: 4.00 },\n  'claude-sonnet-4-5-20250514': { input: 3.00, output: 15.00 },\n  'claude-sonnet-4-20250514':   { input: 3.00, output: 15.00 },\n  'claude-opus-4-20250514':     { input: 15.00, output: 75.00 },\n};\n\n// Find matching pricing (partial match for model variants)\nlet prices = null;\nfor (const [key, val] of Object.entries(PRICING)) {\n  if (model.includes(key) || key.includes(model)) {\n    prices = val;\n    break;\n  }\n}\n\n// Fallback: assume Haiku pricing if unknown\nif (!prices) {\n  // Try to detect from model name\n  if (model.includes('haiku')) prices = PRICING['claude-haiku-4-5-20251001'];\n  else if (model.includes('opus')) prices = PRICING['claude-opus-4-20250514'];\n  else if (model.includes('sonnet')) prices = PRICING['claude-sonnet-4-5-20250514'];\n  else prices = { input: 3.00, output: 15.00 }; // default to Sonnet\n}\n\nconst inputCost = (inputTok / 1_000_000) * prices.input;\nconst outputCost = (outputTok / 1_000_000) * prices.output;\nconst cacheReadCost = (cacheRead / 1_000_000) * (prices.input * 0.1);\nconst cacheWriteCost = (cacheWrite / 1_000_000) * (prices.input * 0.25);\nconst totalCost = inputCost + outputCost + cacheReadCost + cacheWriteCost;\n\nreturn [{\n  json: {\n    workflow_name: data.workflow_name || 'unknown',\n    node_name: data.node_name || 'unknown',\n    model: data.model || 'unknown',\n    input_tokens: inputTok,\n    output_tokens: outputTok,\n    cache_read_tokens: cacheRead,\n    cache_write_tokens: cacheWrite,\n    cost_usd: Math.round(totalCost * 1_000_000) / 1_000_000, // 6 decimal places\n    duration_ms: data.duration_ms || null,\n    metadata: data.metadata || null,\n  }\n}];\n"
+        }
+      },
+      {
+        "id": "insert-log",
+        "name": "Insert Log",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          640,
+          200
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "JvthRCvWKXaGGbBI",
+            "name": "Finance Postgres"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO public.api_usage_log (workflow_name, node_name, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, duration_ms, metadata) VALUES ('{{ $json.workflow_name }}', '{{ $json.node_name }}', '{{ $json.model }}', {{ $json.input_tokens }}, {{ $json.output_tokens }}, {{ $json.cache_read_tokens }}, {{ $json.cache_write_tokens }}, {{ $json.cost_usd }}, {{ $json.duration_ms || 'NULL' }}, {{ $json.metadata ? \"'\" + JSON.stringify($json.metadata).replace(/'/g, \"''\") + \"'::jsonb\" : 'NULL' }})",
+          "options": {}
+        }
+      },
+      {
+        "id": "webhook-query",
+        "name": "Query Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          200,
+          500
+        ],
+        "parameters": {
+          "path": "api-usage",
+          "httpMethod": "GET",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "webhookId": "api-usage-query"
+      },
+      {
+        "id": "query-stats",
+        "name": "Query Stats",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          420,
+          500
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "JvthRCvWKXaGGbBI",
+            "name": "Finance Postgres"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT   called_at::date::text AS day,   workflow_name,   model,   COUNT(*)::text AS call_count,   SUM(input_tokens)::text AS total_input,   SUM(output_tokens)::text AS total_output,   SUM(cost_usd)::text AS total_cost FROM public.api_usage_log WHERE called_at > now() - interval '{{ $json.query.days || 7 }} days' GROUP BY day, workflow_name, model ORDER BY day DESC, total_cost DESC",
+          "options": {
+            "alwaysOutputData": true
+          }
+        }
+      },
+      {
+        "id": "format-stats",
+        "name": "Format Stats",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          640,
+          500
+        ],
+        "parameters": {
+          "jsCode": "// Format the query results for the dashboard\nconst rows = $input.all().map(i => i.json);\n\n// Group by day\nconst byDay = {};\nconst byWorkflow = {};\nconst byModel = {};\nlet totalCost = 0;\nlet totalCalls = 0;\n\nfor (const row of rows) {\n  const day = row.day || 'unknown';\n  const wf = row.workflow_name || 'unknown';\n  const mdl = row.model || 'unknown';\n  const cost = parseFloat(row.total_cost) || 0;\n  const calls = parseInt(row.call_count) || 0;\n\n  if (!byDay[day]) byDay[day] = { cost: 0, calls: 0, input_tokens: 0, output_tokens: 0 };\n  byDay[day].cost += cost;\n  byDay[day].calls += calls;\n  byDay[day].input_tokens += parseInt(row.total_input) || 0;\n  byDay[day].output_tokens += parseInt(row.total_output) || 0;\n\n  if (!byWorkflow[wf]) byWorkflow[wf] = { cost: 0, calls: 0 };\n  byWorkflow[wf].cost += cost;\n  byWorkflow[wf].calls += calls;\n\n  if (!byModel[mdl]) byModel[mdl] = { cost: 0, calls: 0 };\n  byModel[mdl].cost += cost;\n  byModel[mdl].calls += calls;\n\n  totalCost += cost;\n  totalCalls += calls;\n}\n\nreturn [{\n  json: {\n    ok: true,\n    days_queried: Object.keys(byDay).length,\n    total_cost_usd: Math.round(totalCost * 100) / 100,\n    total_calls: totalCalls,\n    by_day: byDay,\n    by_workflow: byWorkflow,\n    by_model: byModel,\n  }\n}];\n"
+        }
+      },
+      {
+        "id": "webhook-log",
+        "name": "Log Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          200,
+          800
+        ],
+        "parameters": {
+          "path": "log-api-usage",
+          "httpMethod": "POST",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "webhookId": "log-api-usage"
+      },
+      {
+        "id": "calc-cost-webhook",
+        "name": "Calculate Cost (Webhook)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          420,
+          800
+        ],
+        "parameters": {
+          "jsCode": "// Calculate estimated cost from token counts and model\nconst raw = $json.body || $json;\n// Data may come from Execute Workflow (full item with _usage_log) or webhook (direct fields)\nconst data = raw._usage_log || raw.body || raw;\n\nconst model = (data.model || '').toLowerCase();\nconst inputTok = data.input_tokens || 0;\nconst outputTok = data.output_tokens || 0;\nconst cacheRead = data.cache_read_tokens || 0;\nconst cacheWrite = data.cache_write_tokens || 0;\n\n// Pricing per million tokens (May 2026)\nconst PRICING = {\n  'claude-haiku-4-5-20251001':  { input: 0.80, output: 4.00 },\n  'claude-sonnet-4-5-20250514': { input: 3.00, output: 15.00 },\n  'claude-sonnet-4-20250514':   { input: 3.00, output: 15.00 },\n  'claude-opus-4-20250514':     { input: 15.00, output: 75.00 },\n};\n\n// Find matching pricing (partial match for model variants)\nlet prices = null;\nfor (const [key, val] of Object.entries(PRICING)) {\n  if (model.includes(key) || key.includes(model)) {\n    prices = val;\n    break;\n  }\n}\n\n// Fallback: assume Haiku pricing if unknown\nif (!prices) {\n  // Try to detect from model name\n  if (model.includes('haiku')) prices = PRICING['claude-haiku-4-5-20251001'];\n  else if (model.includes('opus')) prices = PRICING['claude-opus-4-20250514'];\n  else if (model.includes('sonnet')) prices = PRICING['claude-sonnet-4-5-20250514'];\n  else prices = { input: 3.00, output: 15.00 }; // default to Sonnet\n}\n\nconst inputCost = (inputTok / 1_000_000) * prices.input;\nconst outputCost = (outputTok / 1_000_000) * prices.output;\nconst cacheReadCost = (cacheRead / 1_000_000) * (prices.input * 0.1);\nconst cacheWriteCost = (cacheWrite / 1_000_000) * (prices.input * 0.25);\nconst totalCost = inputCost + outputCost + cacheReadCost + cacheWriteCost;\n\nreturn [{\n  json: {\n    workflow_name: data.workflow_name || 'unknown',\n    node_name: data.node_name || 'unknown',\n    model: data.model || 'unknown',\n    input_tokens: inputTok,\n    output_tokens: outputTok,\n    cache_read_tokens: cacheRead,\n    cache_write_tokens: cacheWrite,\n    cost_usd: Math.round(totalCost * 1_000_000) / 1_000_000, // 6 decimal places\n    duration_ms: data.duration_ms || null,\n    metadata: data.metadata || null,\n  }\n}];\n"
+        }
+      },
+      {
+        "id": "insert-log-webhook",
+        "name": "Insert Log (Webhook)",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          640,
+          800
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "JvthRCvWKXaGGbBI",
+            "name": "Finance Postgres"
+          }
+        },
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO public.api_usage_log (workflow_name, node_name, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, duration_ms, metadata) VALUES ('{{ $json.workflow_name }}', '{{ $json.node_name }}', '{{ $json.model }}', {{ $json.input_tokens }}, {{ $json.output_tokens }}, {{ $json.cache_read_tokens }}, {{ $json.cache_write_tokens }}, {{ $json.cost_usd }}, {{ $json.duration_ms || 'NULL' }}, {{ $json.metadata ? \"'\" + JSON.stringify($json.metadata).replace(/'/g, \"''\") + \"'::jsonb\" : 'NULL' }}) RETURNING id::text, cost_usd::text",
+          "options": {}
+        }
+      },
+      {
+        "id": "respond-log-webhook",
+        "name": "Respond OK",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          860,
+          800
+        ],
+        "parameters": {
+          "jsCode": "return [{ json: { ok: true, id: $json.id, cost_usd: $json.cost_usd } }];"
+        }
+      }
+    ],
+    "connections": {
+      "Log Trigger": {
+        "main": [
+          [
+            {
+              "node": "Calculate Cost",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Calculate Cost": {
+        "main": [
+          [
+            {
+              "node": "Insert Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query Webhook": {
+        "main": [
+          [
+            {
+              "node": "Query Stats",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query Stats": {
+        "main": [
+          [
+            {
+              "node": "Format Stats",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log Webhook": {
+        "main": [
+          [
+            {
+              "node": "Calculate Cost (Webhook)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Calculate Cost (Webhook)": {
+        "main": [
+          [
+            {
+              "node": "Insert Log (Webhook)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Insert Log (Webhook)": {
+        "main": [
+          [
+            {
+              "node": "Respond OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Michael Manning",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-26T01:09:30.198Z",
+        "id": 135,
+        "workflowId": "Wuhd8AY1hr2a16SI",
+        "versionId": "8ad2c588-2c44-4d9c-863c-ff7b98a647db",
+        "event": "activated",
+        "userId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      },
+      {
+        "createdAt": "2026-05-26T01:42:01.008Z",
+        "id": 157,
+        "workflowId": "Wuhd8AY1hr2a16SI",
+        "versionId": "8ad2c588-2c44-4d9c-863c-ff7b98a647db",
+        "event": "activated",
+        "userId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      },
+      {
+        "createdAt": "2026-05-26T01:09:30.186Z",
+        "id": 134,
+        "workflowId": "Wuhd8AY1hr2a16SI",
+        "versionId": "8ad2c588-2c44-4d9c-863c-ff7b98a647db",
+        "event": "deactivated",
+        "userId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      },
+      {
+        "createdAt": "2026-05-26T01:42:00.995Z",
+        "id": 156,
+        "workflowId": "Wuhd8AY1hr2a16SI",
+        "versionId": "8ad2c588-2c44-4d9c-863c-ff7b98a647db",
+        "event": "deactivated",
+        "userId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      }
+    ]
+  }
+}

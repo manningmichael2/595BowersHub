@@ -1,0 +1,334 @@
+{
+  "name": "Categorizer",
+  "description": "Categorizes uncategorized transactions using Haiku, with user examples as few-shot guidance",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "trigger",
+              "type": "any"
+            }
+          ]
+        }
+      },
+      "id": "trigger-cat",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, name, parent_id FROM categories ORDER BY COALESCE(parent_id, id), name;",
+        "options": {}
+      },
+      "id": "fetch-cats",
+      "name": "Fetch Categories",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        400,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT e.description_pattern, c.name AS category_name, e.times_reinforced FROM category_examples e JOIN categories c ON e.category_id = c.id ORDER BY e.times_reinforced DESC, e.updated_at DESC LIMIT 30;",
+        "options": {}
+      },
+      "id": "fetch-examples",
+      "name": "Fetch Examples",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        400,
+        350
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, description, memo, amount FROM transactions WHERE category_id IS NULL AND user_category_override = false ORDER BY posted_date DESC LIMIT 500;",
+        "options": {}
+      },
+      "id": "fetch-uncat",
+      "name": "Fetch Uncategorized",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        400,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const categories = $('Fetch Categories').all().map(i => i.json);\nconst examples = $('Fetch Examples').all().map(i => i.json);\nconst transactions = $('Fetch Uncategorized').all().map(i => i.json);\n\nif (transactions.length === 0) {\n  return [{ json: { skip: true, count: 0, reason: 'No uncategorized transactions' } }];\n}\n\n// A \"leaf\" is any category that has no children.\n// This includes both top-level categories (like 'Other', 'Subscriptions') AND\n// sub-categories under a parent (like 'Food_Groceries' under 'Food').\nconst childIds = new Set(categories.map(c => c.parent_id).filter(p => p !== null));\nconst leaves = categories.filter(c => !childIds.has(c.id));\n\n// Build the category tree for the prompt (shows parent/leaf for context)\nconst tree = [];\nfor (const leaf of leaves) {\n  const parent = leaf.parent_id ? categories.find(c => c.id === leaf.parent_id) : null;\n  tree.push(parent ? (parent.name + '/' + leaf.name) : leaf.name);\n}\ntree.sort();\n\n// Category name -> id lookup (leaves only - these are the valid choices)\nconst categoryIdByName = {};\nfor (const leaf of leaves) {\n  categoryIdByName[leaf.name] = leaf.id;\n}\n\n// Build few-shot examples section\nconst exampleLines = examples\n  .filter(e => e.description_pattern && e.category_name)\n  .slice(0, 30)\n  .map(e => '\"' + e.description_pattern + '\" -> ' + e.category_name);\n\nconst examplesBlock = exampleLines.length > 0\n  ? '\\n\\nHere are past categorization decisions made by the user. Use these as strong guidance:\\n' + exampleLines.join('\\n')\n  : '';\n\n// Batch transactions into groups of 50\nconst batches = [];\nfor (let i = 0; i < transactions.length; i += 50) {\n  batches.push(transactions.slice(i, i + 50));\n}\n\nconst output = [];\nfor (let idx = 0; idx < batches.length; idx++) {\n  const batch = batches[idx];\n  const txnData = batch.map(t => ({\n    id: t.id,\n    description: t.description || '',\n    memo: t.memo || '',\n    amount: parseFloat(t.amount)\n  }));\n\n  const prompt = 'Categorize each bank transaction below. Choose the MOST specific leaf category from this list (only use the leaf name, not the parent):\\n\\n' +\n    tree.join('\\n') +\n    '\\n\\nRules:\\n' +\n    '- Transfers between your own accounts -> Transfer\\n' +\n    '- Paychecks, interest, dividends -> Income\\n' +\n    '- Woodworking tools/supplies (Rockler, Festool, Harbor Freight, blades, wood) -> Woodshop\\n' +\n    '- Airlines, hotels, travel insurance, AMEX travel -> Travel\\n' +\n    '- Grocery stores, food markets (Kroger, Meijer, Costco food) -> Food_Groceries\\n' +\n    '- Restaurants, food delivery, Uber Eats -> Food_Dining\\n' +\n    '- Gas stations, vehicle fuel -> Trans_Gas\\n' +\n    '- Streaming, software, memberships -> Subscriptions\\n' +\n    '- When unsure -> Other\\n' +\n    examplesBlock +\n    '\\n\\nReturn ONLY a JSON array, no markdown, no explanation: [{\"id\":\"<id>\",\"category\":\"<leaf_name>\"}, ...]\\n\\nTransactions:\\n' +\n    JSON.stringify(txnData);\n\n  output.push({ json: {\n    batch_index: idx,\n    total_batches: batches.length,\n    prompt,\n    batch_ids: batch.map(t => t.id),\n    category_id_map: categoryIdByName\n  } });\n}\n\nreturn output;"
+      },
+      "id": "build-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "cond-has-work",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-has-work",
+      "name": "IF Has Work",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        860,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 4096, messages: [{ role: 'user', content: $json.prompt }] }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "call-haiku",
+      "name": "Call Haiku",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        250
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Runs once per Haiku response (one per batch).\n// Corresponding Build Prompt output is at the same index.\nconst txnBatch = $('Build Prompt').all()[$itemIndex];\nconst categoryIdMap = txnBatch.json.category_id_map;\nconst content = ($json.content && $json.content[0]) ? $json.content[0].text : '';\n\nlet parsed;\ntry {\n  let clean = content.trim();\n  if (clean.startsWith('```')) {\n    clean = clean.replace(/^```(?:json)?\\n?/, '').replace(/\\n?```$/, '').trim();\n  }\n  const match = clean.match(/\\[[\\s\\S]*\\]/);\n  if (!match) throw new Error('No JSON array found');\n  parsed = JSON.parse(match[0]);\n} catch (err) {\n  // Fallback: assign all ids in this batch to Other\n  const otherId = categoryIdMap['Other'];\n  const fallback = txnBatch.json.batch_ids.map(id => ({ id, category_id: otherId, fallback: true }));\n  return { json: { items: fallback } };\n}\n\nconst results = [];\nfor (const item of parsed) {\n  const catName = item.category;\n  const catId = categoryIdMap[catName] || categoryIdMap['Other'];\n  results.push({\n    id: item.id,\n    category_id: catId,\n    assigned_category: catName,\n    fallback: !categoryIdMap[catName]\n  });\n}\n\nreturn { json: { items: results } };"
+      },
+      "id": "parse-response",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "split-items",
+      "name": "Split Out Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE transactions SET category_id = {{ $json.category_id }} WHERE id = '{{ $json.id }}' AND user_category_override = false AND category_id IS NULL;",
+        "options": {}
+      },
+      "id": "update-cats",
+      "name": "Update Categories",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1720,
+        250
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// When no uncategorized transactions, short-circuit gracefully\nreturn [{ json: $input.first().json }];"
+      },
+      "id": "log-skip",
+      "name": "Log Skip",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Categories",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Examples",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Uncategorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Uncategorized": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "IF Has Work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Work": {
+      "main": [
+        [
+          {
+            "node": "Call Haiku",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Haiku": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Split Out Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Items": {
+      "main": [
+        [
+          {
+            "node": "Update Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

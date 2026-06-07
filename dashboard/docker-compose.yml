@@ -1,0 +1,14 @@
+# Dashboard — custom hub dashboard
+# Deploy: docker compose up -d --build
+# Uses host network for Tailscale device access
+
+services:
+  dashboard:
+    build: .
+    container_name: dashboard
+    restart: unless-stopped
+    network_mode: host
+    env_file: /home/michael/dashboard/.env
+    volumes:
+      - /usr/bin/tailscale:/usr/bin/tailscale:ro
+      - /var/run/tailscale:/var/run/tailscale:ro

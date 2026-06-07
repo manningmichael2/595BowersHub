@@ -1,0 +1,46 @@
+{
+  "name": "Filter Transactions",
+  "hubId": "filter-transactions",
+  "description": "Searches and filters transactions by account, category, amount range, description, or house-related tags. Use this when the user asks about specific spending categories, transactions at a particular store, spending on the house, or transactions within a dollar amount range.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "account": {
+        "description": "Filter by account name (partial match). Example: 'Ally', 'Chase', 'Amex'",
+        "type": "string"
+      },
+      "category": {
+        "description": "Filter by category name (exact match). Example: 'Groceries', 'Dining', 'Gas'",
+        "type": "string"
+      },
+      "description": {
+        "description": "Filter by transaction description (partial match). Example: 'Walmart', 'Amazon'",
+        "type": "string"
+      },
+      "min_amount": {
+        "description": "Minimum transaction amount (use negative for debits)",
+        "type": "string"
+      },
+      "max_amount": {
+        "description": "Maximum transaction amount",
+        "type": "string"
+      },
+      "house_tag": {
+        "description": "Set to 'true' to only show house-related transactions",
+        "type": "string"
+      },
+      "start_date": {
+        "description": "Start date in YYYY-MM-DD format. Defaults to 90 days ago.",
+        "type": "string"
+      },
+      "end_date": {
+        "description": "End date in YYYY-MM-DD format. Defaults to today.",
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+# Filewriter — Flask microservice for filesystem + IMAP ops
+# Deploy: docker compose up -d
+#
+# Env vars (in .env on server or Portainer stack env):
+#   GMAIL_IMAP_USER     - manningmichael2@gmail.com
+#   GMAIL_IMAP_PASSWORD - 16-char Gmail App Password (from Dashlane)
+
+services:
+  filewriter:
+    image: python:3.11-slim
+    container_name: filewriter
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    env_file: /home/michael/filewriter/.env
+    volumes:
+      - /home/michael/finance:/finance
+      - /home/michael/filewriter:/app
+      - /home/michael/files:/files
+      - /home/michael/knowledge:/knowledge
+    working_dir: /app
+    command: sh -c "pip install flask imap-tools Pillow -q && python app.py"
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    external: true
+    name: ai-services_ai-network

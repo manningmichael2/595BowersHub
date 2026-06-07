@@ -1,0 +1,59 @@
+# Infrastructure — shared foundation services
+# Deploy: docker compose up -d
+#
+# These rarely change. Run once and leave them.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    volumes:
+      - /home/michael/finance/postgres-data:/var/lib/postgresql/data
+      - /home/michael/finance/init:/docker-entrypoint-initdb.d:ro
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-michael}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-finance}
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U michael -d finance"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - ai-services_n8n_data:/home/node/.n8n
+      - /home/michael/finance:/home/node/finance
+      - /home/michael/files:/home/node/files
+    env_file: /home/michael/n8n/.env
+    networks:
+      - ai-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /home/michael/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /home/michael/caddy/certs:/certs:ro
+
+volumes:
+  ai-services_n8n_data:
+    external: true
+
+networks:
+  ai-network:
+    external: true
+    name: ai-services_ai-network

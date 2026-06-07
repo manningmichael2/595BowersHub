@@ -1,0 +1,963 @@
+{
+  "name": "Email Receipts Importer",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "AI-Tags/Receipts",
+        "options": {},
+        "format": "resolved",
+        "downloadAttachments": true,
+        "postProcessAction": "read"
+      },
+      "id": "n-imap",
+      "name": "IMAP Trigger (Receipts)",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        200,
+        500
+      ],
+      "credentials": {
+        "imap": {
+          "id": "ISns0rRRRmIETF2F",
+          "name": "Gmail IMAP (App Password)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// IMAP Trigger emits one item per email. Each email may have N attachments\n// in `binary`. We need to fan out to one item per attachment so downstream\n// runs once per file.\nconst out = [];\nfor (const item of $input.all()) {\n  const msg = item.json;\n  const bin = item.binary || {};\n  const subj = msg.subject || \"\";\n  const from = (msg.from && (msg.from.value?.[0]?.address || msg.from.text)) || \"\";\n  const messageId = msg.messageId || msg.uid || msg.headers?.[\"message-id\"] || \"\";\n\n  let attachIndex = 0;\n  for (const key of Object.keys(bin)) {\n    const att = bin[key];\n    const mime = att.mimeType || \"application/octet-stream\";\n    // Only images and PDFs for now.\n    if (!mime.startsWith(\"image/\") && mime !== \"application/pdf\") continue;\n    out.push({\n      json: {\n        message_id:    messageId,\n        message_uid:   msg.uid,\n        subject:       subj,\n        from_address:  from,\n        attachment_key: key,\n        attachment_filename: att.fileName || `attachment-${attachIndex}`,\n        attachment_mime: mime,\n      },\n      binary: { [key]: att, current: att },\n    });\n    attachIndex++;\n  }\n}\n// If no usable attachments, emit nothing \u2014 downstream won't fire.\nreturn out;\n"
+      },
+      "id": "n-fan",
+      "name": "Fan Out Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst ctx  = item.json;\nconst binKey = ctx.attachment_key;\n\nconst bin = item.binary?.[binKey];\nif (!bin) throw new Error(`Missing binary for key ${binKey}`);\n\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binKey);\nconst b64 = buffer.toString('base64');\n\nconst safeName = (ctx.attachment_filename || 'attachment').replace(/[^A-Za-z0-9._-]/g, '_');\nconst idHash = (ctx.message_id || String(Date.now())).replace(/[^A-Za-z0-9]/g, '').slice(0, 16);\nconst inboxName = `email-${idHash}-${safeName}`;\nconst inboxPath = `/files/inbox/${inboxName}`;\n\nreturn [{\n  json: {\n    ...ctx,\n    inbox_full_path: inboxPath,\n    inbox_rel_path:  `inbox/${inboxName}`,\n    base64:          b64,\n    write_payload:   { path: inboxPath, base64: b64, overwrite: true },\n  }\n}];\n"
+      },
+      "id": "n-prep",
+      "name": "Prep Inbox Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/write-base64",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.write_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-write",
+      "name": "Write Attachment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prep Inbox Payload').first().json;\nreturn [{\n  json: {\n    ...ctx,\n    process_payload: {\n      path:          ctx.inbox_rel_path,\n      domain_hint:   \"receipt\",\n      uploaded_by:   `email:${ctx.from_address || 'unknown'}`,\n      original_name: ctx.attachment_filename,\n    }\n  }\n}];\n"
+      },
+      "id": "n-bp",
+      "name": "Build Process Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "DeoZgLJCawzgcthm"
+        },
+        "workflowInputs": {
+          "value": "={{ $json.process_payload }}",
+          "mappingMode": "passThrough"
+        },
+        "options": {}
+      },
+      "id": "n-proc",
+      "name": "Run Process Asset",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx     = $('Build Process Payload').first().json;\nconst procRes = $json;\n\nconst hasUsableExtraction = procRes.ok\n  && procRes.domain === 'receipt'\n  && procRes.ai_extracted\n  && typeof procRes.ai_extracted.total === 'number';\n\nreturn [{\n  json: {\n    ...ctx,\n    asset_id:     procRes.asset_id,\n    proc_dedup:   !!procRes.dedup,\n    proc_domain:  procRes.domain,\n    skip_to_tx:   !hasUsableExtraction,\n    tx_payload:   { asset_id: procRes.asset_id, uploaded_by: `email:${ctx.from_address || 'unknown'}` },\n  }\n}];\n"
+      },
+      "id": "n-decide",
+      "name": "Decide to Tx",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "skip-tx",
+              "leftValue": "={{$json.skip_to_tx}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-if-skip",
+      "name": "Skip Tx?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    path: \"attachment\",\n    message_id:        ctx.message_id,\n    subject:           ctx.subject,\n    from:              ctx.from_address,\n    attachment:        ctx.attachment_filename,\n    asset_id:          ctx.asset_id,\n    domain:            ctx.proc_domain,\n    transaction_id:    ctx.transaction_id || null,\n    transaction_skipped: ctx.transaction_skipped || null,\n    note: ctx.skip_to_tx\n      ? `attachment processed but no usable receipt data \u2014 left as asset only`\n      : `imported as ${ctx.transaction_id} (skipped=${ctx.transaction_skipped})`,\n  }\n}];\n"
+      },
+      "id": "n-sum-skip",
+      "name": "Summarize A (no tx)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "VGsnOuIM9aLiIxSw"
+        },
+        "workflowInputs": {
+          "value": "={{ $json.tx_payload }}",
+          "mappingMode": "passThrough"
+        },
+        "options": {}
+      },
+      "id": "n-tx",
+      "name": "Attach Tx (A)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1850,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Decide to Tx').first().json;\nconst tx  = $json;\nreturn [{\n  json: {\n    ...ctx,\n    transaction_id:      tx.transaction_id,\n    transaction_skipped: !!tx.skipped,\n  }\n}];\n"
+      },
+      "id": "n-capture",
+      "name": "Capture Tx (A)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    path: \"attachment\",\n    message_id:        ctx.message_id,\n    subject:           ctx.subject,\n    from:              ctx.from_address,\n    attachment:        ctx.attachment_filename,\n    asset_id:          ctx.asset_id,\n    domain:            ctx.proc_domain,\n    transaction_id:    ctx.transaction_id || null,\n    transaction_skipped: ctx.transaction_skipped || null,\n    note: ctx.skip_to_tx\n      ? `attachment processed but no usable receipt data \u2014 left as asset only`\n      : `imported as ${ctx.transaction_id} (skipped=${ctx.transaction_skipped})`,\n  }\n}];\n"
+      },
+      "id": "n-sum-tx",
+      "name": "Summarize A (tx)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2250,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// For each email, check if the body has enough text to be a receipt.\n// IMAP gives us textAsHtml or html or text fields.\nconst out = [];\nfor (const item of $input.all()) {\n  const msg = item.json;\n  const subj = msg.subject || \"\";\n  const from = (msg.from && (msg.from.value?.[0]?.address || msg.from.text)) || \"\";\n  const messageId = msg.messageId || msg.uid || msg.headers?.[\"message-id\"] || \"\";\n\n  // Get the richest body available\n  const html = msg.html || msg.textAsHtml || \"\";\n  const text = msg.text || \"\";\n\n  // Strip HTML tags for length check\n  const stripped = html.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();\n  const bodyText = stripped || text;\n\n  // Skip if body is too short to be a receipt (signatures, \"see attached\", etc.)\n  if (bodyText.length < 200) continue;\n\n  // Also skip if the body is just a generic \"your order has shipped\" with no amounts\n  // We'll let Haiku decide \u2014 but at least filter out trivially short bodies.\n\n  out.push({\n    json: {\n      message_id:    messageId,\n      message_uid:   msg.uid,\n      subject:       subj,\n      from_address:  from,\n      body_html:     html,\n      body_text:     bodyText,\n      body_length:   bodyText.length,\n    }\n  });\n}\nreturn out;\n"
+      },
+      "id": "n-body-extract",
+      "name": "Extract Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\n\n// Build a deterministic-ish filename from message_id (no crypto needed \u2014\n// this is just a filename, not a security boundary).\nconst idHash = (ctx.message_id || String(Date.now()))\n  .replace(/[^A-Za-z0-9]/g, '')\n  .slice(0, 24) || `t${Date.now()}`;\nconst inboxName = `email-body-${idHash}.html`;\nconst inboxPath = `/files/inbox/${inboxName}`;\n\n// Base64-encode the HTML body for filewriter\nconst content = ctx.body_html || ctx.body_text;\nconst b64 = Buffer.from(content, 'utf-8').toString('base64');\n\nreturn [{\n  json: {\n    ...ctx,\n    inbox_full_path: inboxPath,\n    inbox_rel_path:  `inbox/${inboxName}`,\n    original_name:   `${ctx.subject || 'email-receipt'}.html`,\n    base64:          b64,\n    mime:            'text/html',\n    size_bytes:      Buffer.byteLength(content, 'utf-8'),\n    write_payload:   { path: inboxPath, base64: b64, overwrite: true },\n    probe_payload:   { path: inboxPath },\n  }\n}];\n"
+      },
+      "id": "n-body-prep",
+      "name": "Prep Body Asset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/write-base64",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.write_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-body-write",
+      "name": "Write Body HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        850,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/probe",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep Body Asset').first().json.probe_payload) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-body-probe",
+      "name": "Probe Body",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        950,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prep Body Asset').first().json;\nconst probe = $json;\nif (!probe.ok || !probe.exists) {\n  throw new Error(`Body file not found after write: ${ctx.inbox_full_path} (${JSON.stringify(probe)})`);\n}\nreturn [{\n  json: {\n    ...ctx,\n    sha256:     probe.sha256,\n    // probe.mime will be text/html; trust the probe over our guess\n    mime:       probe.mime || ctx.mime,\n    size_bytes: probe.size_bytes || ctx.size_bytes,\n  }\n}];\n"
+      },
+      "id": "n-body-parse-probe",
+      "name": "Parse Body Probe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id::text AS id FROM files.assets WHERE sha256 = '{{$json.sha256}}' LIMIT 1",
+        "options": {}
+      },
+      "id": "n-body-dedup",
+      "name": "Body Dedup Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1050,
+        700
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Parse Body Probe').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r && r.id);\nif (rows.length > 0) {\n  // Already processed this exact body content\n  return [{ json: { ...ctx, dedup: true, asset_id: rows[0].id, skip_body: true } }];\n}\nreturn [{ json: { ...ctx, dedup: false, skip_body: false } }];\n"
+      },
+      "id": "n-body-dedup-branch",
+      "name": "Body Dedup Branch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "body-dedup",
+              "leftValue": "={{$json.skip_body}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-body-if-dedup",
+      "name": "Body Dedup?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    path: \"body\",\n    message_id:  ctx.message_id,\n    subject:     ctx.subject,\n    from:        ctx.from_address,\n    asset_id:    ctx.asset_id,\n    note:        \"body already processed (sha256 dedup)\",\n    dedup:       true,\n  }\n}];\n"
+      },
+      "id": "n-body-dedup-sum",
+      "name": "Summarize B (dedup)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1650,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO files.assets (path, original_name, mime, size_bytes, sha256, domain, uploaded_by) VALUES (  '{{$json.inbox_full_path}}',   '{{($json.original_name || '').replace(/'/g, \"''\")}}',   '{{$json.mime}}',   {{$json.size_bytes}},   '{{$json.sha256}}',   'receipt',   'email:{{($json.from_address || '').replace(/'/g, \"''\")}}') RETURNING id::text AS id",
+        "options": {}
+      },
+      "id": "n-body-insert",
+      "name": "Insert Body Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1650,
+        820
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Body Dedup Branch').first().json;\nconst inserted = $input.first().json;\nreturn [{ json: { ...ctx, asset_id: inserted.id } }];\n"
+      },
+      "id": "n-body-post-insert",
+      "name": "Body Post Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Body Post Insert').first().json;\n\n// Truncate body to ~8000 chars to stay within reasonable token limits\nconst bodyForPrompt = (ctx.body_text || \"\").slice(0, 8000);\n\nconst prompt = `You are extracting receipt/purchase information from an email body.\nThe email subject was: \"${ctx.subject || 'unknown'}\"\nThe sender was: ${ctx.from_address || 'unknown'}\n\nHere is the email body text:\n---\n${bodyForPrompt}\n---\n\nReturn ONLY a JSON object with these keys:\n- merchant (string|null): the store/service name\n- total (number|null): the total amount charged (as a positive number, e.g. 17.49)\n- currency (string|null): e.g. \"USD\"\n- date (string|null): purchase date in YYYY-MM-DD format\n- payment_method (string|null): e.g. \"Visa ending 1234\"\n- line_items (array|null): array of {description, qty, price} if visible\n- notes (string|null): any other relevant info (order number, shipping, etc.)\n\nIf this email does NOT appear to be a purchase receipt or order confirmation, return:\n{\"merchant\": null, \"total\": null, \"not_a_receipt\": true}\n\nReturn the JSON object and nothing else.`;\n\nconst payload = {\n  model: \"claude-haiku-4-5-20251001\",\n  max_tokens: 1024,\n  messages: [{\n    role: \"user\",\n    content: prompt\n  }]\n};\n\nreturn [{\n  json: {\n    ...ctx,\n    haiku_payload: payload,\n  }\n}];\n"
+      },
+      "id": "n-body-prompt",
+      "name": "Build Body Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.haiku_payload) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "n-body-haiku",
+      "name": "Haiku Extract Body",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2250,
+        820
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Body Prompt').first().json;\nconst resp = $json;\nlet text = \"\";\ntry { text = (resp.content && resp.content[0] && resp.content[0].text) || \"\"; }\ncatch (e) { /* fall through */ }\n\ntext = text.trim().replace(/^```(?:json)?/, \"\").replace(/```$/, \"\").trim();\n\nlet extracted = null;\nlet summary   = null;\nlet isReceipt = false;\n\ntry {\n  extracted = JSON.parse(text);\n  if (extracted.not_a_receipt) {\n    summary = \"Not a receipt\";\n    isReceipt = false;\n  } else if (extracted.merchant && typeof extracted.total === 'number') {\n    summary = `${extracted.merchant} - ${extracted.total}`;\n    isReceipt = true;\n  } else if (extracted.merchant) {\n    summary = extracted.merchant;\n    isReceipt = false; // no total = can't create transaction\n  } else {\n    summary = text.slice(0, 120);\n    isReceipt = false;\n  }\n} catch (e) {\n  summary = text.slice(0, 200);\n  extracted = { _raw: text, _parse_error: String(e) };\n  isReceipt = false;\n}\n\nreturn [{\n  json: {\n    ...ctx,\n    ai_summary:     summary,\n    ai_extracted:   extracted,\n    ai_model:       \"claude-haiku-4-5-20251001\",\n    is_receipt:     isReceipt,\n    has_total:      isReceipt && typeof extracted?.total === 'number',\n  }\n}];\n"
+      },
+      "id": "n-body-parse",
+      "name": "Parse Body Haiku",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2450,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE files.assets SET   ai_summary   = '{{($json.ai_summary || '').replace(/'/g, \"''\")}}',   ai_extracted = '{{JSON.stringify($json.ai_extracted || {}).replace(/'/g, \"''\")}}'::jsonb,   ai_model     = '{{$json.ai_model}}',   processed_at = now() WHERE id = '{{$json.asset_id}}'::uuid",
+        "options": {}
+      },
+      "id": "n-body-update",
+      "name": "Update Body Asset",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2650,
+        820
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ...ctx,\n    skip_body_tx: !ctx.has_total,\n    tx_payload: ctx.has_total\n      ? { asset_id: ctx.asset_id, uploaded_by: `email:${ctx.from_address || 'unknown'}` }\n      : null,\n  }\n}];\n"
+      },
+      "id": "n-body-decide-tx",
+      "name": "Body Decide Tx",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2850,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "body-skip-tx",
+              "leftValue": "={{$json.skip_body_tx}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-body-if-skip-tx",
+      "name": "Body Skip Tx?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3050,
+        820
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    path: \"body\",\n    message_id:        ctx.message_id,\n    subject:           ctx.subject,\n    from:              ctx.from_address,\n    asset_id:          ctx.asset_id,\n    is_receipt:        ctx.is_receipt,\n    ai_summary:        ctx.ai_summary,\n    transaction_id:    ctx.transaction_id || null,\n    transaction_skipped: ctx.transaction_skipped || null,\n    note: ctx.skip_body_tx\n      ? (ctx.is_receipt ? 'body parsed as receipt but no total found' : 'body is not a receipt')\n      : `body receipt imported as ${ctx.transaction_id || 'unknown'}`,\n  }\n}];\n"
+      },
+      "id": "n-body-sum-skip",
+      "name": "Summarize B (no tx)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3250,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "VGsnOuIM9aLiIxSw"
+        },
+        "workflowInputs": {
+          "value": "={{ $json.tx_payload }}",
+          "mappingMode": "passThrough"
+        },
+        "options": {}
+      },
+      "id": "n-body-tx",
+      "name": "Body Tx",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3250,
+        940
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Body Decide Tx').first().json;\nconst tx  = $json;\nreturn [{\n  json: {\n    ...ctx,\n    transaction_id:      tx.transaction_id,\n    transaction_skipped: !!tx.skipped,\n  }\n}];\n"
+      },
+      "id": "n-body-capture-tx",
+      "name": "Body Capture Tx",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3450,
+        940
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ok: true,\n    path: \"body\",\n    message_id:        ctx.message_id,\n    subject:           ctx.subject,\n    from:              ctx.from_address,\n    asset_id:          ctx.asset_id,\n    is_receipt:        ctx.is_receipt,\n    ai_summary:        ctx.ai_summary,\n    transaction_id:    ctx.transaction_id || null,\n    transaction_skipped: ctx.transaction_skipped || null,\n    note: ctx.skip_body_tx\n      ? (ctx.is_receipt ? 'body parsed as receipt but no total found' : 'body is not a receipt')\n      : `body receipt imported as ${ctx.transaction_id || 'unknown'}`,\n  }\n}];\n"
+      },
+      "id": "n-body-sum-tx",
+      "name": "Summarize B (tx)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3650,
+        940
+      ]
+    }
+  ],
+  "connections": {
+    "IMAP Trigger (Receipts)": {
+      "main": [
+        [
+          {
+            "node": "Fan Out Attachments",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fan Out Attachments": {
+      "main": [
+        [
+          {
+            "node": "Prep Inbox Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Inbox Payload": {
+      "main": [
+        [
+          {
+            "node": "Write Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Attachment": {
+      "main": [
+        [
+          {
+            "node": "Build Process Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Process Payload": {
+      "main": [
+        [
+          {
+            "node": "Run Process Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Process Asset": {
+      "main": [
+        [
+          {
+            "node": "Decide to Tx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide to Tx": {
+      "main": [
+        [
+          {
+            "node": "Skip Tx?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Tx?": {
+      "main": [
+        [
+          {
+            "node": "Summarize A (no tx)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Attach Tx (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Tx (A)": {
+      "main": [
+        [
+          {
+            "node": "Capture Tx (A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Tx (A)": {
+      "main": [
+        [
+          {
+            "node": "Summarize A (tx)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Body": {
+      "main": [
+        [
+          {
+            "node": "Prep Body Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Body Asset": {
+      "main": [
+        [
+          {
+            "node": "Write Body HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Body HTML": {
+      "main": [
+        [
+          {
+            "node": "Probe Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Body": {
+      "main": [
+        [
+          {
+            "node": "Parse Body Probe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Body Probe": {
+      "main": [
+        [
+          {
+            "node": "Body Dedup Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Dedup Query": {
+      "main": [
+        [
+          {
+            "node": "Body Dedup Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Dedup Branch": {
+      "main": [
+        [
+          {
+            "node": "Body Dedup?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Dedup?": {
+      "main": [
+        [
+          {
+            "node": "Summarize B (dedup)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert Body Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Body Asset": {
+      "main": [
+        [
+          {
+            "node": "Body Post Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Post Insert": {
+      "main": [
+        [
+          {
+            "node": "Build Body Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Body Prompt": {
+      "main": [
+        [
+          {
+            "node": "Haiku Extract Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Haiku Extract Body": {
+      "main": [
+        [
+          {
+            "node": "Parse Body Haiku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Body Haiku": {
+      "main": [
+        [
+          {
+            "node": "Update Body Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Body Asset": {
+      "main": [
+        [
+          {
+            "node": "Body Decide Tx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Decide Tx": {
+      "main": [
+        [
+          {
+            "node": "Body Skip Tx?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Skip Tx?": {
+      "main": [
+        [
+          {
+            "node": "Summarize B (no tx)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Body Tx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Tx": {
+      "main": [
+        [
+          {
+            "node": "Body Capture Tx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Body Capture Tx": {
+      "main": [
+        [
+          {
+            "node": "Summarize B (tx)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

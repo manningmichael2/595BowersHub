@@ -1,0 +1,17 @@
+services:
+  filewriter:
+    image: python:3.11-slim
+    container_name: filewriter
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - /home/michael/finance:/finance
+      - /home/michael/filewriter:/app
+      - /home/michael/files:/files
+      - /home/michael/knowledge:/knowledge
+    working_dir: /app
+    environment:
+      - GMAIL_IMAP_USER=${GMAIL_IMAP_USER}
+      - GMAIL_IMAP_PASSWORD=${GMAIL_IMAP_PASSWORD}
+    command: sh -c "pip install flask imap-tools -q && python app.py"

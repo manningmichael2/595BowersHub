@@ -1,0 +1,30 @@
+# Test-only Python dependencies. Layered on top of requirements.txt.
+#
+# Run from the project root:
+#   pip install -r requirements.txt -r requirements-test.txt
+#   python -m pytest
+#
+# Or in a one-shot container that talks to the running postgres on the
+# ai-services_ai-network docker network (see backend/tests/conftest.py
+# for the DB_HOST/DB_PORT/DB_USER/DB_PASSWORD env vars consumed):
+#
+#   docker run --rm \
+#     --network ai-services_ai-network \
+#     -v "$(pwd):/app" -w /app \
+#     -e DB_HOST=postgres -e DB_PORT=5432 \
+#     -e DB_USER=michael -e DB_PASSWORD=$DB_PASSWORD \
+#     -e PYTHONPATH=/app \
+#     python:3.12-slim sh -c \
+#     'pip install -q -r requirements-test.txt asyncpg==0.30.0 && \
+#      python -m pytest -v'
+
+pytest==8.3.4
+pytest-asyncio==0.25.0
+hypothesis==6.153.6
+
+# Used by Property 11 (test_cron_firing.py) to freeze the wall clock while
+# comparing APScheduler CronTrigger fire times to croniter's. The test
+# itself doesn't strictly need a frozen clock — both fire-time computations
+# are pure and take explicit timestamps — but freezegun is included so the
+# test is self-contained and reproducible regardless of system time.
+freezegun==1.5.1

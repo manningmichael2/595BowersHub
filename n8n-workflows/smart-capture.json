@@ -1,0 +1,771 @@
+{
+  "name": "Smart Capture",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "smart-capture/extract",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "n-wh-ext",
+      "name": "Webhook Extract",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        200
+      ],
+      "webhookId": "smart-capture-extract"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate input. Must have text or image_path.\nconst body = $input.first().json.body || $input.first().json;\nconst text = (body.text || \"\").trim();\nlet imagePath = (body.image_path || \"\").trim();\nconst domainHint = (body.domain_hint || \"\").trim() || null;\n\nif (!text && !imagePath) {\n  return [{\n    json: {\n      error: true,\n      message: \"Must provide 'text' and/or 'image_path'.\"\n    }\n  }];\n}\n\n// Normalize image_path: accept relative paths like \"inbox/photo.jpg\" and\n// auto-prefix with \"/files/\". Also accept bare filenames in inbox.\nif (imagePath) {\n  if (!imagePath.startsWith(\"/\")) {\n    imagePath = \"/files/\" + imagePath;\n  }\n  if (!imagePath.startsWith(\"/files/\")) {\n    return [{\n      json: {\n        error: true,\n        message: `Invalid image_path '${body.image_path}'. Path must be relative to /files/, e.g. 'inbox/photo.jpg' or '/files/inbox/photo.jpg'. To see available files, use the list-files skill with path '/files/inbox'.`\n      }\n    }];\n  }\n}\n\nreturn [{\n  json: {\n    text,\n    image_path: imagePath,\n    has_image: !!imagePath,\n    domain_hint: domainHint,\n    started_at: Date.now(),\n    error: false,\n  }\n}];\n"
+      },
+      "id": "n-ext-validate",
+      "name": "Validate Extract",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-error",
+              "leftValue": "={{$json.error}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-ext-if-err",
+      "name": "Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, error: $json.message } }];"
+      },
+      "id": "n-ext-err-resp",
+      "name": "Extract Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "caseSensitive": true,
+          "leftValue": "",
+          "typeValidation": "loose",
+          "version": 2
+        },
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-image",
+              "leftValue": "={{$json.has_image}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "n-ext-if-img",
+      "name": "Has Image?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ...ctx,\n    pa_payload: {\n      path: ctx.image_path,\n      domain_hint: ctx.domain_hint,\n      uploaded_by: \"smart-capture\",\n      original_name: ctx.image_path.split(\"/\").pop(),\n    }\n  }\n}];\n"
+      },
+      "id": "n-ext-build-pa",
+      "name": "Build PA Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "DeoZgLJCawzgcthm",
+          "mode": "id"
+        },
+        "workflowInputs": {
+          "value": "={{ $json.pa_payload }}",
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "n-ext-pa",
+      "name": "Run Process Asset",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1000,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build PA Call').first().json;\nconst pa = $json;\nreturn [{\n  json: {\n    ...ctx,\n    asset: {\n      asset_id: pa.asset_id || null,\n      domain: pa.domain || null,\n      path: pa.path || null,\n      ai_summary: pa.ai_summary || null,\n      ai_extracted: pa.ai_extracted || null,\n      dedup: pa.dedup === true,\n    }\n  }\n}];\n"
+      },
+      "id": "n-ext-after-pa",
+      "name": "After PA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nreturn [{\n  json: {\n    ...ctx,\n    asset: { asset_id: null, domain: null, path: null, ai_summary: null, ai_extracted: null, dedup: false }\n  }\n}];\n"
+      },
+      "id": "n-ext-no-img",
+      "name": "No Image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\n\nconst systemPrompt = `You are an intent classifier for a personal knowledge capture system.\nGiven a user's input (text and/or extracted image content), determine what they want to capture\nand into which domain. One input can produce multiple intents (compound capture).\n\nKnown domains and their payload shapes (omit fields you don't know \u2014 never invent values):\n\n- tool: physical tools (saws, drills, planes, kitchen tools, etc.).\n  payload: { name, brand, model, type, serial, condition, notes, location }\n- router_bit: router bits for a wood router (NOT the tool itself).\n  payload: { brand, profile (e.g. Cove, Round Over, Flush Trim, Ogee, Chamfer), shank_size_in (number, usually 0.25 or 0.5), cutting_diameter_in (number), cutting_length_in (number), has_bearing (boolean), set_name (model number or set identifier), notes }\n- saw_blade: circular/miter/table saw blades.\n  payload: { brand, diameter_in (number), teeth (number), kerf_in (number), type (rip|crosscut|combo|dado|other), notes }\n- wood: lumber, boards, sheet goods.\n  payload: { species, dimensions, quantity (number), unit (bf|lf|board|other), notes }\n- album: vinyl records / physical music media.\n  payload: { title, artist, label, catalog_number, year (number), condition, notes }\n- manual: product manuals, spec sheets, warranty docs.\n  payload: { title, brand, model, doc_type, notes }\n- house_room: room photos / room records.\n  payload: { name (slug like 'kitchen'), floor (number), notes }\n- recipe: a full recipe (ingredients + method).\n  payload: { title, source, servings (number), ingredients (array of strings), method (array of step strings), notes }\n- cook_log: a log entry for a recipe that was cooked.\n  payload: { recipe_query (the recipe title to look up), cooked_at (YYYY-MM-DD or null), servings_made (number), adjustments, rating (1-5), notes }\n- shopping_list: items to add to the running shopping list.\n  payload: { items: [string, ...] }\n- knowledge_fact: one-line durable fact about user/household/context.\n  payload: { topic (slug like 'woodshop/tools'), fact (single sentence) }\n- project: a multi-part project or plan (woodshop, home_improvement, etc.).\n  payload: { title, type, goals, budget, notes }\n- other: doesn't fit above; will be saved as freeform markdown.\n  payload: { suggested_title, content (markdown body) }\n\nIMPORTANT \u2014 GREEDY EXTRACTION:\nExtract EVERYTHING you can identify from the input, even if it doesn't map to a known\npayload field. Put any extra information in a special \"_extra_fields\" object in the payload.\nEach key in _extra_fields should be a descriptive snake_case column name, and the value\nshould be the extracted data with appropriate type (string, number, boolean).\n\nExamples of _extra_fields:\n- A tool photo shows \"15A\" on the motor: _extra_fields: { \"motor_amps\": 15 }\n- A saw blade package shows \"anti-vibration\": _extra_fields: { \"anti_vibration\": true, \"arbor_size_in\": 0.625 }\n- A tool has a visible model number plate: _extra_fields: { \"manufacturer\": \"DeWalt\", \"voltage\": 20, \"weight_lbs\": 8.5 }\n- A router bit package shows RPM rating: _extra_fields: { \"max_rpm\": 22000, \"carbide_tipped\": true }\n\nThe _extra_fields object tells the user's system which additional columns might be worth\nadding to the database. Be thorough \u2014 extract every visible spec, rating, measurement,\nfeature, and identifier you can read from the image or text. Use descriptive names that\nwould make good database column names (snake_case, specific, with units in the name\nwhere applicable like _in, _mm, _lbs, _amps, _rpm, _deg).\n\nRules:\n- Pick the smallest set of intents that captures the user's intent.\n- Compound input (\"add this recipe and put ingredients on shopping list\") = two intents.\n- Use the DOMAIN HINT when supplied \u2014 it's a strong but not absolute signal.\n- If image extraction is provided, prefer it over guessing.\n- needs_more_info should list short questions if required fields are missing.\n- summary is one short sentence describing what will be captured.\n- ALWAYS include _extra_fields even if empty ({}) \u2014 this signals to the system that\n  greedy extraction was attempted.\n\nReturn ONLY a JSON object, no prose, no markdown fences:\n{ \"intents\": [ { \"domain\": \"...\", \"summary\": \"...\", \"payload\": {..., \"_extra_fields\": {...}}, \"needs_more_info\": [...] } ] }`;\n\nconst asset = ctx.asset || {};\nconst visionBlock = asset.ai_summary\n  ? `IMAGE EXTRACTION SUMMARY: ${asset.ai_summary}\\nIMAGE EXTRACTION FIELDS: ${JSON.stringify(asset.ai_extracted || {})}`\n  : \"IMAGE EXTRACTION: (no image provided)\";\n\nconst userPrompt = `USER TEXT: ${ctx.text || \"(none)\"}\nDOMAIN HINT: ${ctx.domain_hint || \"(none)\"}\n${visionBlock}\n\nClassify the intent(s) and produce structured payload(s).`;\n\nconst payload = {\n  model: \"claude-haiku-4-5-20251001\",\n  max_tokens: 2048,\n  system: systemPrompt,\n  messages: [{ role: \"user\", content: userPrompt }]\n};\n\nreturn [{ json: { ...ctx, classify_payload: payload } }];\n"
+      },
+      "id": "n-ext-build-prompt",
+      "name": "Build Classify Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.classify_payload) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "n-ext-haiku",
+      "name": "Classify (Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Classify Prompt').first().json;\nconst resp = $json;\n\nlet text = \"\";\ntry { text = (resp.content && resp.content[0] && resp.content[0].text) || \"\"; }\ncatch (e) { /* fall through */ }\n\ntext = text.trim().replace(/^```(?:json)?/i, \"\").replace(/```\\s*$/i, \"\").trim();\n\nlet parsed = null;\nlet parseError = null;\ntry { parsed = JSON.parse(text); }\ncatch (e) { parseError = String(e); }\n\nlet intents = (parsed && Array.isArray(parsed.intents)) ? parsed.intents : null;\n\n// Fallback: if parsing failed, route to 'other' so we don't lose the input.\nif (!intents) {\n  intents = [{\n    domain: \"other\",\n    summary: \"Unstructured capture (classifier output not parseable)\",\n    payload: {\n      suggested_title: (ctx.text || \"capture\").slice(0, 60),\n      content: (ctx.text || \"\") + (ctx.asset && ctx.asset.ai_summary ? `\\n\\nVision: ${ctx.asset.ai_summary}` : \"\")\n    },\n    needs_more_info: []\n  }];\n}\n\nreturn [{\n  json: {\n    ok: true,\n    intents,\n    asset: ctx.asset && ctx.asset.asset_id ? ctx.asset : null,\n    raw_text: ctx.text || null,\n    extract_token: (() => {\n      // Generate a signed token: hex(timestamp) + \".\" + hex(hmac)\n      // The commit endpoint verifies this to prevent hallucinated commits.\n      // Token is valid for 30 minutes.\n      const ts = Date.now().toString(16);\n      const secret = \"sc-extract-v1-595bowers\";\n      // Simple hash: we can't use crypto in n8n Code nodes, so use a\n      // deterministic but hard-to-guess token based on timestamp + secret.\n      let hash = 0;\n      const src = ts + secret + (ctx.text || \"\") + JSON.stringify(intents.map(i => i.domain));\n      for (let i = 0; i < src.length; i++) {\n        hash = ((hash << 5) - hash + src.charCodeAt(i)) | 0;\n      }\n      return ts + \".\" + Math.abs(hash).toString(16);\n    })(),\n    classifier_parse_error: parseError,\n    duration_ms: Date.now() - (ctx.started_at || Date.now()),\n  }\n}];\n"
+      },
+      "id": "n-ext-parse",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "path": "smart-capture/commit",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "n-wh-com",
+      "name": "Webhook Commit",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        700
+      ],
+      "webhookId": "smart-capture-commit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst domain = (body.domain || \"\").trim().toLowerCase();\nconst payload = body.payload || {};\nconst assetId = body.asset_id || null;\nconst source = body.source || \"smart-capture\";\nconst extractToken = (body.extract_token || \"\").trim();\n\nconst KNOWN = new Set([\n  \"tool\",\"router_bit\",\"saw_blade\",\"wood\",\"album\",\"manual\",\"house_room\",\n  \"recipe\",\"cook_log\",\"shopping_list\",\"knowledge_fact\",\"project\",\"other\"\n]);\n\nif (!domain) throw new Error(\"Missing 'domain'.\");\nif (!KNOWN.has(domain)) throw new Error(`Unknown domain: ${domain}. Known: ${[...KNOWN].join(\", \")}`);\nif (!payload || typeof payload !== \"object\") throw new Error(\"Missing 'payload' object.\");\n\n// Token validation: extract_token must be present and not expired (30 min).\n// This prevents hallucinated commits \u2014 the agent MUST have received a\n// successful extract response to have a valid token.\nif (!extractToken) {\n  throw new Error(\n    \"Missing 'extract_token'. You must call /smart-capture/extract first and pass \" +\n    \"the extract_token from its response. Do NOT call commit without a successful extract.\"\n  );\n}\nconst tokenParts = extractToken.split(\".\");\nif (tokenParts.length !== 2) {\n  throw new Error(\"Invalid extract_token format. Must be the token returned by /smart-capture/extract.\");\n}\nconst tokenTs = parseInt(tokenParts[0], 16);\nconst now = Date.now();\nconst thirtyMin = 30 * 60 * 1000;\nif (isNaN(tokenTs) || (now - tokenTs) > thirtyMin) {\n  throw new Error(\n    \"extract_token has expired (valid for 30 minutes). Call /smart-capture/extract again to get a fresh token.\"\n  );\n}\n\nreturn [{\n  json: {\n    domain,\n    payload,\n    asset_id: assetId,\n    source,\n    extract_token: extractToken,\n    started_at: Date.now(),\n  }\n}];\n"
+      },
+      "id": "n-com-validate",
+      "name": "Validate Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst d = ctx.domain;\nconst p = ctx.payload || {};\nconst today = new Date().toISOString().slice(0, 10);\n\n// Util to safely render a JS value as a SQL literal.\nfunction sqlStr(v) {\n  if (v === null || v === undefined || v === \"\") return \"NULL\";\n  return \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\n}\nfunction sqlNum(v) {\n  if (v === null || v === undefined || v === \"\") return \"NULL\";\n  const n = Number(v);\n  return Number.isFinite(n) ? String(n) : \"NULL\";\n}\nfunction slug(s) {\n  return String(s || \"untitled\")\n    .toLowerCase().trim()\n    .replace(/[^a-z0-9]+/g, \"-\")\n    .replace(/^-|-$/g, \"\")\n    .slice(0, 80) || \"untitled\";\n}\nfunction assetLinkSql(table, recordCol, assetId, isPrimary) {\n  if (!assetId) return \"\";\n  return `INSERT INTO ${table} (${recordCol}, asset_id, is_primary) VALUES (${recordCol}_VAL, '${assetId}'::uuid, ${isPrimary ? \"true\" : \"false\"});`;\n}\n\n// Returned shape: { target: 'db'|'markdown'|'workflow', ... }\nlet plan = null;\n\nif (d === \"tool\") {\n  // Handle _extra_fields: append to notes as structured data for later columnization\n  const extras = p._extra_fields || {};\n  const extraLines = Object.entries(extras).map(([k, v]) => `${k}: ${v}`);\n  const baseNotes = [p.notes, p.location, p.condition].filter(Boolean).join('; ');\n  const fullNotes = extraLines.length > 0\n    ? [baseNotes, \"--- extra fields ---\", ...extraLines].filter(Boolean).join('\\n')\n    : baseNotes || null;\n\n  const insertSql = `WITH new_rec AS (\n    INSERT INTO inventory.tools (name, brand, model, type, notes)\n    VALUES (${sqlStr(p.name || p.brand || \"Unnamed Tool\")}, ${sqlStr(p.brand)}, ${sqlStr(p.model)}, ${sqlStr(p.type)}, ${sqlStr(fullNotes)})\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO inventory.tool_files (tool_id, asset_id, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, true FROM new_rec\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  const toolBits = [];\n  for (const x of [p.brand, p.model, p.name]) {\n    if (x && !toolBits.some(b => b.toLowerCase() === String(x).toLowerCase())) toolBits.push(String(x));\n  }\n  plan = {\n    target: \"db\", sql: insertSql,\n    summary: `Tool: ${toolBits.join(\" \") || \"(unnamed)\"}`,\n    extra_fields: extras,\n  };\n\n} else if (d === \"router_bit\") {\n  const extras = p._extra_fields || {};\n  const extraLines = Object.entries(extras).map(([k, v]) => `${k}: ${v}`);\n  const baseNotes = p.notes || '';\n  const fullNotes = extraLines.length > 0\n    ? [baseNotes, \"--- extra fields ---\", ...extraLines].filter(Boolean).join('\\n')\n    : baseNotes || null;\n\n  const sql = `WITH new_rec AS (\n    INSERT INTO inventory.router_bits (brand, profile, shank_size_in, cutting_diameter_in, cutting_length_in, has_bearing, set_name, notes)\n    VALUES (${sqlStr(p.brand)}, ${sqlStr(p.profile || \"Unknown\")}, ${sqlNum(p.shank_size_in)}, ${sqlNum(p.cutting_diameter_in)}, ${sqlNum(p.cutting_length_in)}, ${p.has_bearing === true ? \"true\" : p.has_bearing === false ? \"false\" : \"NULL\"}, ${sqlStr(p.set_name)}, ${sqlStr(fullNotes)})\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO inventory.router_bit_files (router_bit_id, asset_id, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, true FROM new_rec\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  plan = { target: \"db\", sql, summary: `Router bit: ${[p.brand, p.profile, p.shank_size_in && p.shank_size_in + '\" shank'].filter(Boolean).join(\" \") || \"(unnamed)\"}`, extra_fields: extras };\n\n} else if (d === \"saw_blade\") {\n  const extras = p._extra_fields || {};\n  const extraLines = Object.entries(extras).map(([k, v]) => `${k}: ${v}`);\n  const baseNotes = p.notes || '';\n  const fullNotes = extraLines.length > 0\n    ? [baseNotes, \"--- extra fields ---\", ...extraLines].filter(Boolean).join('\\n')\n    : baseNotes || null;\n\n  const sql = `WITH new_rec AS (\n    INSERT INTO inventory.saw_blades (brand, diameter_in, teeth, kerf_in, type, notes)\n    VALUES (${sqlStr(p.brand)}, ${sqlNum(p.diameter_in)}, ${sqlNum(p.teeth)}, ${sqlNum(p.kerf_in)}, ${sqlStr(p.type)}, ${sqlStr(fullNotes)})\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO inventory.saw_blade_files (saw_blade_id, asset_id, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, true FROM new_rec\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  plan = { target: \"db\", sql, summary: `Saw blade: ${[p.brand, p.diameter_in && p.diameter_in + \"\\\"\", p.teeth && p.teeth + \"T\"].filter(Boolean).join(\" \") || \"(unnamed)\"}`, extra_fields: extras };\n\n} else if (d === \"wood\") {\n  const sql = `WITH new_rec AS (\n    INSERT INTO inventory.wood (species, dimensions, quantity, unit, notes)\n    VALUES (${sqlStr(p.species)}, ${sqlStr(p.dimensions)}, ${sqlNum(p.quantity)}, ${sqlStr(p.unit)}, ${sqlStr(p.notes)})\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO inventory.wood_files (wood_id, asset_id, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, true FROM new_rec\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  plan = { target: \"db\", sql, summary: `Wood: ${[p.species, p.dimensions].filter(Boolean).join(\" \") || \"(unspecified)\"}` };\n\n} else if (d === \"album\") {\n  const sql = `WITH new_rec AS (\n    INSERT INTO inventory.albums (title, artist, label, catalog_number, year, condition, notes)\n    VALUES (${sqlStr(p.title || \"(untitled)\")}, ${sqlStr(p.artist)}, ${sqlStr(p.label)}, ${sqlStr(p.catalog_number)}, ${sqlNum(p.year)}, ${sqlStr(p.condition)}, ${sqlStr(p.notes)})\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO inventory.album_files (album_id, asset_id, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, true FROM new_rec\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  plan = { target: \"db\", sql, summary: `Album: ${[p.artist, p.title].filter(Boolean).join(\" - \") || \"(untitled)\"}` };\n\n} else if (d === \"manual\") {\n  const sql = `WITH new_rec AS (\n    INSERT INTO inventory.manuals (title, brand, model, doc_type, notes)\n    VALUES (${sqlStr(p.title || (p.brand && p.model ? p.brand + \" \" + p.model + \" manual\" : \"Manual\"))}, ${sqlStr(p.brand)}, ${sqlStr(p.model)}, ${sqlStr(p.doc_type)}, ${sqlStr(p.notes)})\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO inventory.manual_files (manual_id, asset_id, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, true FROM new_rec\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  plan = { target: \"db\", sql, summary: `Manual: ${[p.brand, p.model].filter(Boolean).join(\" \") || p.title || \"(unnamed)\"}` };\n\n} else if (d === \"house_room\") {\n  // Upsert by name so re-captures don't fail.\n  const sql = `WITH new_rec AS (\n    INSERT INTO house.rooms (name, floor, notes)\n    VALUES (${sqlStr(p.name || \"unnamed\")}, ${sqlNum(p.floor)}, ${sqlStr(p.notes)})\n    ON CONFLICT (name) DO UPDATE SET notes = COALESCE(EXCLUDED.notes, house.rooms.notes)\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO house.room_files (room_id, asset_id, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, true FROM new_rec\n    ON CONFLICT DO NOTHING\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  plan = { target: \"db\", sql, summary: `Room: ${p.name || \"(unnamed)\"}` };\n\n} else if (d === \"recipe\") {\n  const ingredients = Array.isArray(p.ingredients) ? p.ingredients : [];\n  const method = Array.isArray(p.method) ? p.method : [];\n  const notesParts = [];\n  if (ingredients.length) notesParts.push(\"INGREDIENTS:\\n- \" + ingredients.join(\"\\n- \"));\n  if (method.length) notesParts.push(\"METHOD:\\n\" + method.map((s,i) => `${i+1}. ${s}`).join(\"\\n\"));\n  if (p.notes) notesParts.push(\"NOTES:\\n\" + p.notes);\n  const fullNotes = notesParts.join(\"\\n\\n\");\n\n  const sql = `WITH new_rec AS (\n    INSERT INTO cook.recipes (title, slug, source, servings, notes)\n    VALUES (${sqlStr(p.title || \"Untitled Recipe\")}, ${sqlStr(slug(p.title))}, ${sqlStr(p.source)}, ${sqlNum(p.servings)}, ${sqlStr(fullNotes)})\n    RETURNING id\n  )${ctx.asset_id ? `, link AS (\n    INSERT INTO cook.recipe_files (recipe_id, asset_id, file_role, is_primary)\n    SELECT id, '${ctx.asset_id}'::uuid, 'source_page', true FROM new_rec\n    RETURNING asset_id\n  )` : \"\"}\n  SELECT (SELECT id FROM new_rec)::text AS record_id;`;\n  plan = { target: \"db\", sql, summary: `Recipe: ${p.title || \"(untitled)\"}` };\n\n} else if (d === \"cook_log\") {\n  // Look up recipe by title fragment first.\n  const q = (p.recipe_query || p.recipe_title || \"\").trim();\n  if (!q) {\n    plan = { target: \"error\", message: \"cook_log requires recipe_query (the recipe title to look up).\" };\n  } else {\n    const sql = `WITH found AS (\n      SELECT id FROM cook.recipes WHERE LOWER(title) LIKE LOWER('%${q.replace(/'/g, \"''\")}%') ORDER BY updated_at DESC LIMIT 1\n    ), inserted AS (\n      INSERT INTO cook.cook_log (recipe_id, cooked_at, servings_made, adjustments, rating, notes)\n      SELECT id, ${p.cooked_at ? sqlStr(p.cooked_at) : \"CURRENT_DATE\"}, ${sqlNum(p.servings_made)}, ${sqlStr(p.adjustments)}, ${sqlNum(p.rating)}, ${sqlStr(p.notes)}\n      FROM found\n      RETURNING id, recipe_id\n    )\n    SELECT (SELECT id FROM inserted)::text AS record_id, (SELECT recipe_id FROM inserted)::text AS recipe_id;`;\n    plan = { target: \"db\", sql, summary: `Cook log entry for: ${q}`, fallback_message: `No recipe matched '${q}'. Capture the recipe first, then log this cook.` };\n  }\n\n} else if (d === \"shopping_list\") {\n  const items = Array.isArray(p.items) ? p.items.filter(Boolean) : [];\n  if (items.length === 0) {\n    plan = { target: \"error\", message: \"shopping_list requires non-empty items array.\" };\n  } else {\n    const lines = items.map(it => `- [${today}] ${String(it).trim()}`).join(\"\\n\");\n    plan = {\n      target: \"markdown\",\n      filewriter: { endpoint: \"/append\", payload: { path: \"/knowledge/shopping-list.md\", content: lines + \"\\n\" } },\n      path: \"/knowledge/shopping-list.md\",\n      summary: `Shopping list: added ${items.length} item${items.length === 1 ? \"\" : \"s\"}`\n    };\n  }\n\n} else if (d === \"knowledge_fact\") {\n  const topic = (p.topic || \"general\").trim();\n  const fact = (p.fact || \"\").trim();\n  if (!fact) {\n    plan = { target: \"error\", message: \"knowledge_fact requires a fact.\" };\n  } else {\n    plan = {\n      target: \"workflow\",\n      remember_payload: { topic, fact },\n      summary: `Knowledge fact (${topic}): ${fact.slice(0, 80)}`\n    };\n  }\n\n} else if (d === \"project\") {\n  const title = (p.title || \"Untitled Project\").trim();\n  const s = slug(title);\n  const md = `# ${title}\\n\\n_Started: ${today}_\\n` +\n             (p.type ? `_Type: ${p.type}_\\n` : \"\") +\n             (p.budget ? `_Budget: ${p.budget}_\\n` : \"\") +\n             \"\\n## Goals\\n\\n\" + (p.goals || \"_(to be defined)_\") +\n             \"\\n\\n## Notes\\n\\n\" + (p.notes || \"\");\n  const path = `/knowledge/projects/${s}.md`;\n  plan = {\n    target: \"markdown\",\n    filewriter: { endpoint: \"/append\", payload: { path, content: md + \"\\n\" } },\n    path,\n    summary: `Project: ${title}`\n  };\n\n} else if (d === \"other\") {\n  const title = (p.suggested_title || \"capture\").trim();\n  const s = slug(title);\n  const md = `# ${title}\\n\\n_Captured: ${today}_\\n\\n${p.content || \"\"}`;\n  const path = `/knowledge/captures/${s}.md`;\n  plan = {\n    target: \"markdown\",\n    filewriter: { endpoint: \"/append\", payload: { path, content: md + \"\\n\" } },\n    path,\n    summary: `Capture: ${title}`\n  };\n} else {\n  plan = { target: \"error\", message: `Unhandled domain: ${d}` };\n}\n\nreturn [{ json: { ...ctx, plan } }];\n"
+      },
+      "id": "n-com-plan",
+      "name": "Plan Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-db",
+                    "leftValue": "={{$json.plan.target}}",
+                    "rightValue": "db",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "db"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-md",
+                    "leftValue": "={{$json.plan.target}}",
+                    "rightValue": "markdown",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "markdown"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-wf",
+                    "leftValue": "={{$json.plan.target}}",
+                    "rightValue": "workflow",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "workflow"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "is-err",
+                    "leftValue": "={{$json.plan.target}}",
+                    "rightValue": "error",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "error"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n-com-switch",
+      "name": "Route By Target",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.plan.sql }}",
+        "options": {}
+      },
+      "id": "n-com-db",
+      "name": "DB Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1000,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate Commit').first().json;\nconst plan = $('Plan Commit').first().json.plan;\nconst row = $input.first().json || {};\nreturn [{ json: {\n  ok: true,\n  domain: ctx.domain,\n  target: \"db\",\n  record_id: row.record_id || null,\n  recipe_id: row.recipe_id || null,\n  asset_linked: !!ctx.asset_id,\n  summary: plan.summary,\n  extra_fields: plan.extra_fields || null,\n  duration_ms: Date.now() - (ctx.started_at || Date.now()),\n} }];\n"
+      },
+      "id": "n-com-db-post",
+      "name": "DB Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $json;\nconst fw = ctx.plan.filewriter;\nreturn [{ json: { ...ctx, fw_endpoint: fw.endpoint, fw_payload: fw.payload } }];\n"
+      },
+      "id": "n-com-md-prep",
+      "name": "MD Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://100.106.180.101:5001' + $json.fw_endpoint }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.fw_payload) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "n-com-md-write",
+      "name": "MD Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate Commit').first().json;\nconst plan = $('Plan Commit').first().json.plan;\nreturn [{ json: {\n  ok: true,\n  domain: ctx.domain,\n  target: \"markdown\",\n  path: plan.path,\n  summary: plan.summary,\n  duration_ms: Date.now() - (ctx.started_at || Date.now()),\n} }];\n"
+      },
+      "id": "n-com-md-post",
+      "name": "MD Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5678/webhook/remember",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.plan.remember_payload) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "n-com-wf-call",
+      "name": "Call Remember",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate Commit').first().json;\nconst plan = $('Plan Commit').first().json.plan;\nconst resp = $input.first().json || {};\nreturn [{ json: {\n  ok: true,\n  domain: ctx.domain,\n  target: \"workflow\",\n  saved: resp.saved !== false,\n  note: resp.note || null,\n  conflicts_with: resp.conflicts_with || null,\n  topic: resp.topic || (plan.remember_payload && plan.remember_payload.topic),\n  summary: plan.summary,\n  duration_ms: Date.now() - (ctx.started_at || Date.now()),\n} }];\n"
+      },
+      "id": "n-com-wf-post",
+      "name": "WF Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $json.plan;\nconst ctx = $('Validate Commit').first().json;\nreturn [{ json: {\n  ok: false,\n  domain: ctx.domain,\n  error: plan.message || \"Plan returned no target.\",\n  fallback_message: plan.fallback_message || null,\n} }];\n"
+      },
+      "id": "n-com-err",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        1100
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Extract": {
+      "main": [
+        [
+          {
+            "node": "Validate Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Extract": {
+      "main": [
+        [
+          {
+            "node": "Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Extract Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Image?": {
+      "main": [
+        [
+          {
+            "node": "Build PA Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build PA Call": {
+      "main": [
+        [
+          {
+            "node": "Run Process Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Process Asset": {
+      "main": [
+        [
+          {
+            "node": "After PA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "After PA": {
+      "main": [
+        [
+          {
+            "node": "Build Classify Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Image": {
+      "main": [
+        [
+          {
+            "node": "Build Classify Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Classify Prompt": {
+      "main": [
+        [
+          {
+            "node": "Classify (Haiku)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify (Haiku)": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Commit": {
+      "main": [
+        [
+          {
+            "node": "Validate Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Commit": {
+      "main": [
+        [
+          {
+            "node": "Plan Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Commit": {
+      "main": [
+        [
+          {
+            "node": "Route By Target",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route By Target": {
+      "main": [
+        [
+          {
+            "node": "DB Insert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MD Prep",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Remember",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB Insert": {
+      "main": [
+        [
+          {
+            "node": "DB Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MD Prep": {
+      "main": [
+        [
+          {
+            "node": "MD Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MD Write": {
+      "main": [
+        [
+          {
+            "node": "MD Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Remember": {
+      "main": [
+        [
+          {
+            "node": "WF Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

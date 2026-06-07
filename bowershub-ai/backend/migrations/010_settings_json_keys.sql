@@ -1,0 +1,70 @@
+-- ============================================================
+-- Documentation-only migration: bh_users.settings_json keys
+-- added by the bowershub-ai-enhancements spec.
+--
+-- This migration performs NO DDL and NO DML. The bh_users.settings_json
+-- JSONB column already exists (created in 001_initial_schema.sql with
+-- DEFAULT '{}'::jsonb). The keys below are introduced as conventions
+-- read and written by application code; Postgres enforces no shape.
+--
+-- Resolvers in backend/services/* (theme_resolver, text_size_resolver,
+-- and the voice settings reader) tolerate missing keys, unknown values,
+-- and stale references (e.g. a theme_id that no longer exists). They
+-- never raise on absent or malformed input.
+--
+-- Keys (all optional; absence means "use default"):
+--
+--   theme_id                       integer
+--                                  References public.bh_themes(id).
+--                                  Stale references fall back to the
+--                                  platform default, then to the built-in
+--                                  Dark Navy preset (R3.5, R3.7, R3.8).
+--
+--   text_size                      'small' | 'medium' | 'large' | 'extra_large'
+--                                  Maps to a chat-content font multiplier
+--                                  (0.875, 1.0, 1.125, 1.25). Unknown or
+--                                  missing values resolve to 'medium' (R4.6).
+--
+--   morning_card_workspace_id      integer
+--                                  References public.bh_workspaces(id).
+--                                  Workspace whose home view shows the
+--                                  morning briefing card. Absent means the
+--                                  default ('General') workspace (R8.9).
+--
+--   morning_card_disabled          boolean
+--                                  When true, suppresses the morning card
+--                                  platform-wide for this user (R8.9).
+--
+--   voice                          object — voice-mode preferences (R10.9).
+--                                  Shape:
+--                                    {
+--                                      "output_enabled":      boolean,
+--                                      "voice_name":          string,
+--                                      "speech_rate":         number   (0.5..2.0),
+--                                      "auto_submit_pause_ms": integer,
+--                                      "manual_send":         boolean
+--                                    }
+--                                  Any subset of these subkeys may be
+--                                  present; missing subkeys fall back to
+--                                  module defaults.
+--
+-- Example settings_json after a fully-customized user has saved every key:
+--
+--   {
+--     "theme_id": 7,
+--     "text_size": "medium",
+--     "morning_card_workspace_id": 3,
+--     "morning_card_disabled": false,
+--     "voice": {
+--       "output_enabled": true,
+--       "voice_name": "Google US English",
+--       "speech_rate": 1.0,
+--       "auto_submit_pause_ms": 2000,
+--       "manual_send": false
+--     }
+--   }
+--
+-- Validates: R3.2, R4.3, R8.9, R10.9
+-- ============================================================
+
+SELECT 1;

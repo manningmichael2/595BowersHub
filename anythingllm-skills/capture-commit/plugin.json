@@ -1,0 +1,34 @@
+{
+  "name": "Smart Capture Commit",
+  "hubId": "capture-commit",
+  "description": "Commits a single capture intent (after the user has confirmed). Pair with `capture` — call `capture` first to extract, present results to the user, then call this skill once per intent the user accepted. The `payload` shape depends on the domain. Domains and their payload fields: tool ({name, brand, model, type, serial, condition, notes, location}), router_bit ({brand, profile, shank_size_in, cutting_diameter_in, cutting_length_in, has_bearing, set_name, notes}), saw_blade ({brand, diameter_in, teeth, kerf_in, type, notes}), wood ({species, dimensions, quantity, unit, notes}), album ({title, artist, label, catalog_number, year, condition, notes}), manual ({title, brand, model, doc_type, notes}), house_room ({name, floor, notes}), recipe ({title, source, servings, ingredients (string array), method (string array), notes}), cook_log ({recipe_query, cooked_at, servings_made, adjustments, rating, notes}), shopping_list ({items (string array)}), knowledge_fact ({topic, fact}), project ({title, type, goals, budget, notes}), other ({suggested_title, content (markdown body)}). If an asset_id was returned by the extract step (image was uploaded), pass it through here so the file gets linked to the new record.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "domain": {
+        "description": "Required. One of: tool, saw_blade, wood, album, manual, house_room, recipe, cook_log, shopping_list, knowledge_fact, project, other.",
+        "type": "string",
+        "default": ""
+      },
+      "payload": {
+        "description": "Required. Object whose shape depends on the domain (see skill description). Pass only the fields that are actually known; missing fields are accepted as null.",
+        "type": "object",
+        "default": {}
+      },
+      "asset_id": {
+        "description": "Optional. UUID of a files.assets row returned by the extract step. When provided, the new record is linked to the asset (e.g., the photo of the tool gets attached to the inventory.tools row).",
+        "type": "string",
+        "default": ""
+      },
+      "extract_token": {
+        "description": "Required. The extract_token returned by the `capture` skill's response. This proves you received a successful extract. Commits without a valid token are rejected.",
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}

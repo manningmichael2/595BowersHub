@@ -1,0 +1,24 @@
+{
+  "name": "Artifact",
+  "hubId": "artifact",
+  "description": "Creates a rich HTML artifact (styled page, chart, diagram, code listing, table, etc.) and returns a viewable URL. Use when the user would benefit from formatted visual output rather than plain text — e.g., comparison tables, Mermaid diagrams, Chart.js charts, syntax-highlighted code, styled instructions, or any content that looks better rendered. The HTML can include inline CSS, JavaScript (Chart.js, Mermaid, etc.), and any standard web content. The artifact is saved as a standalone HTML file accessible via Tailscale.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "title": {
+        "description": "Required. Short descriptive title for the artifact (used as filename slug and page title).",
+        "type": "string",
+        "default": ""
+      },
+      "html": {
+        "description": "Required. Complete HTML content. Can be a full HTML document (with <html>, <head>, <body>) or just a body fragment (will be wrapped in a basic template). Include inline <style> and <script> as needed. For charts use Chart.js (CDN), for diagrams use Mermaid (CDN).",
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}

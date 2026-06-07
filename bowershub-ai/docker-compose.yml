@@ -1,0 +1,27 @@
+# BowersHub AI — custom chat app
+# Deploy: docker compose up -d --build
+# Rebuild: docker compose build --no-cache && docker compose up -d
+
+services:
+  bowershub-ai:
+    build: .
+    container_name: bowershub-ai
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+    volumes:
+      - /home/michael/files:/files
+      - /home/michael/knowledge:/knowledge
+    env_file: /home/michael/bowershub-ai/.env
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5003/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  ai-network:
+    external: true
+    name: ai-services_ai-network

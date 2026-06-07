@@ -1,0 +1,48 @@
+# Secrets - NEVER commit
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SQLite temp files
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+.n8n_db_temp.sqlite
+
+# Docker
+.docker/
+
+# Kiro internal (context cache)
+.kiro-server/
+
+# Steering files contain personal context — keep local only
+.kiro/steering/
+
+# n8n-as-code local config
+.n8nac/
+
+# VS Code workspace file
+*.code-workspace
+
+# Outdated architecture doc (replaced by README.md)
+595BowersHub_AI_Stack.md

@@ -1,0 +1,22 @@
+{
+  "name": "Get Transactions",
+  "hubId": "get-transactions",
+  "description": "Fetches transactions from the finance database for a given date range. Use this when the user asks about recent transactions, spending, purchases, or financial activity over a time period.",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "start_date": {
+        "description": "Start date in YYYY-MM-DD format. Defaults to 90 days ago if not specified.",
+        "type": "string"
+      },
+      "end_date": {
+        "description": "End date in YYYY-MM-DD format. Defaults to today if not specified.",
+        "type": "string"
+      }
+    }
+  }
+}

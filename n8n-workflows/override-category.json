@@ -1,0 +1,683 @@
+{
+  "name": "Override Transaction Category",
+  "description": "Updates a transaction's category, saves the pattern as a learning example, and retroactively applies to similar transactions (with confirmation).",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "update-category",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-oc",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        500
+      ],
+      "webhookId": "update-category-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst transaction_id_raw = body.transaction_id;\nconst category_name_raw = body.category_name || body.new_category;\nconst transaction_id = (typeof transaction_id_raw === 'string') ? transaction_id_raw.trim() : '';\nconst category_name = (typeof category_name_raw === 'string') ? category_name_raw.trim() : '';\nconst create_if_missing = body.create_if_missing === true || body.create_if_missing === 'true';\nconst apply_to_similar = body.apply_to_similar === true || body.apply_to_similar === 'true';\nconst confirm_retroactive = body.confirm_retroactive === true || body.confirm_retroactive === 'true';\n\nif (transaction_id.length === 0) {\n  return [{ json: { error: 'Missing required parameter: transaction_id', valid: false } }];\n}\nif (category_name.length === 0) {\n  return [{ json: { error: 'Missing required parameter: category_name', valid: false } }];\n}\n\nreturn [{ json: {\n  transaction_id,\n  transaction_id_sql: transaction_id.replace(/'/g, \"''\"),\n  category_name,\n  category_name_sql: category_name.replace(/'/g, \"''\"),\n  create_if_missing,\n  apply_to_similar,\n  confirm_retroactive,\n  valid: true\n} }];"
+      },
+      "id": "validate-oc",
+      "name": "Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "cv-oc",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid-oc",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $('Validate').first().json;\nreturn [{ json: { success: false, error: 'invalid_input', message: v.error } }];"
+      },
+      "id": "input-error-oc",
+      "name": "Return Input Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT id FROM categories WHERE LOWER(name) = LOWER('{{ $('Validate').first().json.category_name_sql }}') LIMIT 1) AS id;",
+        "options": {}
+      },
+      "id": "check-cat-oc",
+      "name": "Check Category",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const validated = $('Validate').first().json;\nconst rows = $input.all();\nconst categoryId = (rows.length > 0 && rows[0].json) ? rows[0].json.id : null;\n\nif (categoryId !== null && categoryId !== undefined) {\n  return [{ json: Object.assign({}, validated, { category_id: categoryId, action: 'update' }) }];\n}\n\nif (validated.create_if_missing) {\n  return [{ json: Object.assign({}, validated, { action: 'create_then_update' }) }];\n}\n\nreturn [{ json: Object.assign({}, validated, { action: 'error_not_found' }) }];"
+      },
+      "id": "decide-oc",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "c-notfound",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "error_not_found",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-notfound-oc",
+      "name": "IF Category Not Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.name, p.name AS parent_name\nFROM categories c LEFT JOIN categories p ON c.parent_id = p.id\nWHERE c.id NOT IN (SELECT DISTINCT parent_id FROM categories WHERE parent_id IS NOT NULL)\nORDER BY p.name NULLS LAST, c.name;",
+        "options": {}
+      },
+      "id": "list-cats-oc",
+      "name": "List Categories",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1400,
+        550
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const validated = $('Validate').first().json;\nconst rows = $input.all();\nconst existing = rows.map(r => r.json).filter(r => r.name);\n\n// Group by parent for nicer presentation\nconst byParent = {};\nfor (const r of existing) {\n  const key = r.parent_name || '(top-level)';\n  if (!byParent[key]) byParent[key] = [];\n  byParent[key].push(r.name);\n}\n\nreturn [{ json: {\n  success: false,\n  error: 'category_not_found',\n  message: 'Category \"' + validated.category_name + '\" does not exist. Confirm with the user whether to create it, then call again with create_if_missing=true.',\n  existing_categories_by_parent: byParent\n} }];"
+      },
+      "id": "format-nf-oc",
+      "name": "Format Not Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "c-create",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "create_then_update",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-create-oc",
+      "name": "IF Create Then Update",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO categories (name, is_system) VALUES ('{{ $('Validate').first().json.category_name_sql }}', false) RETURNING id;",
+        "options": {}
+      },
+      "id": "create-cat-oc",
+      "name": "Create Category",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1600,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const decide = $('Decide').first().json;\nconst rows = $input.all();\nconst newId = rows[0].json.id;\nreturn [{ json: Object.assign({}, decide, { category_id: newId }) }];"
+      },
+      "id": "merge-create-oc",
+      "name": "Merge Create",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, description FROM transactions WHERE id = '{{ $('Validate').first().json.transaction_id_sql }}';",
+        "options": {}
+      },
+      "id": "fetch-desc-oc",
+      "name": "Fetch Description",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2000,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// After we've resolved the target category_id, look up the source transaction's\n// description so we can extract a meaningful pattern to learn from.\nconst validated = $('Validate').first().json;\nconst decide = $('Decide').first().json;\nconst rows = $input.all();\nconst txn = rows.length > 0 ? rows[0].json : null;\n\nif (!txn) {\n  return [{ json: { error: 'source_transaction_not_found', message: 'Transaction ' + validated.transaction_id + ' does not exist.' } }];\n}\n\n// Extract a \"pattern\" from the description: take the first alphabetic word\n// that's at least 3 chars long. Gives us strong merchant signals like WALMART, AMAZON, ROCKLER.\nconst raw = (txn.description || '').trim();\nconst words = raw.split(/[\\s*#\\-_\\.\\/,]+/).filter(w => /^[A-Za-z]{3,}$/.test(w));\nconst pattern = words.length > 0 ? words[0].toUpperCase() : raw.slice(0, 40);\n\nreturn [{ json: {\n  transaction_id: validated.transaction_id,\n  transaction_id_sql: validated.transaction_id_sql,\n  category_name: validated.category_name,\n  category_name_sql: validated.category_name_sql,\n  category_id: decide.category_id,\n  description: raw,\n  pattern,\n  pattern_sql: pattern.replace(/'/g, \"''\"),\n  apply_to_similar: validated.apply_to_similar,\n  confirm_retroactive: validated.confirm_retroactive\n} }];"
+      },
+      "id": "extract-pattern-oc",
+      "name": "Extract Pattern",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS cnt\nFROM transactions\nWHERE UPPER(description) LIKE '%' || UPPER('{{ $json.pattern_sql }}') || '%'\n  AND id <> '{{ $json.transaction_id_sql }}'\n  AND user_category_override = false;",
+        "options": {}
+      },
+      "id": "count-similar-oc",
+      "name": "Count Similar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2400,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Extract Pattern').first().json;\nconst rows = $input.all();\nconst similarCount = (rows.length > 0 && rows[0].json) ? parseInt(rows[0].json.cnt, 10) || 0 : 0;\n\n// If user hasn't explicitly opted in to retroactive OR hasn't confirmed yet,\n// and there ARE similar transactions, we return a WARN instead of applying.\nconst shouldWarn = similarCount > 0 && !ctx.confirm_retroactive;\n\nreturn [{ json: Object.assign({}, ctx, {\n  similar_count: similarCount,\n  should_warn: shouldWarn\n}) }];"
+      },
+      "id": "similar-ctx-oc",
+      "name": "Similar Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "c-warn",
+              "leftValue": "={{ $json.should_warn }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-warn-oc",
+      "name": "IF Needs Warning",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\nreturn [{ json: {\n  success: false,\n  needs_confirmation: true,\n  message: 'Re-categorizing this transaction as \"' + ctx.category_name + '\" will also affect ' + ctx.similar_count + ' other similar transactions (matching pattern \"' + ctx.pattern + '\"). Confirm with the user. To proceed, call again with confirm_retroactive=true. To only update this single transaction, call again with apply_to_similar=false.',\n  pattern: ctx.pattern,\n  similar_count: ctx.similar_count,\n  new_category: ctx.category_name,\n  transaction_id: ctx.transaction_id\n} }];"
+      },
+      "id": "format-warn-oc",
+      "name": "Format Warning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE transactions\nSET category_id = {{ $('Extract Pattern').first().json.category_id }},\n    user_category_override = true\nWHERE id = '{{ $('Extract Pattern').first().json.transaction_id_sql }}'\nRETURNING id, category_id, amount, description, posted_date, user_category_override;",
+        "options": {}
+      },
+      "id": "update-primary-oc",
+      "name": "Update Primary Transaction",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3000,
+        150
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE transactions\nSET category_id = {{ $('Extract Pattern').first().json.category_id }}\nWHERE UPPER(description) LIKE '%' || UPPER('{{ $('Extract Pattern').first().json.pattern_sql }}') || '%'\n  AND id <> '{{ $('Extract Pattern').first().json.transaction_id_sql }}'\n  AND user_category_override = false\nRETURNING id;",
+        "options": {}
+      },
+      "id": "update-similar-oc",
+      "name": "Update Similar Transactions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3200,
+        150
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collapse multiple Update Similar rows down to a single pass-through item\n// so the Save Example node (upsert) only runs once.\nreturn [{ json: $('Extract Pattern').first().json }];"
+      },
+      "id": "collapse-oc",
+      "name": "Collapse To One",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO category_examples (description_pattern, category_id, source_transaction_id)\nVALUES ('{{ $('Extract Pattern').first().json.pattern_sql }}', {{ $('Extract Pattern').first().json.category_id }}, '{{ $('Extract Pattern').first().json.transaction_id_sql }}')\nON CONFLICT (LOWER(description_pattern), category_id)\nDO UPDATE SET times_reinforced = category_examples.times_reinforced + 1, updated_at = NOW()\nRETURNING id;",
+        "options": {}
+      },
+      "id": "save-example-oc",
+      "name": "Save Example",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3400,
+        150
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "JvthRCvWKXaGGbBI",
+          "name": "Finance Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Extract Pattern').first().json;\nconst primary = $('Update Primary Transaction').all();\nconst similarUpdate = $('Update Similar Transactions').all();\n\nconst primaryRow = primary.length > 0 ? primary[0].json : {};\nconst similarCount = similarUpdate.length;\n\nconst posted = primaryRow.posted_date;\nconst dateStr = (posted && typeof posted === 'string' && posted.includes('T'))\n  ? posted.split('T')[0]\n  : posted;\n\nconst parts = ['Transaction re-categorized to ' + ctx.category_name + '.'];\nif (similarCount > 0) {\n  parts.push(similarCount + ' similar transactions (pattern \"' + ctx.pattern + '\") were also updated.');\n}\nparts.push('Saved as a learning example for future auto-categorization.');\n\nreturn [{ json: {\n  success: true,\n  message: parts.join(' '),\n  pattern_learned: ctx.pattern,\n  new_category: ctx.category_name,\n  retroactive_updates: similarCount,\n  transaction: {\n    id: primaryRow.id,\n    amount: primaryRow.amount != null ? parseFloat(primaryRow.amount) : null,\n    description: primaryRow.description,\n    posted_date: dateStr,\n    user_category_override: primaryRow.user_category_override\n  }\n} }];"
+      },
+      "id": "format-success-oc",
+      "name": "Format Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        150
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "Check Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Input Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Category": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "IF Category Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Category Not Found": {
+      "main": [
+        [
+          {
+            "node": "List Categories",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Create Then Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Categories": {
+      "main": [
+        [
+          {
+            "node": "Format Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Create Then Update": {
+      "main": [
+        [
+          {
+            "node": "Create Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Category": {
+      "main": [
+        [
+          {
+            "node": "Merge Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Create": {
+      "main": [
+        [
+          {
+            "node": "Fetch Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Description": {
+      "main": [
+        [
+          {
+            "node": "Extract Pattern",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Pattern": {
+      "main": [
+        [
+          {
+            "node": "Count Similar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Similar": {
+      "main": [
+        [
+          {
+            "node": "Similar Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Similar Context": {
+      "main": [
+        [
+          {
+            "node": "IF Needs Warning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Needs Warning": {
+      "main": [
+        [
+          {
+            "node": "Format Warning",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Primary Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Primary Transaction": {
+      "main": [
+        [
+          {
+            "node": "Update Similar Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Similar Transactions": {
+      "main": [
+        [
+          {
+            "node": "Collapse To One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collapse To One": {
+      "main": [
+        [
+          {
+            "node": "Save Example",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Example": {
+      "main": [
+        [
+          {
+            "node": "Format Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

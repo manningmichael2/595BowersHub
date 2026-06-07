@@ -1,0 +1,18 @@
+{
+  "name": "Ask Database",
+  "hubId": "ask-db",
+  "description": "Answers ANY question about data in the household database by translating natural language to SQL. Covers ALL schemas: finance (transactions, accounts, categories, budgets), inventory (tools, router_bits, saw_blades, wood, albums, manuals), files (assets), house (rooms), cook (recipes, cook_log). Use for any READ question: spending totals, inventory lookups, recipe searches, room lists, asset counts, comparisons, aggregations. Examples: 'how many router bits do I have', 'show my cove bits', 'what did I spend on food this month', 'list all tools', 'show recipes I saved'. This is READ-ONLY — it cannot modify data. IMPORTANT: Limited to 15 calls per session. ALWAYS write ONE comprehensive query that returns all the data you need. NEVER loop through items one at a time — use WHERE IN, JOINs, or broad SELECTs instead.",
+  "author": "Michael",
+  "version": "2.1.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "question": {
+        "description": "A natural language question about ANY data in the system. WRITE BROAD QUERIES — ask for all rows you need in one question, not one row at a time. Be specific about filters and date ranges. Examples: 'Show all tools with brand, model, condition, and current_value_estimate', 'List all router bits with their profile and shank size', 'What did I spend by category this month?', 'Show all inventory items that have no value estimate'. NEVER call this skill in a loop — one comprehensive query is always better than many narrow ones.",
+        "type": "string"
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# Build artifacts and dependencies — Dockerfile rebuilds these inside the image
+frontend/node_modules
+frontend/dist
+frontend/package-lock.json
+**/__pycache__
+**/*.pyc
+
+# Test caches (root-owned from docker-based test runs; harmless but bloats context)
+.pytest_cache
+.hypothesis
+backend/tests
+requirements-test.txt
+pytest.ini
+
+# Editor / VCS noise
+.git
+.gitignore
+.kiro
+.vscode
+.idea
+
+# Local-only configs
+*.env
+.env
+.env.*
+!*.env.example
+
+# Ad-hoc files
+*.log
+*.tmp
+*.swp
+.DS_Store

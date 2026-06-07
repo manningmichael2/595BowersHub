@@ -1,0 +1,13 @@
+{
+  "name": "Sync Steering on Doc Edit",
+  "version": "1.0.0",
+  "description": "When the main project context doc or context log is edited, remind the agent to check if the steering file needs updating.",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["context-log.md", ".kiro/steering/595bowershub-project.md"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A project context file was just edited. Review the changes and check if 'c:\\Users\\manni\\OneDrive\\Homebrew_dev\\.kiro\\steering\\595bowershub-project.md' needs to be updated to reflect any new decisions, infrastructure changes, completed items, or new planned features. Only update it if something meaningful changed — don't make trivial edits."
+  }
+}

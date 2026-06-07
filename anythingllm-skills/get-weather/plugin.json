@@ -1,0 +1,19 @@
+{
+  "name": "Get Weather",
+  "hubId": "get-weather",
+  "description": "Fetches current weather conditions and forecast. Use this when the user asks about the weather, temperature, rain, wind, or forecast. Can check weather for any location by name, or defaults to the user's home area (Clawson, MI).",
+  "author": "Michael",
+  "version": "1.0.0",
+  "active": true,
+  "setup_args": {},
+  "entrypoint": {
+    "file": "handler.js",
+    "params": {
+      "location": {
+        "description": "City name or location to check weather for. Defaults to Clawson, MI (48017) if not provided.",
+        "type": "string",
+        "default": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,157 @@
+import { useState, useEffect, useRef } from 'react'
+import { api } from '../services/api'
+import { useUIStore } from '../stores/ui'
+import { useConversationStore } from '../stores/conversation'
+
+interface SearchResult {
+  source_type: string
+  content: string
+  context?: string
+  workspace_name?: string
+  conversation_title?: string
+  conversation_id?: number
+  message_id?: number
+  topic?: string
+  file?: string
+  created_at?: string
+}
+
+export default function SearchOverlay() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Record<string, SearchResult[]>>({})
+  const [isSearching, setIsSearching] = useState(false)
+  const [activeTab, setActiveTab] = useState<'all' | 'messages' | 'knowledge' | 'artifacts'>('all')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { setSearchOpen } = useUIStore()
+  const { setActive } = useConversationStore()
+
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  // Debounced search
+  useEffect(() => {
+    if (query.length < 2) {
+      setResults({})
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true)
+      try {
+        const res = await api.get(`/api/search?q=${encodeURIComponent(query)}&type=${activeTab}`)
+        setResults(res.data.results || {})
+      } catch {
+        setResults({})
+      }
+      setIsSearching(false)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [query, activeTab])
+
+  const totalResults = Object.values(results).reduce((sum, arr) => sum + arr.length, 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60" onClick={() => setSearchOpen(false)} />
+
+      {/* Search panel */}
+      <div className="relative w-full max-w-2xl mx-4 bg-[#1a1a2e] border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+        {/* Search input */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800">
+          <svg className="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search conversations, knowledge, artifacts..."
+            className="flex-1 bg-transparent text-gray-200 placeholder-gray-500 text-sm focus:outline-none"
+          />
+          <kbd className="text-xs text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">Esc</kbd>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-4 py-2 border-b border-gray-800">
+          {(['all', 'messages', 'knowledge', 'artifacts'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                activeTab === tab ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Results */}
+        <div className="max-h-[50vh] overflow-y-auto">
+          {isSearching && (
+            <div className="p-4 text-center text-gray-500 text-sm">Searching...</div>
+          )}
+
+          {!isSearching && query.length >= 2 && totalResults === 0 && (
+            <div className="p-4 text-center text-gray-500 text-sm">No results found</div>
+          )}
+
+          {/* Message results */}
+          {(results.messages || []).map((r, i) => (
+            <button
+              key={`msg-${i}`}
+              onClick={() => {
+                // Navigate to conversation
+                if (r.conversation_id) {
+                  setActive({ id: r.conversation_id } as any)
+                }
+                setSearchOpen(false)
+              }}
+              className="w-full text-left px-4 py-3 hover:bg-gray-800/50 border-b border-gray-800/50"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400">message</span>
+                <span className="text-xs text-gray-500">{r.workspace_name}</span>
+                <span className="text-xs text-gray-600">• {r.conversation_title}</span>
+              </div>
+              <p className="text-sm text-gray-300 line-clamp-2">{r.content}</p>
+            </button>
+          ))}
+
+          {/* Knowledge results */}
+          {(results.knowledge || []).map((r, i) => (
+            <div key={`know-${i}`} className="px-4 py-3 border-b border-gray-800/50">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/30 text-green-400">knowledge</span>
+                <span className="text-xs text-gray-500">{r.topic || r.file}</span>
+              </div>
+              <p className="text-sm text-gray-300">{r.content}</p>
+            </div>
+          ))}
+
+          {/* Artifact results */}
+          {(results.artifacts || []).map((r, i) => (
+            <div key={`art-${i}`} className="px-4 py-3 border-b border-gray-800/50">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs px-1.5 py-0.5 rounded bg-purple-900/30 text-purple-400">artifact</span>
+                <span className="text-xs text-gray-500">{r.workspace_name}</span>
+              </div>
+              <p className="text-sm text-gray-300 line-clamp-2">{r.content}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        {totalResults > 0 && (
+          <div className="px-4 py-2 border-t border-gray-800 text-xs text-gray-500">
+            {totalResults} result{totalResults !== 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,665 @@
+{
+  "updatedAt": "2026-05-14T01:36:33.757Z",
+  "createdAt": "2026-05-12T22:28:29.847Z",
+  "id": "EIinsmGcdxOYqj5c",
+  "name": "Finance SQL Query",
+  "description": "Natural language to SQL query engine for finance data",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "finance-query",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-fq",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "finance-query-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst question = body.question || '';\n\nif (!question || question.trim().length === 0) {\n  return [{ json: { error: 'No question provided. Send {\"question\": \"your question here\"}', valid: false } }];\n}\n\nconst today = new Date().toISOString().split('T')[0];\n\nconst schema = [\"DATABASE SCHEMA (auto-generated from live database):\", \"\", \"=== Schema: cook ===\", \"\", \"Table: cook.cook_log\", \"  - id (bigint)\", \"  - recipe_id (bigint)\", \"  - cooked_at (date)\", \"  - servings_made (integer nullable)\", \"  - adjustments (text nullable)\", \"  - rating (smallint nullable)\", \"  - notes (text nullable)\", \"  - created_at (timestamptz)\", \"\", \"Table: cook.recipe_files\", \"  - recipe_id (bigint)\", \"  - asset_id (uuid)\", \"  - file_role (text nullable)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: cook.recipes\", \"  - id (bigint)\", \"  - title (text)\", \"  - slug (text nullable)\", \"  - source (text nullable)\", \"  - servings (integer nullable)\", \"  - calories_each (integer nullable)\", \"  - notes (text nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"\", \"\", \"=== Schema: files ===\", \"\", \"Table: files.assets\", \"  - id (uuid)\", \"  - path (text)\", \"  - original_name (text nullable)\", \"  - mime (text)\", \"  - size_bytes (bigint)\", \"  - sha256 (text)\", \"  - domain (text nullable)\", \"  - uploaded_at (timestamptz)\", \"  - uploaded_by (text nullable)\", \"  - ai_summary (text nullable)\", \"  - ai_extracted (jsonb nullable)\", \"  - ai_model (text nullable)\", \"  - processed_at (timestamptz nullable)\", \"\", \"\", \"=== Schema: house ===\", \"\", \"Table: house.room_files\", \"  - room_id (bigint)\", \"  - asset_id (uuid)\", \"  - orientation (text nullable)\", \"  - position (text nullable)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: house.rooms\", \"  - id (bigint)\", \"  - name (text)\", \"  - floor (integer nullable)\", \"  - notes (text nullable)\", \"  - created_at (timestamptz)\", \"\", \"\", \"=== Schema: inventory ===\", \"\", \"Table: inventory.album_files\", \"  - album_id (bigint)\", \"  - asset_id (uuid)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: inventory.albums\", \"  - id (bigint)\", \"  - title (text)\", \"  - artist (text nullable)\", \"  - label (text nullable)\", \"  - catalog_number (text nullable)\", \"  - year (integer nullable)\", \"  - condition (text nullable)\", \"  - notes (text nullable)\", \"  - last_played_at (date nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"  - archived_at (timestamptz nullable)\", \"\", \"Table: inventory.manual_files\", \"  - manual_id (bigint)\", \"  - asset_id (uuid)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: inventory.manuals\", \"  - id (bigint)\", \"  - title (text)\", \"  - brand (text nullable)\", \"  - model (text nullable)\", \"  - doc_type (text nullable)\", \"  - notes (text nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"  - archived_at (timestamptz nullable)\", \"\", \"Table: inventory.router_bit_files\", \"  - router_bit_id (bigint)\", \"  - asset_id (uuid)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: inventory.router_bits\", \"  - id (bigint)\", \"  - brand (text nullable)\", \"  - profile (text)\", \"  - shank_size_in (numeric nullable)\", \"  - cutting_diameter_in (numeric nullable)\", \"  - cutting_length_in (numeric nullable)\", \"  - has_bearing (boolean nullable)\", \"  - set_name (text nullable)\", \"  - notes (text nullable)\", \"  - condition (text nullable)\", \"  - purchase_price (numeric nullable)\", \"  - current_value_estimate (numeric nullable)\", \"  - value_estimated_at (date nullable)\", \"  - acquired_at (date nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"  - archived_at (timestamptz nullable)\", \"  - radius_in (numeric nullable)\", \"  - model_number (text nullable)\", \"  - angle_deg (numeric nullable)\", \"  - url (text nullable)\", \"\", \"Table: inventory.saw_blade_files\", \"  - saw_blade_id (bigint)\", \"  - asset_id (uuid)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: inventory.saw_blades\", \"  - id (bigint)\", \"  - brand (text nullable)\", \"  - diameter_in (numeric nullable)\", \"  - teeth (integer nullable)\", \"  - kerf_in (numeric nullable)\", \"  - type (text nullable)\", \"  - notes (text nullable)\", \"  - acquired_at (date nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"  - archived_at (timestamptz nullable)\", \"\", \"Table: inventory.tool_files\", \"  - tool_id (bigint)\", \"  - asset_id (uuid)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: inventory.tools\", \"  - id (bigint)\", \"  - name (text)\", \"  - brand (text nullable)\", \"  - model (text nullable)\", \"  - type (text nullable)\", \"  - notes (text nullable)\", \"  - acquired_at (date nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"  - archived_at (timestamptz nullable)\", \"\", \"Table: inventory.wood\", \"  - id (bigint)\", \"  - species (text nullable)\", \"  - dimensions (text nullable)\", \"  - quantity (numeric nullable)\", \"  - unit (text nullable)\", \"  - notes (text nullable)\", \"  - acquired_at (date nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"  - archived_at (timestamptz nullable)\", \"\", \"Table: inventory.wood_files\", \"  - wood_id (bigint)\", \"  - asset_id (uuid)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"\", \"=== Schema: public ===\", \"\", \"Table: public.accounts\", \"  - id (varchar)\", \"  - org_name (varchar nullable)\", \"  - account_name (varchar nullable)\", \"  - currency (varchar)\", \"  - last_balance (numeric nullable)\", \"  - last_balance_date (date nullable)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"\", \"Table: public.alert_log\", \"  - id (integer)\", \"  - category_id (integer)\", \"  - alert_type (varchar)\", \"  - alert_date (date)\", \"  - amount_spent (numeric nullable)\", \"  - percentage_used (integer nullable)\", \"  - sent_at (timestamptz)\", \"\", \"Table: public.budgets\", \"  - id (integer)\", \"  - category_id (integer)\", \"  - month (date)\", \"  - limit_amount (numeric)\", \"\", \"Table: public.categories\", \"  - id (integer)\", \"  - name (varchar)\", \"  - budget_monthly (numeric nullable)\", \"  - is_system (boolean)\", \"  - parent_id (integer nullable)\", \"\", \"Table: public.category_examples\", \"  - id (integer)\", \"  - description_pattern (text)\", \"  - category_id (integer)\", \"  - source_transaction_id (varchar nullable)\", \"  - times_reinforced (integer)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"\", \"Table: public.email_classified\", \"  - message_id (text)\", \"  - classified_at (timestamptz)\", \"  - labels (array)\", \"\", \"Table: public.email_labels\", \"  - label (text)\", \"  - times_used (integer)\", \"  - first_used (timestamptz)\", \"  - last_used (timestamptz)\", \"\", \"Table: public.transaction_files\", \"  - transaction_id (text)\", \"  - asset_id (uuid)\", \"  - is_primary (boolean)\", \"  - linked_at (timestamptz)\", \"\", \"Table: public.transactions\", \"  - id (varchar)\", \"  - account_id (varchar)\", \"  - posted_date (date)\", \"  - amount (numeric)\", \"  - description (text nullable)\", \"  - memo (text nullable)\", \"  - pending (boolean)\", \"  - category_id (integer nullable)\", \"  - user_category_override (boolean)\", \"  - is_transfer (boolean)\", \"  - is_transfer_manual (boolean)\", \"  - house_tag (boolean)\", \"  - house_tag_manual (boolean)\", \"  - created_at (timestamptz)\", \"  - updated_at (timestamptz)\", \"  - source (text)\", \"\", \"\", \"CATEGORY HIERARCHY (VERY IMPORTANT \\u2014 these are the EXACT names in categories.name):\", \"\", \"Top-level categories that are PARENTS ONLY (do NOT use directly for transaction lookups):\", \"  Food, House, Transportation\", \"Use these only when aggregating across all children (e.g. 'total Food spending' = SUM where category in (Food_Groceries, Food_Dining)).\", \"\", \"LEAF categories (these are what transactions are actually assigned to):\", \"  ATM\", \"  Entertainment\", \"  Food_Dining       -- restaurants, cafes, takeout, bars\", \"  Food_Groceries    -- grocery stores, supermarkets\", \"  House_Furniture\", \"  House_Improvement\", \"  House_Maintenance\", \"  House_Mortgage\", \"  House_Utilities\", \"  Income\", \"  Insurance\", \"  Medical\", \"  Other\", \"  Shopping\", \"  Subscriptions\", \"  Trans_Car_Insurance\", \"  Trans_Car_Maintenance\", \"  Trans_Gas\", \"  Trans_Public_Transit\", \"  Transfer\", \"  Travel\", \"  Woodshop\", \"\", \"NATURAL LANGUAGE \\u2192 CATEGORY MAPPING (use the EXACT leaf name, not the user's word):\", \"  'groceries', 'food shopping', 'supermarket'    \\u2192 Food_Groceries\", \"  'dining', 'eating out', 'restaurants', 'food'  \\u2192 Food_Dining (when context is meals out)\", \"  'gas', 'fuel', 'gasoline'                      \\u2192 Trans_Gas\", \"  'car insurance', 'auto insurance'              \\u2192 Trans_Car_Insurance\", \"  'car maintenance', 'oil change', 'car repair'  \\u2192 Trans_Car_Maintenance\", \"  'public transit', 'bus', 'train', 'subway'    \\u2192 Trans_Public_Transit\", \"  'mortgage', 'house payment'                    \\u2192 House_Mortgage\", \"  'utilities', 'electric', 'water', 'gas bill'  \\u2192 House_Utilities\", \"  'home repair', 'plumber', 'handyman'           \\u2192 House_Maintenance\", \"  'renovation', 'remodel', 'home improvement'    \\u2192 House_Improvement\", \"  'furniture'                                    \\u2192 House_Furniture\", \"  'subscriptions', 'recurring', 'streaming'      \\u2192 Subscriptions\", \"  'doctor', 'medical', 'pharmacy', 'dentist'    \\u2192 Medical\", \"\", \"  When the user says 'food' generically (could mean groceries OR dining), prefer to\", \"  return BOTH categories grouped, e.g. GROUP BY c.name. Don't guess.\", \"\", \"PARENT ROLLUPS (when user asks for total spending in a parent category):\", \"  Use a parent-id subquery so the query auto-adapts if leaves are added later:\", \"    WHERE c.parent_id = (SELECT id FROM categories WHERE name = 'Food')\", \"  Apply this for parents: Food, House, Transportation.\", \"\", \"IMPORTANT QUERY RULES:\", \"- This is READ-ONLY. Generate only SELECT statements.\", \"- Amounts in public.transactions are NEGATIVE for spending, POSITIVE for income.\", \"- Spending totals: use ABS(SUM(amount)) or SUM(-amount) to return positive numbers.\", \"- Always exclude transfers when calculating spending: WHERE is_transfer = false.\", \"- Use EXACT category names from the leaf list above. Match with c.name = 'Food_Groceries'. Do NOT use LIKE patterns.\", \"- Use aggregation (SUM, COUNT, AVG, GROUP BY) for totals/summaries.\", \"- Only return individual rows when user explicitly wants a list.\", \"- Always JOIN with relevant tables for readable output (e.g., account names, category names).\", \"- For inventory queries: archived_at IS NULL means active records. Include this filter unless user asks about archived items.\", \"- For file/image queries: join through _files link tables to files.assets.\", \"- Add LIMIT 5000 as safety cap.\", \"- Today is: %TODAY%\"].join('\\n').replace('%TODAY%', today);\n\nreturn [{ json: { question, schema, valid: true } }];"
+      },
+      "id": "prepare-prompt-fq",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "cond-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid-fq",
+      "name": "IF Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, messages: [{ role: 'user', content: $('Prepare Prompt').first().json.schema + '\\n\\nUSER QUESTION: ' + $('Prepare Prompt').first().json.question + '\\n\\nGenerate a single PostgreSQL SELECT query to answer this question. Return ONLY the SQL query, no explanation, no markdown, no code fences. The database has multiple schemas (public, inventory, files, house, cook). Always use fully-qualified table names (schema.table). When the question references categories, use the EXACT leaf category names from the schema (e.g. Food_Groceries, Trans_Gas, House_Mortgage). Do NOT abbreviate or rephrase them. Match category names exactly with equals, never LIKE patterns. For inventory questions, filter WHERE archived_at IS NULL unless user asks about archived items. Use aggregation when appropriate. Always include LIMIT 5000.' }] }) }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST"
+      },
+      "id": "call-haiku-fq",
+      "name": "Generate SQL (Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst content = response.content && response.content[0] ? response.content[0].text : '';\n\nlet sql = content.trim();\nif (sql.startsWith('```')) {\n  sql = sql.replace(/^```(?:sql)?\\n?/, '').replace(/\\n?```$/, '').trim();\n}\n\nconst upper = sql.toUpperCase();\nconst forbidden = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE', 'TRUNCATE', 'GRANT', 'REVOKE', 'COPY'];\nlet found = null;\nfor (const word of forbidden) {\n  const regex = new RegExp('\\\\b' + word + '\\\\b');\n  if (regex.test(upper)) {\n    found = word;\n    break;\n  }\n}\n\nif (found) {\n  return [{ json: { error: 'Refused: query contains forbidden keyword ' + found + '. Only SELECT queries are allowed.', valid: false } }];\n}\n\nif (!upper.trimStart().startsWith('SELECT') && !upper.trimStart().startsWith('WITH')) {\n  return [{ json: { error: 'Refused: query must start with SELECT or WITH.', valid: false } }];\n}\n\nif (!upper.includes('LIMIT')) {\n  sql = sql.replace(/;\\s*$/, '') + ' LIMIT 5000;';\n}\n\nreturn [{ json: { sql, valid: true } }];"
+      },
+      "id": "validate-sql-fq",
+      "name": "Validate SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "cond-sql-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-sql-valid-fq",
+      "name": "IF SQL Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $('Validate SQL').first().json.sql }}",
+        "options": {}
+      },
+      "id": "execute-query-fq",
+      "name": "Execute Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1520,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "6UmK2l0ftACuxJJ6",
+          "name": "Finance Postgres (Read-Only)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\nconst question = $('Prepare Prompt').first().json.question;\nconst sql = $('Validate SQL').first().json.sql;\n\nreturn [{ json: {\n  question,\n  sql_generated: sql,\n  row_count: rows.length,\n  results: rows\n} }];"
+      },
+      "id": "format-results-fq",
+      "name": "Format Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $('Validate SQL').first().json.error || 'SQL validation failed';\nreturn [{ json: { error } }];"
+      },
+      "id": "return-sql-error-fq",
+      "name": "Return SQL Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const errorData = $('Prepare Prompt').first().json;\nreturn [{ json: { error: errorData.error } }];"
+      },
+      "id": "return-input-error-fq",
+      "name": "Return Input Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        440
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompt": {
+      "main": [
+        [
+          {
+            "node": "IF Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid": {
+      "main": [
+        [
+          {
+            "node": "Generate SQL (Haiku)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Input Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate SQL (Haiku)": {
+      "main": [
+        [
+          {
+            "node": "Validate SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate SQL": {
+      "main": [
+        [
+          {
+            "node": "IF SQL Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF SQL Valid": {
+      "main": [
+        [
+          {
+            "node": "Execute Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return SQL Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Query": {
+      "main": [
+        [
+          {
+            "node": "Format Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "61e4df1a-5206-470b-92ca-920d7d9380c1",
+  "activeVersionId": "61e4df1a-5206-470b-92ca-920d7d9380c1",
+  "versionCounter": 46,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-05-12T22:28:29.849Z",
+      "createdAt": "2026-05-12T22:28:29.849Z",
+      "role": "workflow:owner",
+      "workflowId": "EIinsmGcdxOYqj5c",
+      "projectId": "sUwwWKPwkXlUE6jF",
+      "project": {
+        "updatedAt": "2026-05-11T01:15:17.027Z",
+        "createdAt": "2026-05-11T01:12:34.580Z",
+        "id": "sUwwWKPwkXlUE6jF",
+        "name": "Michael Manning <manningmichael2@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-05-14T01:36:33.757Z",
+    "createdAt": "2026-05-14T01:36:33.757Z",
+    "versionId": "61e4df1a-5206-470b-92ca-920d7d9380c1",
+    "workflowId": "EIinsmGcdxOYqj5c",
+    "nodes": [
+      {
+        "parameters": {
+          "path": "finance-query",
+          "httpMethod": "POST",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "webhook-fq",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          200,
+          300
+        ],
+        "webhookId": "finance-query-webhook"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst question = body.question || '';\n\nif (!question || question.trim().length === 0) {\n  return [{ json: { error: 'No question provided. Send {\"question\": \"your question here\"}', valid: false } }];\n}\n\nconst today = new Date().toISOString().split('T')[0];\n\nconst schema = [\"DATABASE SCHEMA:\", \"\", \"Table: accounts\", \"- id (varchar PK)\", \"- org_name (varchar) -- bank/institution name (e.g. 'Ally Bank', 'PNC Bank', 'Chase')\", \"- account_name (varchar) -- e.g. \\\"Savings Account (1663)\\\"\", \"- currency (varchar, default USD)\", \"- last_balance (numeric 12,2)\", \"- last_balance_date (date)\", \"\", \"Table: transactions\", \"- id (varchar PK)\", \"- account_id (varchar FK -> accounts.id)\", \"- posted_date (date)\", \"- amount (numeric 12,2) -- NEGATIVE for spending/debits, POSITIVE for income/credits\", \"- description (text) -- merchant/payee name\", \"- memo (text)\", \"- pending (boolean)\", \"- category_id (integer FK -> categories.id)\", \"- user_category_override (boolean)\", \"- is_transfer (boolean) -- true if transfer between own accounts\", \"- is_transfer_manual (boolean)\", \"- house_tag (boolean) -- true if related to house purchase/renovation\", \"- house_tag_manual (boolean)\", \"\", \"Table: categories\", \"- id (integer PK)\", \"- name (varchar) -- see CATEGORY HIERARCHY below\", \"- parent_id (integer, nullable) -- if set, this is a child category\", \"- budget_monthly (numeric 10,2)\", \"- is_system (boolean)\", \"\", \"Table: budgets\", \"- id (integer PK)\", \"- category_id (integer FK -> categories.id)\", \"- month (date) -- first of month\", \"- limit_amount (numeric 10,2)\", \"\", \"Table: alert_log\", \"- id (integer PK)\", \"- category_id (integer FK -> categories.id)\", \"- alert_type (varchar) -- 80_pct or 100_pct\", \"- alert_date (date)\", \"- amount_spent (numeric 10,2)\", \"- percentage_used (integer)\", \"\", \"CATEGORY HIERARCHY (VERY IMPORTANT \\u2014 these are the EXACT names in categories.name):\", \"\", \"Top-level categories that are PARENTS ONLY (do NOT use directly for transaction lookups):\", \"  Food, House, Transportation\", \"Use these only when aggregating across all children (e.g. 'total Food spending' = SUM where category in (Food_Groceries, Food_Dining)).\", \"\", \"LEAF categories (these are what transactions are actually assigned to):\", \"  ATM\", \"  Entertainment\", \"  Food_Dining       -- restaurants, cafes, takeout, bars\", \"  Food_Groceries    -- grocery stores, supermarkets\", \"  House_Furniture\", \"  House_Improvement\", \"  House_Maintenance\", \"  House_Mortgage\", \"  House_Utilities\", \"  Income\", \"  Insurance\", \"  Medical\", \"  Other\", \"  Shopping\", \"  Subscriptions\", \"  Trans_Car_Insurance\", \"  Trans_Car_Maintenance\", \"  Trans_Gas\", \"  Trans_Public_Transit\", \"  Transfer\", \"  Travel\", \"  Woodshop\", \"\", \"NATURAL LANGUAGE \\u2192 CATEGORY MAPPING (use the EXACT leaf name, not the user's word):\", \"  'groceries', 'food shopping', 'supermarket'    \\u2192 Food_Groceries\", \"  'dining', 'eating out', 'restaurants', 'food'  \\u2192 Food_Dining (when context is meals out)\", \"  'gas', 'fuel', 'gasoline'                      \\u2192 Trans_Gas\", \"  'car insurance', 'auto insurance'              \\u2192 Trans_Car_Insurance\", \"  'car maintenance', 'oil change', 'car repair'  \\u2192 Trans_Car_Maintenance\", \"  'public transit', 'bus', 'train', 'subway'    \\u2192 Trans_Public_Transit\", \"  'mortgage', 'house payment'                    \\u2192 House_Mortgage\", \"  'utilities', 'electric', 'water', 'gas bill'  \\u2192 House_Utilities\", \"  'home repair', 'plumber', 'handyman'           \\u2192 House_Maintenance\", \"  'renovation', 'remodel', 'home improvement'    \\u2192 House_Improvement\", \"  'furniture'                                    \\u2192 House_Furniture\", \"  'subscriptions', 'recurring', 'streaming'      \\u2192 Subscriptions\", \"  'doctor', 'medical', 'pharmacy', 'dentist'    \\u2192 Medical\", \"\", \"  When the user says 'food' generically (could mean groceries OR dining), prefer to\", \"  return BOTH categories grouped, e.g. GROUP BY c.name. Don't guess.\", \"\", \"PARENT ROLLUPS (when user asks for total spending in a parent category):\", \"  Use a parent-id subquery so the query auto-adapts if leaves are added later:\", \"    WHERE c.parent_id = (SELECT id FROM categories WHERE name = 'Food')\", \"  Apply this for parents: Food, House, Transportation.\", \"  Example \\u2014 'total food spending in April':\", \"    SELECT SUM(ABS(t.amount)) FROM transactions t\", \"    JOIN categories c ON t.category_id = c.id\", \"    WHERE c.parent_id = (SELECT id FROM categories WHERE name = 'Food')\", \"      AND t.posted_date BETWEEN '2026-04-01' AND '2026-04-30'\", \"      AND t.is_transfer = false;\", \"  Use a leaf-name IN list ONLY when the user explicitly names a subset of leaves\", \"  (e.g., 'groceries and dining combined').\", \"\", \"  When the user wants a BREAKDOWN by sub-category (e.g., 'show my food spending by\", \"  type'), GROUP BY c.name and join with the parent-id filter.\", \"\", \"RELATIONSHIPS:\", \"- transactions.account_id -> accounts.id\", \"- transactions.category_id -> categories.id\", \"- budgets.category_id -> categories.id\", \"- alert_log.category_id -> categories.id\", \"\", \"IMPORTANT NOTES:\", \"- Amounts are NEGATIVE for spending, POSITIVE for income.\", \"- Spending totals: use ABS(SUM(amount)) or SUM(-amount) to return positive numbers.\", \"- Always exclude transfers when calculating spending: WHERE is_transfer = false.\", \"- Use EXACT category names from the leaf list above. Match with c.name = 'Food_Groceries' (with underscore). Do NOT use LIKE patterns or rewrite the user's phrasing.\", \"- Today is: %TODAY%\", \"- Use aggregation (SUM, COUNT, AVG, GROUP BY) for totals/summaries.\", \"- Only return individual rows when user explicitly wants a list.\", \"- Always JOIN accounts and categories for readable output.\", \"- Add LIMIT 5000 as safety cap.\"].join('\\n').replace('%TODAY%', today);\n\nreturn [{ json: { question, schema, valid: true } }];"
+        },
+        "id": "prepare-prompt-fq",
+        "name": "Prepare Prompt",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          420,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true
+            },
+            "conditions": [
+              {
+                "id": "cond-valid",
+                "leftValue": "={{ $json.valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "if-valid-fq",
+        "name": "IF Valid",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          640,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "url": "https://api.anthropic.com/v1/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, messages: [{ role: 'user', content: $('Prepare Prompt').first().json.schema + '\\n\\nUSER QUESTION: ' + $('Prepare Prompt').first().json.question + '\\n\\nGenerate a single PostgreSQL SELECT query to answer this question. Return ONLY the SQL query, no explanation, no markdown, no code fences. When the question references categories, use the EXACT leaf category names from the schema (e.g. Food_Groceries, Trans_Gas, House_Mortgage). Do NOT abbreviate or rephrase them. Match category names exactly with equals, never LIKE patterns. Use aggregation when appropriate. Always include LIMIT 5000.' }] }) }}",
+          "options": {
+            "timeout": 30000
+          },
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "method": "POST"
+        },
+        "id": "call-haiku-fq",
+        "name": "Generate SQL (Haiku)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          860,
+          200
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "uGfcnvWQfj3IfjsH",
+            "name": "Anthropic API"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const response = $input.first().json;\nconst content = response.content && response.content[0] ? response.content[0].text : '';\n\nlet sql = content.trim();\nif (sql.startsWith('```')) {\n  sql = sql.replace(/^```(?:sql)?\\n?/, '').replace(/\\n?```$/, '').trim();\n}\n\nconst upper = sql.toUpperCase();\nconst forbidden = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE', 'TRUNCATE', 'GRANT', 'REVOKE', 'COPY'];\nlet found = null;\nfor (const word of forbidden) {\n  const regex = new RegExp('\\\\b' + word + '\\\\b');\n  if (regex.test(upper)) {\n    found = word;\n    break;\n  }\n}\n\nif (found) {\n  return [{ json: { error: 'Refused: query contains forbidden keyword ' + found + '. Only SELECT queries are allowed.', valid: false } }];\n}\n\nif (!upper.trimStart().startsWith('SELECT') && !upper.trimStart().startsWith('WITH')) {\n  return [{ json: { error: 'Refused: query must start with SELECT or WITH.', valid: false } }];\n}\n\nif (!upper.includes('LIMIT')) {\n  sql = sql.replace(/;\\s*$/, '') + ' LIMIT 5000;';\n}\n\nreturn [{ json: { sql, valid: true } }];"
+        },
+        "id": "validate-sql-fq",
+        "name": "Validate SQL",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1080,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true
+            },
+            "conditions": [
+              {
+                "id": "cond-sql-valid",
+                "leftValue": "={{ $json.valid }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "if-sql-valid-fq",
+        "name": "IF SQL Valid",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{ $('Validate SQL').first().json.sql }}",
+          "options": {}
+        },
+        "id": "execute-query-fq",
+        "name": "Execute Query",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.5,
+        "position": [
+          1520,
+          100
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "6UmK2l0ftACuxJJ6",
+            "name": "Finance Postgres (Read-Only)"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const rows = $input.all().map(item => item.json);\nconst question = $('Prepare Prompt').first().json.question;\nconst sql = $('Validate SQL').first().json.sql;\n\nreturn [{ json: {\n  question,\n  sql_generated: sql,\n  row_count: rows.length,\n  results: rows\n} }];"
+        },
+        "id": "format-results-fq",
+        "name": "Format Results",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1740,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const error = $('Validate SQL').first().json.error || 'SQL validation failed';\nreturn [{ json: { error } }];"
+        },
+        "id": "return-sql-error-fq",
+        "name": "Return SQL Error",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1520,
+          350
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const errorData = $('Prepare Prompt').first().json;\nreturn [{ json: { error: errorData.error } }];"
+        },
+        "id": "return-input-error-fq",
+        "name": "Return Input Error",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          860,
+          440
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Prepare Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Prompt": {
+        "main": [
+          [
+            {
+              "node": "IF Valid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF Valid": {
+        "main": [
+          [
+            {
+              "node": "Generate SQL (Haiku)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Return Input Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Generate SQL (Haiku)": {
+        "main": [
+          [
+            {
+              "node": "Validate SQL",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate SQL": {
+        "main": [
+          [
+            {
+              "node": "IF SQL Valid",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF SQL Valid": {
+        "main": [
+          [
+            {
+              "node": "Execute Query",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Return SQL Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Execute Query": {
+        "main": [
+          [
+            {
+              "node": "Format Results",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Michael Manning",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-05-14T01:36:33.794Z",
+        "id": 76,
+        "workflowId": "EIinsmGcdxOYqj5c",
+        "versionId": "61e4df1a-5206-470b-92ca-920d7d9380c1",
+        "event": "activated",
+        "userId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      },
+      {
+        "createdAt": "2026-05-14T01:36:33.781Z",
+        "id": 75,
+        "workflowId": "EIinsmGcdxOYqj5c",
+        "versionId": "61e4df1a-5206-470b-92ca-920d7d9380c1",
+        "event": "deactivated",
+        "userId": "c0631f56-0fa1-4cba-ae07-a88057dd596a"
+      }
+    ]
+  }
+}

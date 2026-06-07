@@ -1,0 +1,670 @@
+{
+  "name": "Knowledge Memory",
+  "description": "Personal knowledge base. /webhook/remember saves facts to /knowledge/<topic>.md (Haiku-deduped). /webhook/recall greps /knowledge for a query.",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "remember",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wh-remember",
+      "name": "Webhook Remember",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "remember-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\n\nconst topicRaw = body.topic;\nconst factRaw = body.fact;\n\nif (!topicRaw || typeof topicRaw !== 'string' || topicRaw.trim().length === 0) {\n  return [{ json: { valid: false, error: 'Missing required parameter: topic' } }];\n}\nif (!factRaw || typeof factRaw !== 'string' || factRaw.trim().length === 0) {\n  return [{ json: { valid: false, error: 'Missing required parameter: fact' } }];\n}\n\nconst fact = factRaw.trim();\n\n// Normalize the topic to a filesystem-safe slug. Spaces \u2192 hyphens, uppercase \u2192 lowercase,\n// strip anything that isn't [a-z0-9_/-]. Collapse repeated hyphens. Trim slashes.\nlet topic = topicRaw\n  .trim()\n  .toLowerCase()\n  .replace(/\\s+/g, '-')\n  .replace(/[^a-z0-9_/-]+/g, '-')\n  .replace(/-+/g, '-')\n  .replace(/^[/-]+|[/-]+$/g, '');\n\nif (topic.length === 0) {\n  return [{ json: { valid: false, error: 'Topic normalized to empty string. Use letters, numbers, hyphens, or slashes.' } }];\n}\n\nconst path = '/knowledge/' + topic + '.md';\nconst today = new Date().toISOString().slice(0, 10);\n\nreturn [{ json: { valid: true, topic, path, fact, today } }];"
+      },
+      "id": "validate-remember",
+      "name": "Validate Remember",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "valid-remember",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid-remember",
+      "name": "IF Valid Remember",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $('Validate Remember').first().json;\nreturn [{ json: { success: false, error: v.error } }];"
+      },
+      "id": "invalid-remember",
+      "name": "Invalid Remember",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/read-text",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ path: $json.path }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "read-existing",
+      "name": "Read Existing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read result returned from filewriter /read-text.\nconst validated = $('Validate Remember').first().json;\nconst readResp = $input.first().json;\n\nconst exists = readResp.exists === true;\nconst content = (readResp.content || '').trim();\nconst isEmpty = content.length === 0;\n\nreturn [{ json: Object.assign({}, validated, {\n  exists,\n  existing_content: content,\n  needs_dedup: exists && !isEmpty\n}) }];"
+      },
+      "id": "decide-dedup",
+      "name": "Decide Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "needs-dedup",
+              "leftValue": "={{ $json.needs_dedup }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-needs-dedup",
+      "name": "IF Needs Dedup",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\n\nconst systemPrompt = \"You are a deduplication classifier for a personal knowledge base. \" +\n  \"Given EXISTING knowledge about a topic and a NEW FACT, decide whether the new fact is \" +\n  \"already substantively covered by the existing content. Be strict: paraphrases of the \" +\n  \"same fact ARE duplicates. Conflicting facts (e.g., 'Ally is emergency fund' vs. \" +\n  \"'Marcus is emergency fund') are NOT duplicates \u2014 they should both be saved so the \" +\n  \"history is preserved. New details that add specificity are NOT duplicates. \" +\n  \"Respond with ONLY a JSON object, no prose, no markdown fences: \" +\n  \"{\\\"covered\\\": boolean, \\\"reason\\\": \\\"short explanation\\\", \\\"conflicts_with\\\": null or \\\"the conflicting existing line\\\"}\";\n\nconst userPrompt = \"TOPIC: \" + ctx.topic + \"\\n\\n\" +\n  \"EXISTING KNOWLEDGE:\\n\" + ctx.existing_content + \"\\n\\n\" +\n  \"NEW FACT: \" + ctx.fact + \"\\n\\n\" +\n  \"Is the new fact already covered? Return JSON only.\";\n\nreturn [{ json: Object.assign({}, ctx, {\n  system_prompt: systemPrompt,\n  user_prompt: userPrompt\n}) }];"
+      },
+      "id": "build-prompt",
+      "name": "Build Dedup Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 256, system: $json.system_prompt, messages: [{ role: 'user', content: $json.user_prompt }] }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "haiku-dedup",
+      "name": "Haiku Dedup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "uGfcnvWQfj3IfjsH",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Dedup Prompt').first().json;\nconst resp = $input.first().json;\n\n// Extract Haiku's text response.\nlet text = '';\ntry {\n  text = (resp.content && resp.content[0] && resp.content[0].text) || '';\n} catch (e) {\n  text = '';\n}\n\n// Strip code fences if any (Haiku occasionally adds them despite instructions).\ntext = text.trim().replace(/^```(?:json)?\\s*/i, '').replace(/```\\s*$/, '').trim();\n\nlet decision = { covered: false, reason: 'parse_failed', conflicts_with: null };\ntry {\n  decision = JSON.parse(text);\n} catch (e) {\n  // On parse failure, default to NOT covered (safer to save a duplicate than lose a fact).\n  decision = { covered: false, reason: 'haiku_response_unparseable: ' + text.slice(0, 200), conflicts_with: null };\n}\n\nreturn [{ json: Object.assign({}, ctx, {\n  dedup_decision: decision,\n  should_save: !decision.covered\n}) }];"
+      },
+      "id": "parse-dedup",
+      "name": "Parse Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\nreturn [{ json: Object.assign({}, ctx, {\n  dedup_decision: { covered: false, reason: 'first_entry_for_topic', conflicts_with: null },\n  should_save: true\n}) }];"
+      },
+      "id": "direct-save",
+      "name": "Direct Save Ctx",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "merge-save",
+      "name": "Merge Save Decision",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "should-save",
+              "leftValue": "={{ $json.should_save }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-should-save",
+      "name": "IF Should Save",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\n\n// Format: \"- [YYYY-MM-DD] fact text\"\nconst line = '- [' + ctx.today + '] ' + ctx.fact;\n\n// If the file is brand new (didn't exist before), prepend a header.\nconst header = ctx.exists ? '' : '# ' + ctx.topic.replace(/\\//g, ' / ') + '\\n\\n';\n\nreturn [{ json: Object.assign({}, ctx, {\n  append_payload: { path: ctx.path, content: header + line }\n}) }];"
+      },
+      "id": "build-append",
+      "name": "Build Append Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/append",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.append_payload) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "do-append",
+      "name": "Append Fact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2600,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Build Append Payload').first().json }];"
+      },
+      "id": "carry-after-append",
+      "name": "Carry Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $input.first().json;\nconst decision = ctx.dedup_decision || {};\n\nif (ctx.should_save) {\n  return [{ json: {\n    success: true,\n    saved: true,\n    topic: ctx.topic,\n    path: ctx.path,\n    fact: ctx.fact,\n    note: decision.reason,\n    conflicts_with: decision.conflicts_with || null\n  } }];\n}\n\nreturn [{ json: {\n  success: true,\n  saved: false,\n  topic: ctx.topic,\n  path: ctx.path,\n  fact: ctx.fact,\n  note: 'Fact appears to already be covered by existing content. ' + (decision.reason || ''),\n  conflicts_with: decision.conflicts_with || null\n} }];"
+      },
+      "id": "format-remember",
+      "name": "Format Remember Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "path": "recall",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "wh-recall",
+      "name": "Webhook Recall",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        800
+      ],
+      "webhookId": "recall-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst queryRaw = body.query;\n\nif (!queryRaw || typeof queryRaw !== 'string' || queryRaw.trim().length === 0) {\n  return [{ json: { valid: false, error: 'Missing required parameter: query' } }];\n}\n\nreturn [{ json: {\n  valid: true,\n  query: queryRaw.trim(),\n  search_payload: {\n    root: '/knowledge',\n    query: queryRaw.trim(),\n    case_insensitive: true,\n    extensions: ['.md', '.txt'],\n    max_results: 100,\n    mode: 'smart'\n  }\n} }];"
+      },
+      "id": "validate-recall",
+      "name": "Validate Recall",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "valid-recall",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid-recall",
+      "name": "IF Valid Recall",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const v = $('Validate Recall').first().json;\nreturn [{ json: { success: false, error: v.error } }];"
+      },
+      "id": "invalid-recall",
+      "name": "Invalid Recall",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        950
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.106.180.101:5001/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.search_payload) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "do-search",
+      "name": "Search Knowledge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate Recall').first().json;\nconst resp = $input.first().json;\n\nif (!resp.ok) {\n  return [{ json: { success: false, error: resp.error || 'search_failed' } }];\n}\n\nconst matches = resp.matches || [];\n\n// Group by file for nicer presentation.\nconst byFile = {};\nfor (const m of matches) {\n  if (!byFile[m.file]) byFile[m.file] = [];\n  byFile[m.file].push({ line_number: m.line_number, line: m.line });\n}\n\n// Convert to an array of {topic, lines} where topic is derived from the file path.\nconst groups = Object.keys(byFile).map(file => {\n  const topic = file.replace(/^\\/knowledge\\//, '').replace(/\\.md$|\\.txt$/, '');\n  return { topic, file, lines: byFile[file] };\n});\n\nreturn [{ json: {\n  success: true,\n  query: ctx.query,\n  match_count: matches.length,\n  truncated: resp.truncated === true,\n  results: groups\n} }];"
+      },
+      "id": "format-recall",
+      "name": "Format Recall Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Remember": {
+      "main": [
+        [
+          {
+            "node": "Validate Remember",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Remember": {
+      "main": [
+        [
+          {
+            "node": "IF Valid Remember",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid Remember": {
+      "main": [
+        [
+          {
+            "node": "Read Existing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Remember",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing": {
+      "main": [
+        [
+          {
+            "node": "Decide Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Dedup": {
+      "main": [
+        [
+          {
+            "node": "IF Needs Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Needs Dedup": {
+      "main": [
+        [
+          {
+            "node": "Build Dedup Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Direct Save Ctx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dedup Prompt": {
+      "main": [
+        [
+          {
+            "node": "Haiku Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Haiku Dedup": {
+      "main": [
+        [
+          {
+            "node": "Parse Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Dedup": {
+      "main": [
+        [
+          {
+            "node": "Merge Save Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Direct Save Ctx": {
+      "main": [
+        [
+          {
+            "node": "Merge Save Decision",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Save Decision": {
+      "main": [
+        [
+          {
+            "node": "IF Should Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Should Save": {
+      "main": [
+        [
+          {
+            "node": "Build Append Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Remember Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Append Payload": {
+      "main": [
+        [
+          {
+            "node": "Append Fact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Fact": {
+      "main": [
+        [
+          {
+            "node": "Carry Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carry Context": {
+      "main": [
+        [
+          {
+            "node": "Format Remember Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Recall": {
+      "main": [
+        [
+          {
+            "node": "Validate Recall",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Recall": {
+      "main": [
+        [
+          {
+            "node": "IF Valid Recall",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Valid Recall": {
+      "main": [
+        [
+          {
+            "node": "Search Knowledge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Recall",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Knowledge": {
+      "main": [
+        [
+          {
+            "node": "Format Recall Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
