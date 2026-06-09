@@ -1,0 +1,16 @@
+{
+  "$comment": "Project-shared Claude Code settings. Personal overrides + permissions live in settings.local.json (not committed). The hook below mirrors Kiro's fileEdited hook for spec files.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/spec-notify.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

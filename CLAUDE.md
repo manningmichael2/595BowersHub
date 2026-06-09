@@ -52,6 +52,21 @@ npm run build        # tsc && vite build
 
 **Deploy** is on the server via `./scripts/deploy.sh <service>` or `docker compose up -d --build` per service dir. Don't deploy unless asked.
 
+## Spec-driven feature planning (`/spec`)
+
+This repo has a custom spec workflow that goes beyond Kiro's linear flow — invoke it with `/spec <feature-name>`. It authors `requirements.md` → `design.md` → `tasks.md` into `.kiro/specs/<slug>/` in **Kiro-compatible format** (so either tool can read/continue a spec), and it's multi-turn and human-gated (approve each phase before the next).
+
+What makes it best-in-class (not a Kiro clone):
+- **Grounded requirements** — fans out the `spec-researcher` subagent to map the real codebase + constraints before writing, so requirements reflect what exists.
+- **Design tournament** (deep features) — spawns parallel design approaches (minimal-change / ideal-architecture / risk-first), then synthesizes the strongest.
+- **Adversarial critique** — the `spec-critic` subagent hunts for gaps after each phase before you see it.
+- **Mechanical traceability** — `.claude/hooks/spec-validate.py` enforces every requirement ↔ task before "done" (no LLM hand-waving).
+- **Adaptive depth** — light / standard / deep; rigor scales to the feature.
+
+Components: `.claude/skills/spec/` (SKILL.md + templates), `.claude/agents/{spec-researcher,spec-critic}.md`, `.claude/hooks/spec-validate.py`. A `PostToolUse` hook (`.claude/settings.json` → `.claude/hooks/spec-notify.py`) surfaces spec-file writes in the transcript (mirrors Kiro's `fileEdited`). **Note:** skills/agents/hooks load at session start — they take effect in a *new* session, not the one that created them.
+
+Good first dogfood: `/spec dynamic-model-discovery` (the planned next task).
+
 ## When starting the next session
 
 The planned next tasks (highest-leverage first, from `project-review.md`): **(1)** dynamic model discovery to kill hardcoded model IDs (§9.6), then the foundation blockers — **(2)** reproducible schema + off-site backups (C2), **(3)** `ask-db` sandbox + scoped DB roles (C1/C7), **(4)** CI (C5). After foundations, pgvector semantic memory (§8.3) is the highest-value feature.

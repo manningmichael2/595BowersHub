@@ -46,3 +46,6 @@ Thumbs.db
 
 # Outdated architecture doc (replaced by README.md)
 595BowersHub_AI_Stack.md
+
+# Claude Code — personal settings (permissions allowlist) stay local
+.claude/settings.local.json
