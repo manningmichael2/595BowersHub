@@ -120,4 +120,15 @@ Replaced the Phase 0 ask-db admin-gate STOPGAP with the real least-privilege san
 - [C7 note]: this closes the acute C1 issue and the ask-db slice of C7 (one scoped role + de-escalation). The broader C7 — giving *every* service its own scoped DB role instead of superuser `michael` — remains a larger follow-up.
 - [Deploy]: `0002` runs on next app restart (after baseline adoption) and locks down the live finance_reader; ask-db then executes sandboxed. Owner's call when to deploy.
 
+## [2026-06-09] Session Notes — Claude Code (C7: per-app scoped DB roles + cleanup)
+
+Finished C7 — stop every service connecting as cluster superuser `michael`. On `main` after merge.
+
+- [Done][retire db-admin]: moved `db-admin/` → `archive/db-admin/` + `DEPRECATED.md`. It was an **unauthenticated**, SQL-injectable, superuser-connected Flask service exposing arbitrary DDL on :5002 (review C3/C7). Its unique features (inbox/AI-extract, ~33 routes) already live in the authenticated `bowershub-ai` `db_browser` router. Removed the frontend "DB Admin" iframe tool (`ToolFramePage.tsx`). **Owner decommissions the container at deploy** (`docker stop db-admin && docker rm db-admin`) — see DEPRECATED.md.
+- [Done][scoped roles migration `0003_scoped_db_roles.sql`]: creates `bowershub_app` (NOSUPERUSER, CREATEROLE, member of finance_reader, full RW+CREATE on app schemas) and `dashboard_reader` (SELECT on `public.api_usage_log` only). **Created NOLOGIN → inert until the deploy cutover.** Idempotent.
+- [Done][cutover runbook `docs/c7-db-roles-cutover.md`]: the validated procedure — set passwords+LOGIN, reassign object ownership to bowershub_app (per-object `ALTER … OWNER`, NOT `REASSIGN OWNED` which fails on the DB itself), switch each service's `.env` `DB_USER`, restart. **Validated end-to-end in Docker**: after cutover bowershub_app owns all 64 objects, does owner DDL, runs migrations (CREATEROLE), de-escalates to finance_reader for ask-db, and is **denied pg_read_file** (not superuser); dashboard_reader reads only api_usage_log, denied bh_users. Rollback = revert `.env`.
+- [Done][other C7 gaps]: pinned `n8n` + `ollama` `:latest` → digests in `infrastructure/docker-compose.yml`. Hardcoded Tailscale IP `100.106.180.101` removed from active code (`ToolFramePage.tsx` now uses `VITE_TOOLS_HOST` ?? `window.location.hostname`); remaining hits are all under `archive/`.
+- [Follow-up]: **n8n**'s Postgres credential (set in the n8n UI, not repo) should also move off `michael` to a scoped role when convenient. The main-app + dashboard cutover is deploy-gated (runbook).
+- [Status]: review's foundation blockers all addressed — Phase 0, **C2** (schema+backups), **C1** (ask-db sandbox), **C5** (CI), **C7** (scoped roles, db-admin retired, pins, IP). Pending DEPLOY (one restart applies 0002/0003 + baseline adoption; then run the C7 cutover for the role switch). After deploy, the roadmap opens to features (pgvector §8.3, model discovery §9.6) and converting the 4 xfailed mock tests to real-DB tests.
+
 ---
