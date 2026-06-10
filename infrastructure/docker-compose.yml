@@ -24,7 +24,8 @@ services:
       retries: 5
 
   n8n:
-    image: n8nio/n8n:latest
+    # Pinned to a digest (C7): :latest made deploys unrepeatable. Bump deliberately.
+    image: n8nio/n8n@sha256:b1b0c592735e24acd3cc64db83f94ef4efd8e331e47c6883249cc51cc1bea16b
     container_name: n8n
     restart: unless-stopped
     ports:
@@ -50,7 +51,8 @@ services:
       - /home/michael/caddy/certs:/certs:ro
 
   ollama:
-    image: ollama/ollama:latest
+    # Pinned to a digest (C7): :latest made deploys unrepeatable. Bump deliberately.
+    image: ollama/ollama@sha256:fbaaecc6c632a73c2b4ca25ef52dbee0b68d07783fcb850f916404c004040f90
     container_name: ollama
     restart: unless-stopped
     volumes:

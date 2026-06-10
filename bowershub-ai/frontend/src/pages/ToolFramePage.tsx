@@ -1,9 +1,13 @@
 /**
- * ToolFramePage — embeds external tools (Dashboard, DB Admin, n8n) as
- * full-height iframes inside the BowersHub AI PWA shell.
+ * ToolFramePage — embeds external tools (Dashboard, n8n) as full-height
+ * iframes inside the BowersHub AI PWA shell.
  *
  * Goal: "one PWA, all the tools" — user doesn't have to leave the app
  * or manage separate bookmarks for each service.
+ *
+ * The tools host is NOT hardcoded (C7): it comes from VITE_TOOLS_HOST, falling
+ * back to the hostname the app was loaded from (the tools run on the same box).
+ * (DB Admin was retired — its features live in the authenticated app now.)
  */
 import { useNavigate, useParams } from 'react-router-dom'
 
@@ -13,21 +17,18 @@ interface ToolConfig {
   url: string
 }
 
+const TOOLS_HOST = import.meta.env.VITE_TOOLS_HOST || window.location.hostname
+
 const TOOLS: Record<string, ToolConfig> = {
   dashboard: {
     label: 'Dashboard',
     icon: '📊',
-    url: 'http://100.106.180.101:8080',
-  },
-  'db-admin': {
-    label: 'DB Admin',
-    icon: '🗄️',
-    url: 'http://100.106.180.101:5002',
+    url: `http://${TOOLS_HOST}:8080`,
   },
   n8n: {
     label: 'n8n Workflows',
     icon: '⚡',
-    url: 'http://100.106.180.101:5678',
+    url: `http://${TOOLS_HOST}:5678`,
   },
 }
 
