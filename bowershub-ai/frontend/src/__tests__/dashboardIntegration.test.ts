@@ -470,10 +470,14 @@ describe('Theme Reactivity', () => {
   })
 })
 
-// --- Section 3: Responsive Layout (CSS Classes) ---
+// --- Section 3: Widget Layout (react-grid-layout) ---
+//
+// WidgetGrid lays out widgets with react-grid-layout (drag/resize, responsive
+// cols configured via the lib's `breakpoints`/`cols` props), NOT Tailwind CSS
+// grid utilities. These tests assert the real react-grid-layout DOM.
 
-describe('Responsive Layout (CSS Classes)', () => {
-  it('WidgetGrid renders with responsive grid column classes', async () => {
+describe('Widget Layout (react-grid-layout)', () => {
+  it('WidgetGrid renders a responsive react-grid-layout with one item per widget', async () => {
     // Mock fetch for widget data calls
     globalThis.fetch = vi.fn(() =>
       Promise.resolve(
@@ -498,20 +502,15 @@ describe('Responsive Layout (CSS Classes)', () => {
       })
     )
 
-    // The grid container should have the responsive breakpoint classes
-    const gridDiv = container.firstElementChild as HTMLElement
-    expect(gridDiv).toBeTruthy()
-
-    const classes = gridDiv.className
-    // Single column by default (mobile)
-    expect(classes).toContain('grid-cols-1')
-    // Two columns at sm breakpoint (≥640px)
-    expect(classes).toContain('sm:grid-cols-2')
-    // Three columns at lg breakpoint (≥1024px)
-    expect(classes).toContain('lg:grid-cols-3')
+    // react-grid-layout renders the grid container; responsiveness is driven
+    // by its breakpoints/cols props rather than Tailwind classes.
+    const gridLayout = container.querySelector('.react-grid-layout')
+    expect(gridLayout).toBeTruthy()
+    // One grid item per widget instance.
+    expect(container.querySelectorAll('.react-grid-item')).toHaveLength(widgets.length)
   })
 
-  it('WidgetGrid uses CSS Grid (grid class present)', async () => {
+  it('WidgetGrid renders the react-grid-layout container', async () => {
     globalThis.fetch = vi.fn(() =>
       Promise.resolve(
         new Response(JSON.stringify({}), {
@@ -534,11 +533,10 @@ describe('Responsive Layout (CSS Classes)', () => {
       })
     )
 
-    const gridDiv = container.firstElementChild as HTMLElement
-    expect(gridDiv.className).toContain('grid')
+    expect(container.querySelector('.react-grid-layout')).toBeTruthy()
   })
 
-  it('WidgetGrid applies gap between widget cells', async () => {
+  it('WidgetGrid renders one positioned item per widget cell', async () => {
     globalThis.fetch = vi.fn(() =>
       Promise.resolve(
         new Response(JSON.stringify({}), {
@@ -562,9 +560,10 @@ describe('Responsive Layout (CSS Classes)', () => {
       })
     )
 
-    const gridDiv = container.firstElementChild as HTMLElement
-    // Gap class should be present for spacing between widgets
-    expect(gridDiv.className).toContain('gap-')
+    // Spacing between cells comes from react-grid-layout's `margin` prop (it
+    // positions items via inline styles, not a `gap-*` class). Assert one
+    // positioned grid item per widget.
+    expect(container.querySelectorAll('.react-grid-item')).toHaveLength(widgets.length)
   })
 
   it('WidgetGrid skips unknown widget_keys without rendering them', async () => {
@@ -605,10 +604,10 @@ describe('Responsive Layout (CSS Classes)', () => {
       })
     )
 
-    // The grid should render without crashing
-    const gridDiv = container.firstElementChild as HTMLElement
-    expect(gridDiv).toBeTruthy()
-    expect(gridDiv.className).toContain('grid')
+    // The grid should render without crashing. The unknown key has a def but
+    // no registered component, so its cell renders empty — the grid still
+    // mounts and nothing throws.
+    expect(container.querySelector('.react-grid-layout')).toBeTruthy()
 
     // Should not have thrown any errors — the test completing is proof
   })

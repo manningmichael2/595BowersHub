@@ -13,6 +13,13 @@ from backend.database import get_pool
 
 logger = logging.getLogger(__name__)
 
+# C1 stopgap: these skills run LLM-generated SQL against the shared superuser
+# connection pool (see services/finance.py:ask_db). Until the least-privilege
+# sandbox lands (Phase 1: scoped role + sqlglot + read-only txn), restrict them
+# to admins so a non-admin member can't exfiltrate the whole DB via chat.
+# TODO(phase-1): replace with a DB-driven per-skill min-role column on bh_skills.
+ADMIN_ONLY_SKILLS = {"ask-db", "finance-query"}
+
 
 class SkillPermissionError(Exception):
     """Raised when a user/workspace doesn't have permission to use a skill."""
@@ -74,6 +81,15 @@ class SkillExecutor:
             return True  # Empty = all users allowed
         return user_id in restricted
 
+    async def _user_is_admin(self, user_id: int) -> bool:
+        """Return True if the given user has the admin role."""
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            role = await conn.fetchval(
+                "SELECT role FROM public.bh_users WHERE id = $1", user_id
+            )
+        return role == "admin"
+
     async def check_workspace_permitted(self, skill_id: int, workspace_id: int) -> bool:
         """Check if a skill is assigned to a workspace."""
         pool = get_pool()
@@ -102,6 +118,12 @@ class SkillExecutor:
         # User-level permission check (always enforced)
         if not self.check_user_permitted(skill, user_id):
             raise SkillPermissionError(f"User not permitted to use skill: {skill_name}")
+
+        # Admin-only gate (C1 stopgap) for SQL-executing skills.
+        if skill_name in ADMIN_ONLY_SKILLS and not await self._user_is_admin(user_id):
+            raise SkillPermissionError(
+                f"Skill '{skill_name}' is restricted to administrators"
+            )
 
         # Workspace check (can be bypassed for global slash commands)
         if not bypass_workspace_check:

@@ -18,6 +18,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 async def login(body: LoginRequest, request: Request, auth_service: AuthService = Depends(get_auth_service)):
     """Authenticate with email and password. Returns JWT access + refresh tokens."""
     from backend.middleware.audit import AuditLogger
+    from backend.middleware.rate_limit import rate_limiter, client_ip
+
+    # Throttle password guessing: 5 attempts/min per client IP (raises 429).
+    rate_limiter.check(client_ip(request), "login")
+
     user = await auth_service.authenticate(body.email, body.password)
     if not user:
         await AuditLogger.log(None, "login_failed", details={"email": body.email},

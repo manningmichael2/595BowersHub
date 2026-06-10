@@ -73,7 +73,7 @@ describe('useDashboardWidget', () => {
     expect(result.current.data).toBeNull()
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/weather', {
@@ -95,7 +95,7 @@ describe('useDashboardWidget', () => {
     )
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.isLoading).toBe(false)
@@ -118,7 +118,7 @@ describe('useDashboardWidget', () => {
 
     // Wait for initial successful fetch
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.data).toEqual(testData)
@@ -130,7 +130,7 @@ describe('useDashboardWidget', () => {
     // Advance past the polling interval
     await act(async () => {
       vi.advanceTimersByTime(30000)
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     // Data should be retained, but marked stale
@@ -167,7 +167,7 @@ describe('useDashboardWidget', () => {
     // Advance past the timeout
     await act(async () => {
       vi.advanceTimersByTime(5000)
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.isLoading).toBe(false)
@@ -189,7 +189,7 @@ describe('useDashboardWidget', () => {
 
     // Initial fetch
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.data).toEqual(data1)
@@ -201,7 +201,7 @@ describe('useDashboardWidget', () => {
     // Advance to trigger polling
     await act(async () => {
       vi.advanceTimersByTime(15000)
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -222,7 +222,7 @@ describe('useDashboardWidget', () => {
     expect(result.current.isLoading).toBe(true)
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.isLoading).toBe(false)
@@ -239,7 +239,7 @@ describe('useDashboardWidget', () => {
     expect(result.current.isLoading).toBe(false)
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.isLoading).toBe(false)
@@ -255,7 +255,7 @@ describe('useDashboardWidget', () => {
     )
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.data).toEqual(data1)
@@ -265,7 +265,7 @@ describe('useDashboardWidget', () => {
 
     await act(async () => {
       result.current.refresh()
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.data).toEqual(data2)
@@ -283,7 +283,7 @@ describe('useDashboardWidget', () => {
     )
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     unmount()
@@ -293,7 +293,7 @@ describe('useDashboardWidget', () => {
 
     await act(async () => {
       vi.advanceTimersByTime(20000)
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     // Only the initial fetch should have been made
@@ -308,7 +308,7 @@ describe('useDashboardWidget', () => {
     )
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(result.current.data).toEqual({ ok: true })
@@ -319,7 +319,7 @@ describe('useDashboardWidget', () => {
     // Advance less than 60s — should not poll yet
     await act(async () => {
       vi.advanceTimersByTime(59000)
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -327,7 +327,7 @@ describe('useDashboardWidget', () => {
     // Advance to hit 60s
     await act(async () => {
       vi.advanceTimersByTime(1000)
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
@@ -342,7 +342,7 @@ describe('useDashboardWidget', () => {
     )
 
     await act(async () => {
-      await vi.runAllTimersAsync()
+      await vi.advanceTimersByTimeAsync(0)
     })
 
     expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/public', {

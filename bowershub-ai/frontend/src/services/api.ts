@@ -3,6 +3,7 @@
  */
 
 import { useAuthStore } from '../stores/auth'
+import { toast } from '../stores/toast'
 
 const BASE_URL = ''
 
@@ -40,6 +41,7 @@ class ApiClient {
         return this.request(method, path, data, false, extraHeaders)
       }
       // Refresh failed — logout cleanly
+      toast.error('Your session expired. Please log in again.')
       useAuthStore.getState().logout()
       window.location.href = '/login'
       throw { response: { status: 401, data: { detail: 'Session expired' } } }

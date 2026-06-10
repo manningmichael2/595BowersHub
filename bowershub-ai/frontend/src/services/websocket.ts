@@ -5,6 +5,7 @@
 
 import { useAuthStore } from '../stores/auth'
 import { useConversationStore } from '../stores/conversation'
+import { toast } from '../stores/toast'
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 
@@ -149,8 +150,8 @@ class WebSocketClient {
       case 'error':
         store.setStreaming(false)
         store.setSkillStatus(null)
-        // Could show error toast
         console.error('WebSocket error:', data.data?.message)
+        toast.error(data.data?.message || 'The assistant ran into an error. Please try again.')
         break
 
       case 'pong':

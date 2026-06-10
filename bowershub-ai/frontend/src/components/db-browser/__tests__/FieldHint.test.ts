@@ -24,6 +24,16 @@ const validInputTypes = [
 /** Arbitrary for a FieldHint input_type */
 const arbInputType = fc.constantFrom(...validInputTypes)
 
+/**
+ * Bounded finite double, normalizing -0 to 0. JSON.stringify(-0) === "0", so
+ * a raw -0 from the generator can't survive a round-trip and would fail the
+ * deep-equality property for a reason that has nothing to do with FieldHint.
+ */
+const arbBoundedDouble = (min: number, max: number) =>
+  fc
+    .double({ min, max, noNaN: true, noDefaultInfinity: true })
+    .map(v => (Object.is(v, -0) ? 0 : v))
+
 /** Arbitrary for a FieldHint object */
 const arbFieldHint: fc.Arbitrary<FieldHint> = fc.record({
   column_name: fc.string({ minLength: 1, maxLength: 63 }),
@@ -31,9 +41,9 @@ const arbFieldHint: fc.Arbitrary<FieldHint> = fc.record({
   options: fc.oneof(fc.constant(null), fc.array(fc.string({ maxLength: 100 }), { minLength: 1, maxLength: 20 })),
   prefix: fc.oneof(fc.constant(null), fc.string({ maxLength: 20 })),
   suffix: fc.oneof(fc.constant(null), fc.string({ maxLength: 20 })),
-  min_val: fc.oneof(fc.constant(null), fc.double({ min: -1e6, max: 1e6, noNaN: true, noDefaultInfinity: true })),
-  max_val: fc.oneof(fc.constant(null), fc.double({ min: -1e6, max: 1e6, noNaN: true, noDefaultInfinity: true })),
-  step: fc.oneof(fc.constant(null), fc.double({ min: 0.001, max: 1000, noNaN: true, noDefaultInfinity: true })),
+  min_val: fc.oneof(fc.constant(null), arbBoundedDouble(-1e6, 1e6)),
+  max_val: fc.oneof(fc.constant(null), arbBoundedDouble(-1e6, 1e6)),
+  step: fc.oneof(fc.constant(null), arbBoundedDouble(0.001, 1000)),
   placeholder: fc.oneof(fc.constant(null), fc.string({ maxLength: 100 })),
 })
 

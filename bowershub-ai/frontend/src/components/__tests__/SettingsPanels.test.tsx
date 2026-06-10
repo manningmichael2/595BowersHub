@@ -4,9 +4,11 @@
  * Coverage (task 19.4):
  *   - AppearancePanel: clicking a theme card calls `useSettingsStore.patch`
  *     with the matching `theme_id`.
- *   - AppearancePanel: the four text-size buttons render their labels
- *     wrapped in the matching `bh-text-*` size class so the live preview
- *     visually reflects each size (R4.2).
+ *   - AppearancePanel: the four text-size buttons render their labels as a
+ *     live preview, each at its own (strictly increasing) inline font size so
+ *     the preview visually reflects each size (R4.2). The size is applied via
+ *     an inline `font-size`, which intentionally beats the inert `.bh-text-*`
+ *     marker classes — see the note in index.css.
  *   - VoicePanel: when the browser does not expose `SpeechRecognition`
  *     (or `webkitSpeechRecognition`), the panel surfaces the
  *     "Voice unavailable" notice and hides the STT-only controls
@@ -169,25 +171,26 @@ describe('AppearancePanel', () => {
     })
   })
 
-  it('renders each text-size button label inside its matching bh-text-* class', async () => {
+  it('renders each text-size button label at its own preview font size (R4.2)', async () => {
     render(<AppearancePanel />)
 
     // Wait for the themes fetch to resolve so the trailing async state
     // update doesn't trigger an `act(...)` warning before our assertions.
     await screen.findByRole('button', { name: /Forest/ })
 
-    // Each button label is a <span> with the size class. We locate the
-    // span by text and verify it carries the expected `bh-text-*` class.
-    const expectations: Array<[string, string]> = [
-      ['Small', 'bh-text-small'],
-      ['Medium', 'bh-text-medium'],
-      ['Large', 'bh-text-large'],
-      ['Extra Large', 'bh-text-xlarge'],
-    ]
+    // The live preview renders each label at its own inline font size (the
+    // `.bh-text-*` classes are inert markers — actual sizing is the inline
+    // `font-size`, per index.css). Verify the four previews are present and
+    // their sizes strictly increase, so the preview reflects each size.
+    const sizes = ['Small', 'Medium', 'Large', 'Extra Large'].map(label => {
+      const node = screen.getByText(label) as HTMLElement
+      const px = parseFloat(node.style.fontSize)
+      expect(px).toBeGreaterThan(0)
+      return px
+    })
 
-    for (const [label, expectedClass] of expectations) {
-      const labelNode = screen.getByText(label)
-      expect(labelNode.className).toContain(expectedClass)
+    for (let i = 1; i < sizes.length; i++) {
+      expect(sizes[i]).toBeGreaterThan(sizes[i - 1])
     }
   })
 })

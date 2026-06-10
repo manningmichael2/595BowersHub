@@ -45,6 +45,13 @@ class Config:
     CALDAV_USER: Optional[str] = None
     CALDAV_PASSWORD: Optional[str] = None
 
+    # Optional — public origin + CORS. PUBLIC_URL is the deployed frontend origin
+    # (also used for password-reset links). CORS_ORIGINS is a comma-separated
+    # allowlist of additional origins. Wildcard is never used: allow_credentials
+    # requires an explicit origin list. See resolve_cors_origins().
+    PUBLIC_URL: Optional[str] = None
+    CORS_ORIGINS: Optional[str] = None
+
     # Optional — initial admin (used on first run if no users exist)
     ADMIN_EMAIL: str = "admin@bowershub.local"
     ADMIN_PASSWORD: str = ""
@@ -87,6 +94,30 @@ REQUIRED_VARS = [
 ]
 
 
+def resolve_cors_origins() -> list:
+    """Resolve the CORS allowlist from the environment.
+
+    Safe to call at import time (does not validate required vars). Combines the
+    comma-separated CORS_ORIGINS, the deployed PUBLIC_URL, and the local dev
+    origins, de-duplicated. A literal "*" is dropped — it is invalid alongside
+    allow_credentials=True and would silently disable credentialed CORS.
+    """
+    origins: list = []
+    raw = os.environ.get("CORS_ORIGINS")
+    if raw:
+        origins.extend(o.strip().rstrip("/") for o in raw.split(",") if o.strip())
+    public_url = os.environ.get("PUBLIC_URL")
+    if public_url:
+        origins.append(public_url.strip().rstrip("/"))
+    # Local development (vite dev server).
+    origins.extend(["http://localhost:5173", "http://127.0.0.1:5173"])
+    resolved: list = []
+    for o in origins:
+        if o and o != "*" and o not in resolved:
+            resolved.append(o)
+    return resolved
+
+
 def load_config() -> Config:
     """Load configuration from environment variables. Exits if required vars are missing."""
     missing = [var for var in REQUIRED_VARS if not os.environ.get(var)]
@@ -116,6 +147,8 @@ def load_config() -> Config:
         CALDAV_URL=os.environ.get("CALDAV_URL"),
         CALDAV_USER=os.environ.get("CALDAV_USER"),
         CALDAV_PASSWORD=os.environ.get("CALDAV_PASSWORD"),
+        PUBLIC_URL=os.environ.get("PUBLIC_URL"),
+        CORS_ORIGINS=os.environ.get("CORS_ORIGINS"),
         ADMIN_EMAIL=os.environ.get("ADMIN_EMAIL", "admin@bowershub.local"),
         ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", ""),
     )

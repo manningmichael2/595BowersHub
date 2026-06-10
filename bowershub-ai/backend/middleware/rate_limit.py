@@ -4,11 +4,30 @@ Rate limiting middleware: token bucket per user.
 
 import time
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 from fastapi import Request, HTTPException
 
 logger = logging.getLogger(__name__)
+
+# Rate-limit subjects are keyed by either an authenticated user id (int) or, for
+# pre-auth endpoints like login, a client IP string.
+Subject = Union[int, str]
+
+
+def client_ip(request: Request) -> str:
+    """Best-effort client IP for rate limiting.
+
+    Honors the first entry of X-Forwarded-For (set by our reverse proxy, Caddy)
+    so that per-IP limits apply to the real client rather than the proxy. This
+    trusts the proxy to set the header; the app is only reachable through it.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    return request.client.host if request.client else "unknown"
 
 
 class TokenBucket:
@@ -49,29 +68,31 @@ class RateLimiter:
         "message": (30, 60.0),       # 30 messages per 60 seconds
         "api_call": (100, 3600.0),   # 100 API calls per hour
         "file_upload": (20, 3600.0), # 20 uploads per hour
+        "login": (5, 60.0),          # 5 login attempts per minute, per IP
     }
 
     def __init__(self):
-        # user_id → action → TokenBucket
-        self._buckets: Dict[int, Dict[str, TokenBucket]] = {}
+        # subject (user_id or IP) → action → TokenBucket
+        self._buckets: Dict[Subject, Dict[str, TokenBucket]] = {}
 
-    def check(self, user_id: int, action: str = "api_call") -> bool:
+    def check(self, subject: Subject, action: str = "api_call") -> bool:
         """
-        Check if a user is within rate limits for an action.
-        Returns True if allowed, raises HTTPException if rate limited.
+        Check if a subject (user id, or IP for pre-auth actions) is within rate
+        limits for an action. Returns True if allowed, raises HTTPException (429)
+        if rate limited.
         """
         if action not in self.LIMITS:
             return True
 
         max_tokens, window = self.LIMITS[action]
 
-        if user_id not in self._buckets:
-            self._buckets[user_id] = {}
+        if subject not in self._buckets:
+            self._buckets[subject] = {}
 
-        if action not in self._buckets[user_id]:
-            self._buckets[user_id][action] = TokenBucket(max_tokens, window)
+        if action not in self._buckets[subject]:
+            self._buckets[subject][action] = TokenBucket(max_tokens, window)
 
-        bucket = self._buckets[user_id][action]
+        bucket = self._buckets[subject][action]
         if not bucket.consume():
             raise HTTPException(
                 status_code=429,
@@ -85,12 +106,12 @@ class RateLimiter:
         # Simple cleanup — could be called periodically
         cutoff = time.time() - 7200  # 2 hours
         to_remove = []
-        for user_id, actions in self._buckets.items():
+        for subject, actions in self._buckets.items():
             all_old = all(b.last_refill < cutoff for b in actions.values())
             if all_old:
-                to_remove.append(user_id)
-        for uid in to_remove:
-            del self._buckets[uid]
+                to_remove.append(subject)
+        for subject in to_remove:
+            del self._buckets[subject]
 
 
 # Global rate limiter instance
