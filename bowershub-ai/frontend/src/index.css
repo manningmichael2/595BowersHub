@@ -27,7 +27,10 @@
   --color-text-muted: #94a3b8;
   --color-border: #374151;
   --color-danger: #ef4444;
+  --color-error: #ef4444;
   --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-on-primary: #ffffff;
 }
 
 /*
@@ -154,3 +157,65 @@ body {
 .typing-dot { animation: typing-dot 1.4s infinite; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* react-grid-layout overrides for smoother dashboard experience */
+.react-grid-layout {
+  transition: height 200ms ease;
+}
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+.react-grid-item.resizing {
+  transition: none;
+  z-index: 10;
+  opacity: 0.9;
+}
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 20;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  opacity: 0.9;
+}
+.react-grid-item > .react-resizable-handle {
+  background: none;
+  width: 20px;
+  height: 20px;
+}
+.react-grid-item > .react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  opacity: 0.6;
+}
+.react-grid-item:hover > .react-resizable-handle::after {
+  opacity: 1;
+  border-color: var(--color-primary);
+}
+.react-grid-placeholder {
+  background: var(--color-primary) !important;
+  opacity: 0.15 !important;
+  border-radius: 0.5rem;
+}
+
+/* Bottom padding to clear the mobile tab bar (52px + safe area) */
+@media (max-width: 639px) {
+  .bh-app-shell {
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Offset fixed-position app shells for the top nav bar on desktop */
+@media (min-width: 640px) {
+  .bh-app-shell {
+    top: 44px !important;
+  }
+}

@@ -168,45 +168,23 @@ class SkillExecutor:
         self, skill_name: str, params: Dict[str, Any]
     ) -> Optional[SkillResult]:
         """
-        Check if a skill has a native (in-process Python) handler.
+        Check if a skill has a registered native (in-process Python) handler.
         Returns SkillResult if handled, None if it should fall through to webhook.
         
-        This is the migration path from n8n webhooks to Python: add handlers here
-        one at a time, and the skill works without an n8n workflow.
+        Handlers are auto-discovered from backend/services/skills/ at app startup
+        via skill_registry.discover_skills(). To add a new native skill:
+          1. Create backend/services/skills/<name>.py
+          2. Use @native_skill("skill-name") decorator on the handler
+          3. Add a bh_skills row with webhook_url = 'native://<skill-name>'
         """
-        if skill_name == "sports-score":
-            from backend.services.sports_score import get_sports_score
-            result = await get_sports_score(
-                team=params.get("team"),
-                sport=params.get("sport"),
-            )
-            return SkillResult(skill_name=skill_name, raw_data=result)
+        from backend.services.skill_registry import get_handler
 
-        if skill_name == "get-weather" or skill_name == "weather":
-            from backend.services.weather import get_weather
-            result = await get_weather(
-                location=params.get("location") or params.get("city") or params.get("query"),
-            )
-            return SkillResult(skill_name=skill_name, raw_data=result)
+        handler = get_handler(skill_name)
+        if handler is None:
+            return None  # Not a native skill — fall through to webhook
 
-        if skill_name == "recall":
-            from backend.services.knowledge import recall
-            result = await recall(
-                query=params.get("query") or params.get("question") or params.get("q", ""),
-            )
-            return SkillResult(skill_name=skill_name, raw_data=result)
-
-        if skill_name == "remember":
-            from backend.services.knowledge import remember
-            result = await remember(
-                topic=params.get("topic", ""),
-                fact=params.get("fact", ""),
-            )
-            return SkillResult(skill_name=skill_name, raw_data=result)
-
-        # Add more native skills here as they're migrated from n8n:
-
-        return None  # Not a native skill — fall through to webhook
+        result = await handler(params)
+        return SkillResult(skill_name=skill_name, raw_data=result)
 
     def format_response(self, result: SkillResult) -> str:
         """Convert raw skill output to human-readable markdown."""

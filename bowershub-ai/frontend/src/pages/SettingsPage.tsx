@@ -77,7 +77,7 @@ export default function SettingsPage() {
     // scrolling on mobile. This page therefore has to manage its own
     // scroll: a fixed-height shell whose body pane is `overflow-y-auto`.
     <div
-      className="bg-surface text-gray-200 flex flex-col"
+      className="bh-app-shell bg-surface text-gray-200 flex flex-col"
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
     >
       {/* Header */}

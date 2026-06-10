@@ -85,7 +85,7 @@ def _format_weather(data: dict, location: str) -> dict:
 
     # 3-day forecast
     if forecast_days:
-        lines.append("### Forecast")
+        lines.append("---")
         lines.append("")
         for i, day in enumerate(forecast_days[:3]):
             date_str = day.get("date", "")

@@ -18,6 +18,7 @@ export default {
         },
         primary: 'var(--color-primary)',
         accent: 'var(--color-accent)',
+        'on-primary': 'var(--color-on-primary)',
         text: {
           DEFAULT: 'var(--color-text)',
           muted: 'var(--color-text-muted)',

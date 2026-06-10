@@ -52,7 +52,7 @@ function UserMessage({ message }: { message: Message }) {
   return (
     <div className="flex gap-3 justify-end">
       <div className="max-w-[80%] md:max-w-[70%]">
-        <div className="bg-indigo-600 rounded-2xl rounded-br-md px-4 py-2.5 text-sm text-white">
+        <div className="bg-primary rounded-2xl rounded-br-md px-4 py-2.5 text-sm text-on-primary">
           {message.content}
         </div>
         <div className="text-xs text-gray-500 mt-1 text-right">
@@ -108,7 +108,7 @@ function AssistantMessage({ message }: { message: Message }) {
         AI
       </div>
       <div className="flex-1 min-w-0 max-w-[85%]">
-        <div className="markdown-content text-gray-200 text-sm">
+        <div className="markdown-content text-text text-sm">
           <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
         <div className="flex items-center gap-2 mt-1.5">
@@ -167,7 +167,7 @@ function LayerBadge({ layer }: { layer: string }) {
   const colors: Record<string, string> = {
     L1: 'bg-green-900/50 text-green-400',
     L2: 'bg-blue-900/50 text-blue-400',
-    L3: 'bg-purple-900/50 text-purple-400',
+    L3: 'bg-primary/20 text-accent',
   }
   return (
     <span className={`text-xs px-1.5 py-0.5 rounded ${colors[layer] || 'bg-gray-800 text-gray-400'}`}>

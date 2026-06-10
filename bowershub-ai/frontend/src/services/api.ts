@@ -11,13 +11,16 @@ class ApiClient {
     return useAuthStore.getState().accessToken
   }
 
-  private async request(method: string, path: string, data?: any, retry = true): Promise<any> {
+  private async request(method: string, path: string, data?: any, retry = true, extraHeaders?: Record<string, string>): Promise<any> {
     const token = this.getToken()
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
+    }
+    if (extraHeaders) {
+      Object.assign(headers, extraHeaders)
     }
 
     const options: RequestInit = { method, headers }
@@ -34,7 +37,7 @@ class ApiClient {
     if (response.status === 401 && retry && !isAuthEndpoint) {
       const refreshed = await useAuthStore.getState().refreshAuth()
       if (refreshed) {
-        return this.request(method, path, data, false)
+        return this.request(method, path, data, false, extraHeaders)
       }
       // Refresh failed — logout cleanly
       useAuthStore.getState().logout()
@@ -55,9 +58,10 @@ class ApiClient {
   }
 
   get(path: string) { return this.request('GET', path) }
-  post(path: string, data?: any) { return this.request('POST', path, data) }
-  patch(path: string, data?: any) { return this.request('PATCH', path, data) }
-  delete(path: string) { return this.request('DELETE', path) }
+  post(path: string, data?: any, headers?: Record<string, string>) { return this.request('POST', path, data, true, headers) }
+  put(path: string, data?: any, headers?: Record<string, string>) { return this.request('PUT', path, data, true, headers) }
+  patch(path: string, data?: any, headers?: Record<string, string>) { return this.request('PATCH', path, data, true, headers) }
+  delete(path: string, headers?: Record<string, string>) { return this.request('DELETE', path, undefined, true, headers) }
 }
 
 export const api = new ApiClient()

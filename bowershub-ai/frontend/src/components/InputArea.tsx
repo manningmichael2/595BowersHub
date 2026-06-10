@@ -1,15 +1,50 @@
-import { useCallback, useState, useRef, useEffect, KeyboardEvent } from 'react'
+import { useCallback, useState, useRef, useEffect, KeyboardEvent, ChangeEvent } from 'react'
 import { useConversationStore } from '../stores/conversation'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUIStore } from '../stores/ui'
 import { wsClient } from '../services/websocket'
+import { api } from '../services/api'
 import SlashAutocomplete from './SlashAutocomplete'
 import VoiceModeButton from './VoiceModeButton'
+
+interface PendingAttachment {
+  file: File
+  preview: string  // data URL for image preview
+  mime: string
+  base64: string   // raw base64 (no data: prefix)
+  uploading: boolean
+  error?: string
+}
+
+// Command history — persists across re-renders via sessionStorage
+const HISTORY_KEY = 'bh-input-history'
+const MAX_HISTORY = 50
+
+function getHistory(): string[] {
+  try {
+    return JSON.parse(sessionStorage.getItem(HISTORY_KEY) || '[]')
+  } catch { return [] }
+}
+
+function pushHistory(msg: string) {
+  const hist = getHistory()
+  // Don't duplicate the last entry
+  if (hist[hist.length - 1] === msg) return
+  hist.push(msg)
+  if (hist.length > MAX_HISTORY) hist.shift()
+  sessionStorage.setItem(HISTORY_KEY, JSON.stringify(hist))
+}
 
 export default function InputArea() {
   const [input, setInput] = useState('')
   const [showSlash, setShowSlash] = useState(false)
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // History navigation state
+  const historyIndexRef = useRef(-1)  // -1 = not browsing history
+  const draftRef = useRef('')         // saves current draft when entering history
 
   const { activeConversation, isStreaming, createConversation } = useConversationStore()
   const { activeWorkspace } = useWorkspaceStore()
@@ -24,14 +59,94 @@ export default function InputArea() {
     }
   }, [input])
 
-  // Show slash autocomplete
+  // Show slash autocomplete — only when actively typing (not from history nav)
+  const [isFromHistory, setIsFromHistory] = useState(false)
+  
   useEffect(() => {
-    setShowSlash(input.startsWith('/') && !input.includes(' '))
-  }, [input])
+    if (isFromHistory) {
+      setShowSlash(false)
+      return
+    }
+    if (!input.startsWith('/')) {
+      setShowSlash(false)
+      return
+    }
+    if (!input.includes(' ')) {
+      // Still typing the base command name — show matching commands
+      setShowSlash(true)
+    } else {
+      // After the space — show flag suggestions if user is still in flag territory
+      const afterSpace = input.slice(input.indexOf(' ') + 1)
+      // Show autocomplete when: nothing typed yet (just the space), or typing a dash
+      // Don't show when user has typed past a flag (e.g., "/sports --scores tigers")
+      const parts = afterSpace.trim().split(/\s+/)
+      if (parts.length <= 1 && (afterSpace === '' || afterSpace.trimEnd() === afterSpace)) {
+        // Still on first arg — show if it starts with - or is empty
+        setShowSlash(!afterSpace.trim() || afterSpace.trim().startsWith('-'))
+      } else {
+        // Already typed a second word after the flag — hide autocomplete
+        setShowSlash(false)
+      }
+    }
+  }, [input, isFromHistory])
+
+  // Intercept "/" key globally to focus textarea (prevents Firefox Quick Find)
+  useEffect(() => {
+    const handleGlobalSlash = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== '/') return
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || (e.target as HTMLElement)?.isContentEditable) return
+      e.preventDefault()
+      textareaRef.current?.focus()
+      setInput('/')
+    }
+    document.addEventListener('keydown', handleGlobalSlash)
+    return () => document.removeEventListener('keydown', handleGlobalSlash)
+  }, [])
+
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const newAttachments: PendingAttachment[] = []
+
+    for (let i = 0; i < Math.min(files.length, 3); i++) {
+      const file = files[i]
+      // Read as base64
+      const base64 = await readFileAsBase64(file)
+      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : ''
+      
+      newAttachments.push({
+        file,
+        preview,
+        mime: file.type || 'application/octet-stream',
+        base64,
+        uploading: false,
+      })
+    }
+
+    setAttachments(prev => [...prev, ...newAttachments].slice(0, 5))
+    // Reset file input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const removeAttachment = (idx: number) => {
+    setAttachments(prev => {
+      const copy = [...prev]
+      if (copy[idx]?.preview) URL.revokeObjectURL(copy[idx].preview)
+      copy.splice(idx, 1)
+      return copy
+    })
+  }
 
   const handleSend = async (overrideContent?: string) => {
     const content = (overrideContent ?? input).trim()
-    if (!content || isStreaming) return
+    if ((!content && attachments.length === 0) || isStreaming) return
+
+    // Save to command history
+    if (content) pushHistory(content)
+    historyIndexRef.current = -1
+    draftRef.current = ''
 
     // Create conversation if none active
     let convId = activeConversation?.id
@@ -41,13 +156,32 @@ export default function InputArea() {
     }
     if (!convId) return
 
+    // Build attachment payloads for the WebSocket message
+    const wsAttachments = attachments.map(att => ({
+      mime: att.mime,
+      base64: att.base64,
+      filename: att.file.name,
+    }))
+
+    // Also upload to server so files are persisted on disk (for smart capture)
+    if (attachments.length > 0) {
+      const formData = new FormData()
+      formData.append('conversation_id', String(convId))
+      attachments.forEach(att => formData.append('files', att.file))
+      try {
+        await api.post('/api/files/upload', formData)
+      } catch (err) {
+        console.warn('File upload failed (will still send via WS):', err)
+      }
+    }
+
     // Optimistic: add user message to store
     const optimisticMsg = {
-      id: Date.now(), // Temporary ID
+      id: Date.now(),
       conversation_id: convId,
       role: 'user' as const,
-      content,
-      attachments: [],
+      content: content || '📷 ' + attachments.map(a => a.file.name).join(', '),
+      attachments: wsAttachments.map(a => ({ mime: a.mime, filename: a.filename })),
       model_used: null,
       routing_layer: null,
       input_tokens: null,
@@ -59,14 +193,17 @@ export default function InputArea() {
     useConversationStore.getState().addMessage(optimisticMsg)
     useConversationStore.getState().setStreaming(true)
 
-    // Send via WebSocket
-    wsClient.sendMessage(convId, content, modelSelection)
+    // Send via WebSocket (includes base64 attachments for vision)
+    wsClient.sendMessage(convId, content || 'What is this?', modelSelection, wsAttachments)
 
     // Reset model if not locked
     if (!useUIStore.getState().modelLocked) {
       useUIStore.getState().resetModel()
     }
 
+    // Clean up
+    attachments.forEach(att => { if (att.preview) URL.revokeObjectURL(att.preview) })
+    setAttachments([])
     setInput('')
   }
 
@@ -101,17 +238,66 @@ export default function InputArea() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+      return
+    }
+
+    // Up arrow — navigate to previous commands (only when cursor is at position 0)
+    if (e.key === 'ArrowUp') {
+      const el = textareaRef.current
+      if (el && el.selectionStart === 0 && el.selectionEnd === 0) {
+        const history = getHistory()
+        if (history.length === 0) return
+
+        e.preventDefault()
+        if (historyIndexRef.current === -1) {
+          // Entering history mode — save current draft
+          draftRef.current = input
+          historyIndexRef.current = history.length - 1
+        } else if (historyIndexRef.current > 0) {
+          historyIndexRef.current--
+        }
+        setIsFromHistory(true)
+        setInput(history[historyIndexRef.current])
+      }
+    }
+
+    // Down arrow — navigate forward through history (only when cursor is at end)
+    if (e.key === 'ArrowDown') {
+      if (historyIndexRef.current === -1) return  // not in history mode
+      const el = textareaRef.current
+      const atEnd = el && el.selectionStart === el.value.length
+      if (atEnd) {
+        e.preventDefault()
+        const history = getHistory()
+        if (historyIndexRef.current < history.length - 1) {
+          historyIndexRef.current++
+          setInput(history[historyIndexRef.current])
+        } else {
+          // Back to the draft
+          historyIndexRef.current = -1
+          setInput(draftRef.current)
+        }
+      }
     }
   }
 
-  const handleSlashSelect = (command: string) => {
-    setInput(command + ' ')
-    setShowSlash(false)
+  const handleSlashSelect = (command: string, send?: boolean) => {
+    if (send) {
+      // Flag selected — send immediately
+      setInput(command)
+      setShowSlash(false)
+      // Use setTimeout to let React update the input state before sending
+      setTimeout(() => handleSend(command), 0)
+    } else {
+      // Command or flag selected — fill input with trailing space for typing args
+      setInput(command + ' ')
+      setShowSlash(false)
+    }
     textareaRef.current?.focus()
   }
 
   return (
-    <div className="border-t border-gray-800 bg-[#0f0f1a]/80 backdrop-blur-sm p-3 relative shrink-0" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+    <div className="border-t border-border bg-background/80 backdrop-blur-sm p-3 relative shrink-0" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
       {/* Slash autocomplete */}
       {showSlash && (
         <SlashAutocomplete
@@ -122,25 +308,61 @@ export default function InputArea() {
       )}
 
       <div className="flex items-end gap-2 max-w-4xl mx-auto">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.pdf,.doc,.docx,.txt"
+          multiple
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
         {/* File attach button */}
         <button
-          className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 shrink-0 mb-0.5"
-          title="Attach file"
+          onClick={() => fileInputRef.current?.click()}
+          className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 shrink-0 mb-0.5 transition-colors"
+          title="Attach photo or file"
+          disabled={isStreaming}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
           </svg>
         </button>
 
-        {/* Text input */}
+        {/* Text input + attachment preview */}
         <div className="flex-1 relative">
+          {/* Attachment thumbnails */}
+          {attachments.length > 0 && (
+            <div className="flex gap-2 mb-2 px-1">
+              {attachments.map((att, idx) => (
+                <div key={idx} className="relative group">
+                  {att.preview ? (
+                    <img src={att.preview} alt={att.file.name} className="w-16 h-16 rounded-lg object-cover border border-border" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg border border-border bg-surface flex items-center justify-center text-xs text-text-muted">
+                      📄
+                    </div>
+                  )}
+                  <button
+                    onClick={() => removeAttachment(idx)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => { setIsFromHistory(false); setInput(e.target.value) }}
             onKeyDown={handleKeyDown}
-            placeholder={activeConversation ? "Message BowersHub AI..." : "Start a new conversation..."}
-            className="w-full bg-[#1a1a2e] border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none focus:outline-none focus:border-indigo-500 transition-colors"
+            placeholder={attachments.length > 0 ? "Add a message about this photo..." : (activeConversation ? "Message BowersHub AI..." : "Start a new conversation...")}
+            className="w-full bg-surface border border-border rounded-xl px-4 py-2.5 text-sm text-text placeholder-text-muted resize-none focus:outline-none focus:border-primary transition-colors"
             rows={1}
             disabled={isStreaming}
           />
@@ -169,8 +391,8 @@ export default function InputArea() {
         ) : (
           <button
             onClick={() => handleSend()}
-            disabled={!input.trim()}
-            className="p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white shrink-0 mb-0.5 transition-colors"
+            disabled={!input.trim() && attachments.length === 0}
+            className="p-2.5 rounded-xl bg-primary hover:brightness-110 disabled:bg-gray-700 disabled:cursor-not-allowed text-on-primary shrink-0 mb-0.5 transition-colors"
             title="Send"
             aria-label="Send message"
           >
@@ -184,11 +406,26 @@ export default function InputArea() {
       {/* Model indicator */}
       {modelSelection !== 'auto' && (
         <div className="text-center mt-1">
-          <span className="text-xs text-indigo-400">
+          <span className="text-xs text-primary">
             Using: {modelSelection.includes('haiku') ? 'Haiku' : modelSelection.includes('sonnet') ? 'Sonnet' : modelSelection}
           </span>
         </div>
       )}
     </div>
   )
+}
+
+/** Read a file as base64 (without the data:... prefix) */
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      // Strip the "data:image/jpeg;base64," prefix
+      const base64 = result.split(',')[1] || ''
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }

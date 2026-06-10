@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Link } from 'react-router-dom'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useConversationStore, Conversation } from '../stores/conversation'
 import { useAuthStore } from '../stores/auth'
@@ -26,9 +28,9 @@ export default function Sidebar() {
 
   return (
     <>
-    <div className="h-full flex flex-col bg-background border-r border-gray-800">
+    <div className="h-full flex flex-col bg-background border-r border-border pb-14 sm:pb-0">
       {/* Workspace switcher */}
-      <div className="p-3 border-b border-gray-800">
+      <div className="p-3 border-b border-border">
         <div className="flex gap-2">
           <select
             value={activeWorkspace?.id || ''}
@@ -36,7 +38,7 @@ export default function Sidebar() {
               const ws = workspaces.find(w => w.id === parseInt(e.target.value))
               if (ws) setActiveWorkspace(ws)
             }}
-            className="flex-1 bg-surface text-gray-200 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+            className="flex-1 bg-surface text-text border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
           >
             {workspaces.map(ws => (
               <option key={ws.id} value={ws.id}>
@@ -47,7 +49,7 @@ export default function Sidebar() {
           {activeWorkspace && (
             <button
               onClick={() => setWsSettingsOpen(true)}
-              className="px-2 rounded-lg border border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-800 text-sm"
+              className="px-2 rounded-lg border border-border text-text-muted hover:text-text hover:bg-background text-sm"
               title="Workspace system prompt"
               aria-label="Workspace settings"
             >
@@ -61,7 +63,7 @@ export default function Sidebar() {
       <div className="p-3">
         <button
           onClick={handleNewConversation}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-primary hover:brightness-110 text-on-primary text-sm font-medium transition-colors"
         >
           <span>+</span>
           <span>New conversation</span>
@@ -86,19 +88,20 @@ export default function Sidebar() {
       </div>
 
       {/* User menu */}
-      <div className="p-3 border-t border-gray-800">
-        {/* Tool links */}
+      <div className="p-3 border-t border-border">
+        {/* Navigation links */}
         <div className="flex gap-1 mb-2">
-          <a href="/tools/dashboard" className="flex-1 text-center text-xs text-gray-400 hover:text-gray-200 py-1.5 rounded hover:bg-gray-800/50">📊</a>
-          <a href="/tools/db-admin" className="flex-1 text-center text-xs text-gray-400 hover:text-gray-200 py-1.5 rounded hover:bg-gray-800/50">🗄️</a>
-          <a href="/tools/n8n" className="flex-1 text-center text-xs text-gray-400 hover:text-gray-200 py-1.5 rounded hover:bg-gray-800/50">⚡</a>
+          <Link to="/dashboard" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Dashboard" onClick={() => setSidebarOpen(false)}>📊</Link>
+          <Link to="/chat" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Chat" onClick={() => setSidebarOpen(false)}>💬</Link>
+          <a href="http://100.106.180.101:5002" target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="DB Admin">🗄️</a>
+          <a href="http://100.106.180.101:5678" target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="n8n">⚡</a>
         </div>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-medium shrink-0">
+            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm font-medium text-on-primary shrink-0">
               {user?.display_name?.[0]?.toUpperCase() || '?'}
             </div>
-            <span className="text-sm text-gray-300 truncate">{user?.display_name}</span>
+            <span className="text-sm text-text truncate">{user?.display_name}</span>
           </div>
           <button
             onClick={logout}
@@ -110,13 +113,13 @@ export default function Sidebar() {
         <div className="flex gap-2">
           <a
             href="/settings"
-            className="flex-1 text-center text-xs text-gray-400 hover:text-gray-200 py-1.5 rounded hover:bg-gray-800/50"
+            className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50"
           >
             ⚙ Settings
           </a>
           <button
             onClick={() => window.location.reload()}
-            className="flex-1 text-center text-xs text-gray-400 hover:text-gray-200 py-1.5 rounded hover:bg-gray-800/50"
+            className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50"
             title="Reload to pick up updates"
           >
             🔄 Refresh
@@ -124,7 +127,7 @@ export default function Sidebar() {
           {user?.role === 'admin' && (
             <a
               href="/admin"
-              className="flex-1 text-center text-xs text-indigo-400 hover:text-indigo-300 py-1.5 rounded hover:bg-gray-800/50"
+              className="flex-1 text-center text-xs text-primary hover:brightness-125 py-1.5 rounded hover:bg-gray-800/50"
             >
               🔧 Admin
             </a>
@@ -133,14 +136,15 @@ export default function Sidebar() {
       </div>
     </div>
 
-    {/* Workspace settings panel — rendered outside the sidebar DOM
-        so position:fixed works properly (not clipped by overflow) */}
-    {wsSettingsOpen && activeWorkspace && (
+    {/* Workspace settings panel — portaled to document.body to escape
+        the sidebar's CSS transform containing block */}
+    {wsSettingsOpen && activeWorkspace && createPortal(
       <WorkspaceSettingsPanel
         workspaceId={activeWorkspace.id}
         mode={user?.role === 'admin' ? 'edit' : 'view'}
         onClose={() => setWsSettingsOpen(false)}
-      />
+      />,
+      document.body,
     )}
     </>
   )
@@ -212,8 +216,8 @@ function ConversationItem({ conv, isActive, onSelect }: ConversationItemProps) {
       className={`
         group relative w-full text-left px-3 py-2.5 rounded-lg mb-0.5 text-sm transition-colors cursor-pointer
         ${isActive
-          ? 'bg-indigo-600/20 text-indigo-200'
-          : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200'}
+          ? 'bg-primary/20 text-accent'
+          : 'text-text-muted hover:bg-background/50 hover:text-text'}
       `}
       onClick={editing ? undefined : onSelect}
     >
@@ -230,7 +234,7 @@ function ConversationItem({ conv, isActive, onSelect }: ConversationItemProps) {
                 if (e.key === 'Escape') { setEditing(false); setTitle(conv.title || '') }
               }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full bg-gray-900 border border-indigo-500 rounded px-1.5 py-0.5 text-sm text-gray-200 focus:outline-none"
+              className="w-full bg-gray-900 border border-primary rounded px-1.5 py-0.5 text-sm text-gray-200 focus:outline-none"
             />
           ) : (
             <span className="truncate block font-medium">
@@ -270,7 +274,7 @@ function ConversationItem({ conv, isActive, onSelect }: ConversationItemProps) {
       {showMenu && (
         <div
           ref={menuRef}
-          className="absolute top-full right-2 mt-1 bg-[#1e1e3a] border border-gray-700 rounded-lg shadow-xl z-30 overflow-hidden"
+          className="absolute top-full right-2 mt-1 bg-surface border border-gray-700 rounded-lg shadow-xl z-30 overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <button

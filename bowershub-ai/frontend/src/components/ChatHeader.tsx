@@ -9,11 +9,11 @@ export default function ChatHeader() {
   const { toggleSidebar, setSearchOpen } = useUIStore()
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-[#0f0f1a]/80 backdrop-blur-sm shrink-0">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm shrink-0">
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={toggleSidebar}
-          className="md:hidden p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 shrink-0"
+          className="md:hidden p-1.5 rounded-lg hover:bg-surface text-text-muted shrink-0"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -25,9 +25,9 @@ export default function ChatHeader() {
             <>
               <span
                 className="w-3 h-3 rounded-full shrink-0"
-                style={{ backgroundColor: activeWorkspace.color || '#6366f1' }}
+                style={{ backgroundColor: activeWorkspace.color || 'var(--color-primary)' }}
               />
-              <span className="text-sm font-medium text-gray-200 shrink-0">
+              <span className="text-sm font-medium text-text shrink-0">
                 {activeWorkspace.name}
               </span>
             </>
@@ -45,7 +45,7 @@ export default function ChatHeader() {
 
         <button
           onClick={() => setSearchOpen(true)}
-          className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400"
+          className="p-1.5 rounded-lg hover:bg-surface text-text-muted"
           title="Search (Ctrl+K)"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

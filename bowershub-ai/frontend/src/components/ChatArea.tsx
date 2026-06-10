@@ -56,9 +56,9 @@ export default function ChatArea() {
                       AI
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="markdown-content text-gray-200 text-sm">
+                      <div className="markdown-content text-text text-sm">
                         {streamingContent}
-                        <span className="inline-block w-2 h-4 bg-indigo-400 animate-pulse ml-0.5" />
+                        <span className="inline-block w-2 h-4 bg-accent animate-pulse ml-0.5" />
                       </div>
                     </div>
                   </div>

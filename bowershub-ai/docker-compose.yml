@@ -12,7 +12,9 @@ services:
     volumes:
       - /home/michael/files:/files
       - /home/michael/knowledge:/knowledge
-    env_file: /home/michael/bowershub-ai/.env
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/tailscale:/var/run/tailscale:ro
+    env_file: .env
     networks:
       - ai-network
     healthcheck:

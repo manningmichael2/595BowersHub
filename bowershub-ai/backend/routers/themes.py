@@ -343,10 +343,10 @@ async def update_theme(
 
             existing_dict = dict(existing)
 
-            if existing_dict["is_preset"]:
+            if existing_dict["is_preset"] and user.get("role") != "admin":
                 raise HTTPException(
                     status_code=409,
-                    detail="Preset themes cannot be modified",
+                    detail="Preset themes can only be modified by admins",
                 )
 
             if not _can_modify(existing_dict, user):

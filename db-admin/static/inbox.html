@@ -116,6 +116,7 @@
     <div class="select-actions" id="select-actions">
         <button id="btn-select-all">Select All</button>
         <button id="btn-clear-sel">Clear Selection</button>
+        <button id="btn-delete-sel" style="color:var(--danger);margin-left:auto;">🗑️ Delete Selected</button>
     </div>
     <div class="file-grid" id="file-grid"></div>
     <div class="empty-inbox" id="empty-state" style="display:none;">
@@ -428,6 +429,33 @@ document.getElementById('btn-save-knowledge').addEventListener('click', async fu
         status.textContent = e.message;
     }
     btn.disabled = false; btn.textContent = '💾 Save Knowledge Note';
+});
+// Delete selected files
+document.getElementById('btn-delete-sel').addEventListener('click', async function() {
+    if (!selected.length) return;
+    var count = selected.length;
+    if (!confirm('Delete ' + count + ' file' + (count > 1 ? 's' : '') + ' from inbox? This cannot be undone.')) return;
+    var btn = document.getElementById('btn-delete-sel');
+    var status = document.getElementById('status');
+    btn.disabled = true; btn.textContent = '⏳ Deleting...';
+    try {
+        var resp = await fetch('/api/inbox-delete', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({files: selected})});
+        var data = await resp.json();
+        if (data.ok) {
+            status.className = 'status-msg success';
+            status.textContent = 'Deleted ' + data.deleted + ' file' + (data.deleted !== 1 ? 's' : '') + '.';
+            files = files.filter(function(f){return selected.indexOf(f.path) < 0;});
+            selected = [];
+            render();
+        } else {
+            status.className = 'status-msg error';
+            status.textContent = 'Error: ' + (data.detail || JSON.stringify(data));
+        }
+    } catch(e) {
+        status.className = 'status-msg error';
+        status.textContent = e.message;
+    }
+    btn.disabled = false; btn.textContent = '🗑️ Delete Selected';
 });
 load();
 </script>

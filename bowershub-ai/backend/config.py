@@ -37,9 +37,23 @@ class Config:
     VAPID_PRIVATE_KEY: Optional[str] = None
     VAPID_PUBLIC_KEY: Optional[str] = None
 
+    # Optional — Google Calendar via CalDAV + App Password
+    # If CALDAV_URL is not set, it's auto-constructed from CALDAV_USER.
+    # CALDAV_USER defaults to GMAIL_SMTP_USER if not set separately.
+    # CALDAV_PASSWORD defaults to GMAIL_SMTP_PASSWORD if not set separately.
+    CALDAV_URL: Optional[str] = None
+    CALDAV_USER: Optional[str] = None
+    CALDAV_PASSWORD: Optional[str] = None
+
     # Optional — initial admin (used on first run if no users exist)
     ADMIN_EMAIL: str = "admin@bowershub.local"
     ADMIN_PASSWORD: str = ""
+
+    # Model IDs — single source of truth for all model references.
+    # Update these when Anthropic releases new versions.
+    HAIKU_MODEL: str = "claude-haiku-4-5-20251001"
+    SONNET_MODEL: str = "claude-sonnet-4-5-20250514"
+    LOCAL_MODEL: str = "llama3.2:3b"
 
     @property
     def database_url(self) -> str:
@@ -99,6 +113,9 @@ def load_config() -> Config:
         PUSHOVER_API_TOKEN=os.environ.get("PUSHOVER_API_TOKEN"),
         VAPID_PRIVATE_KEY=os.environ.get("VAPID_PRIVATE_KEY"),
         VAPID_PUBLIC_KEY=os.environ.get("VAPID_PUBLIC_KEY"),
+        CALDAV_URL=os.environ.get("CALDAV_URL"),
+        CALDAV_USER=os.environ.get("CALDAV_USER"),
+        CALDAV_PASSWORD=os.environ.get("CALDAV_PASSWORD"),
         ADMIN_EMAIL=os.environ.get("ADMIN_EMAIL", "admin@bowershub.local"),
         ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", ""),
     )

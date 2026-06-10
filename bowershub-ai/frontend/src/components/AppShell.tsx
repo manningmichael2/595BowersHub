@@ -43,7 +43,7 @@ export default function AppShell() {
 
   return (
     <div
-      className="flex overflow-hidden bg-surface"
+      className="bh-app-shell flex overflow-hidden bg-surface"
       style={{
         position: 'fixed',
         top: 0, left: 0, right: 0, bottom: 0,

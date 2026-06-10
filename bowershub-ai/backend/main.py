@@ -2,6 +2,7 @@
 BowersHub AI — FastAPI application entry point.
 """
 
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -85,7 +86,10 @@ async def lifespan(app: FastAPI):
     # Initialize background scheduler for in-process jobs
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
     from backend.services.categorizer import run_categorizer
+    from backend.services.alerts import check_budgets, check_inbox, check_reminders
+    from backend.services.gameday_alerts import check_gameday_alerts
 
     scheduler = AsyncIOScheduler()
     # Run categorizer at 2:30am daily (after SimpleFin nightly sync at 2am)
@@ -96,9 +100,66 @@ async def lifespan(app: FastAPI):
         name="Transaction Categorizer (local model)",
         replace_existing=True,
     )
+    # Budget alerts — check every hour
+    scheduler.add_job(
+        check_budgets,
+        IntervalTrigger(hours=1),
+        id="budget_alerts",
+        name="Budget threshold alerts",
+        replace_existing=True,
+    )
+    # Inbox monitoring — check every 30 minutes
+    scheduler.add_job(
+        check_inbox,
+        IntervalTrigger(minutes=30),
+        id="inbox_alerts",
+        name="Inbox file count alerts",
+        replace_existing=True,
+    )
+    # Reminders — check every minute
+    scheduler.add_job(
+        check_reminders,
+        IntervalTrigger(minutes=1),
+        id="reminder_delivery",
+        name="Reminder delivery",
+        replace_existing=True,
+    )
+    # Game-day alerts — check every 30 minutes for upcoming tracked team games
+    scheduler.add_job(
+        check_gameday_alerts,
+        IntervalTrigger(minutes=30),
+        id="gameday_alerts",
+        name="Game-day alerts (Pushover)",
+        replace_existing=True,
+    )
+    # Morning briefing — 7:00 AM daily
+    async def _deliver_briefing():
+        try:
+            from backend.services.briefing import BriefingService
+            from backend.services.skill_executor import SkillExecutor
+            mp = app.state.model_provider
+            se = SkillExecutor(config)
+            svc = BriefingService(mp, se, config)
+            # Deliver to admin user (id=1) in General workspace (id=1)
+            await svc.deliver(user_id=1, workspace_id=1)
+        except Exception as e:
+            logger.error(f"Morning briefing failed: {e}")
+
+    scheduler.add_job(
+        _deliver_briefing,
+        CronTrigger(hour=7, minute=0),
+        id="morning_briefing",
+        name="Morning Briefing",
+        replace_existing=True,
+    )
+
     scheduler.start()
     app.state.scheduler = scheduler
-    logger.info("Background scheduler started (categorizer at 2:30am)")
+    logger.info("Background scheduler started (categorizer 2:30am, briefing 7am, alerts every 30-60min, reminders every 1min, gameday every 30min)")
+
+    # Discover and register native skill handlers
+    from backend.services.skill_registry import discover_skills
+    discover_skills()
 
     logger.info("BowersHub AI started successfully")
 
@@ -175,22 +236,29 @@ app.include_router(quick_capture_router)
 from backend.routers.scheduled_prompts import router as scheduled_prompts_router
 app.include_router(scheduled_prompts_router)
 
+from backend.routers.dashboard import router as dashboard_router
+app.include_router(dashboard_router)
+
+from backend.routers.db_browser import router as db_browser_router
+app.include_router(db_browser_router)
+
 
 # --- Slash commands endpoint (used by frontend autocomplete) ---
 
 @app.get("/api/slash-commands")
 async def list_slash_commands(workspace_id: int = 0):
-    """List available slash commands for a workspace."""
+    """List available slash commands for a workspace, including flags."""
     from backend.database import get_pool
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT command, description FROM public.bh_slash_commands
+            SELECT command, description, COALESCE(flags, '[]'::jsonb) as flags
+            FROM public.bh_slash_commands
             WHERE is_active = true
             AND (workspace_id = $1 OR workspace_id IS NULL)
             ORDER BY command
         """, workspace_id)
-    return [{"command": r["command"], "description": r["description"]} for r in rows]
+    return [{"command": r["command"], "description": r["description"], "flags": json.loads(r["flags"]) if isinstance(r["flags"], str) else (r["flags"] or [])} for r in rows]
 
 
 # --- Models endpoint ---
@@ -298,6 +366,14 @@ app.mount(
     StaticFiles(directory=_branding_active_dir),
     name="icons",
 )
+
+# Serve user-uploaded files (images, documents, etc.) from /files
+_files_root = Path(_os.environ.get("FILES_ROOT", "/files"))
+if _files_root.exists():
+    app.mount("/files", StaticFiles(directory=_files_root), name="files")
+    logger.info("Static file serving enabled at /files → %s", _files_root)
+else:
+    logger.warning("FILES_ROOT %s does not exist — /files static serving disabled", _files_root)
 
 
 async def _current_icon_version() -> str:

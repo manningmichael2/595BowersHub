@@ -147,3 +147,155 @@ async def get_me(user: dict = Depends(get_current_user)):
         created_at=user["created_at"],
         last_login_at=user["last_login_at"],
     )
+
+
+# ---- Password Recovery ----
+
+from pydantic import BaseModel as PydanticBaseModel
+
+
+class PasswordResetRequest(PydanticBaseModel):
+    email: str
+
+
+class PasswordResetConfirm(PydanticBaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/request-password-reset")
+async def request_password_reset(body: PasswordResetRequest, request: Request):
+    """
+    Request a password reset email. Always returns 200 (never reveals whether email exists).
+    Rate limited: max 3 requests per email per hour.
+    """
+    import hashlib
+    import secrets
+    from datetime import datetime, timedelta, timezone
+    from backend.database import get_pool
+    from backend.services.email_sender import send_email
+
+    pool = get_pool()
+    email = body.email.lower().strip()
+
+    # Always return success (never reveal if email exists)
+    async with pool.acquire() as conn:
+        # Rate limit: max 3 reset requests per email per hour
+        recent_count = await conn.fetchval("""
+            SELECT COUNT(*) FROM public.bh_password_reset_tokens t
+            JOIN public.bh_users u ON u.id = t.user_id
+            WHERE u.email = $1 AND t.created_at > NOW() - INTERVAL '1 hour'
+        """, email)
+        if recent_count and recent_count >= 3:
+            # Silently succeed — don't reveal rate limit to potential attackers
+            return {"ok": True, "message": "If that email exists, a reset link has been sent."}
+
+        # Look up user
+        user = await conn.fetchrow(
+            "SELECT id, email, display_name FROM public.bh_users WHERE email = $1 AND is_active = true",
+            email
+        )
+
+    if not user:
+        # Don't reveal that email doesn't exist
+        return {"ok": True, "message": "If that email exists, a reset link has been sent."}
+
+    # Generate token
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO public.bh_password_reset_tokens (user_id, token_hash, expires_at)
+            VALUES ($1, $2, $3)
+        """, user["id"], token_hash, expires_at)
+
+    # Build reset URL
+    base_url = str(request.base_url).rstrip("/")
+    # Use the HTTPS tailscale URL if available
+    import os
+    public_url = os.environ.get("PUBLIC_URL", base_url)
+    reset_url = f"{public_url}/reset-password?token={raw_token}"
+
+    # Send email
+    email_body = f"""Hi {user['display_name']},
+
+You requested a password reset for BowersHub AI.
+
+Click here to reset your password:
+{reset_url}
+
+This link expires in 30 minutes.
+
+If you didn't request this, ignore this email — your password won't change.
+
+— BowersHub AI"""
+
+    await send_email(
+        to=user["email"],
+        subject="BowersHub AI — Password Reset",
+        body=email_body,
+    )
+
+    return {"ok": True, "message": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(body: PasswordResetConfirm):
+    """
+    Reset password using a valid token from the reset email.
+    Token is single-use and expires after 30 minutes.
+    """
+    import hashlib
+    from datetime import datetime, timezone
+    from backend.database import get_pool
+
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    token_hash = hashlib.sha256(body.token.encode()).hexdigest()
+    pool = get_pool()
+
+    async with pool.acquire() as conn:
+        # Find valid, unconsumed token
+        token_row = await conn.fetchrow("""
+            SELECT id, user_id, expires_at, consumed_at
+            FROM public.bh_password_reset_tokens
+            WHERE token_hash = $1
+        """, token_hash)
+
+        if not token_row:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+        if token_row["consumed_at"]:
+            raise HTTPException(status_code=400, detail="This reset link has already been used")
+
+        if token_row["expires_at"] < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="This reset link has expired")
+
+        # Hash new password and update
+        from backend.services.auth import AuthService
+        new_hash = AuthService.hash_password(body.new_password)
+
+        await conn.execute(
+            "UPDATE public.bh_users SET password_hash = $1 WHERE id = $2",
+            new_hash, token_row["user_id"],
+        )
+
+        # Mark token as consumed
+        await conn.execute(
+            "UPDATE public.bh_password_reset_tokens SET consumed_at = NOW() WHERE id = $1",
+            token_row["id"],
+        )
+
+        # Revoke all existing refresh tokens (force re-login everywhere)
+        await conn.execute(
+            "UPDATE public.bh_refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL",
+            token_row["user_id"],
+        )
+
+    from backend.middleware.audit import AuditLogger
+    await AuditLogger.log(token_row["user_id"], "password_reset", "user", token_row["user_id"])
+
+    return {"ok": True, "message": "Password has been reset. Please log in with your new password."}

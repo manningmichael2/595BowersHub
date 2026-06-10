@@ -21,6 +21,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../services/api'
+import { useAuthStore } from '../stores/auth'
 import {
   useSettingsStore,
   type EffectiveTheme,
@@ -81,6 +82,11 @@ export default function AppearancePanel() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [showFallbackNotice, setShowFallbackNotice] = useState(false)
   const [builderOpen, setBuilderOpen] = useState(false)
+  const [editingThemeId, setEditingThemeId] = useState<number | null>(null)
+  const [editingThemeName, setEditingThemeName] = useState<string | null>(null)
+
+  const currentUser = useAuthStore(s => s.user)
+  const isAdmin = currentUser?.role === 'admin'
 
   // ---- Fetch themes ------------------------------------------------------
 
@@ -324,6 +330,11 @@ export default function AppearancePanel() {
                 selected={theme.id === selectedThemeId}
                 pending={theme.id === pendingThemeId}
                 onSelect={() => onSelectTheme(theme)}
+                onEdit={isAdmin ? () => {
+                  setEditingThemeId(theme.id)
+                  setEditingThemeName(theme.name)
+                  setBuilderOpen(true)
+                } : undefined}
               />
             ))}
           </div>
@@ -332,7 +343,7 @@ export default function AppearancePanel() {
         <div>
           <button
             type="button"
-            onClick={() => setBuilderOpen(true)}
+            onClick={() => { setEditingThemeId(null); setEditingThemeName(null); setBuilderOpen(true) }}
             className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-200 hover:bg-gray-700 border border-gray-700"
             title="Build a personal theme — opens the color editor"
           >
@@ -365,7 +376,7 @@ export default function AppearancePanel() {
                 className={
                   'flex flex-col items-center justify-center gap-1 rounded-lg border px-3 py-3 transition-colors ' +
                   (selected
-                    ? 'border-indigo-500 bg-indigo-500/10 text-gray-100'
+                    ? 'border-primary bg-primary/10 text-gray-100'
                     : 'border-gray-700 bg-gray-800/40 text-gray-300 hover:border-gray-600 hover:bg-gray-800/70')
                 }
               >
@@ -391,9 +402,12 @@ export default function AppearancePanel() {
       {/* ---------------- Theme builder modal ---------------- */}
       {builderOpen && (
         <ThemeBuilder
-          onClose={() => setBuilderOpen(false)}
+          themeId={editingThemeId ?? undefined}
+          editMode={editingThemeId != null}
+          initialName={editingThemeName ?? undefined}
+          onClose={() => { setBuilderOpen(false); setEditingThemeId(null); setEditingThemeName(null) }}
           onSave={async (saved: any) => {
-            // Refresh the list so the new theme appears as a card, then
+            // Refresh the list so the new/updated theme appears, then
             // auto-select it so the change is visible immediately (R3.4).
             await loadThemes()
             if (saved && typeof saved.id === 'number') {
@@ -409,6 +423,8 @@ export default function AppearancePanel() {
                 setPendingThemeId(null)
               }
             }
+            setEditingThemeId(null)
+            setEditingThemeName(null)
           }}
         />
       )}
@@ -423,11 +439,13 @@ function ThemeCard({
   selected,
   pending,
   onSelect,
+  onEdit,
 }: {
   theme: ThemeListEntry
   selected: boolean
   pending: boolean
   onSelect: () => void
+  onEdit?: () => void
 }) {
   const tokens = theme.tokens_json || {}
   return (
@@ -439,11 +457,21 @@ function ThemeCard({
       className={
         'group relative flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors ' +
         (selected
-          ? 'border-indigo-500 ring-1 ring-indigo-500/60 bg-indigo-500/5'
+          ? 'border-primary ring-1 ring-primary/60 bg-primary/5'
           : 'border-gray-700 bg-gray-800/40 hover:border-gray-600 hover:bg-gray-800/70') +
         (pending ? ' opacity-60 cursor-wait' : '')
       }
     >
+      {/* Admin edit button */}
+      {onEdit && (
+        <span
+          onClick={(e) => { e.stopPropagation(); onEdit() }}
+          className="absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded bg-gray-700/80 text-gray-300 hover:bg-gray-600 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10"
+          title="Edit theme colors"
+        >
+          ✏️
+        </span>
+      )}
       {/* Mini preview tile rendered with the theme's actual tokens. */}
       <div
         className="rounded-md border h-16 w-full overflow-hidden flex items-stretch"
@@ -512,7 +540,7 @@ function ThemeCard({
         ) : (
           <span className="text-gray-500">&nbsp;</span>
         )}
-        {selected && <span className="text-indigo-300">Active</span>}
+        {selected && <span className="text-primary">Active</span>}
       </div>
     </button>
   )

@@ -49,9 +49,26 @@ services:
       - /home/michael/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /home/michael/caddy/certs:/certs:ro
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   ai-services_n8n_data:
     external: true
+  ollama_data:
+    external: true
+    name: ollama_data
 
 networks:
   ai-network:

@@ -265,7 +265,7 @@ export default function SystemPromptEditor({
       )}
 
       {/* Side-by-side editor + preview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Editor pane */}
         <div className="rounded-lg border border-gray-800 bg-gray-900/40 overflow-hidden flex flex-col min-h-[24rem]">
           <div className="px-3 py-1.5 border-b border-gray-800 bg-gray-900/60 text-xs uppercase tracking-wider text-gray-500 flex items-center justify-between">

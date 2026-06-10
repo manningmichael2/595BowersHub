@@ -68,6 +68,9 @@ export default function LoginPage() {
         <p className="text-center text-xs text-gray-600 mt-6">
           Need an account? Ask your admin for an invite link.
         </p>
+        <p className="text-center text-xs mt-2">
+          <a href="/forgot-password" className="text-indigo-400 hover:text-indigo-300">Forgot password?</a>
+        </p>
       </div>
     </div>
   )

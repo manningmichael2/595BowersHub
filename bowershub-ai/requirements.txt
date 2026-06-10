@@ -41,3 +41,9 @@ pywebpush==2.3.0
 
 # Utilities
 python-dateutil==2.9.0.post0
+
+# Safe math evaluation (replaces eval() in toolbox calculator)
+simpleeval==1.0.3
+
+# Email sending (native send-email skill)
+aiosmtplib==3.0.2

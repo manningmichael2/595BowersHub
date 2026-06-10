@@ -1,16 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
 import AppShell from './components/AppShell'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminConsolePage from './pages/AdminConsolePage'
 import ScheduledPromptsPage from './pages/ScheduledPromptsPage'
 import QuickCaptureOverlay from './components/QuickCaptureOverlay'
 import QuickCapturePage from './pages/QuickCapturePage'
 import ToolFramePage from './pages/ToolFramePage'
+import DashboardPage from './pages/DashboardPage'
+import BottomTabBar from './components/BottomTabBar'
+import TopNav from './components/TopNav'
+
+// Lazy-loaded DB Browser — code-split to avoid impacting chat page load
+const DbBrowserPage = lazy(() => import('./pages/DbBrowserPage'))
 
 /**
  * Theme tokens we apply as CSS custom properties on `:root`.
@@ -78,6 +86,18 @@ function App() {
       root.style.setProperty('--color-surface-light', tokens.surface)
       root.style.setProperty('--color-surface-dark', tokens.background || tokens.surface)
     }
+
+    // Compute --color-on-primary: text color to use ON TOP of bg-primary.
+    // If primary is light (like Mono's #ffffff), text on it must be dark.
+    if (typeof tokens.primary === 'string' && tokens.primary.length >= 7) {
+      const hex = tokens.primary.replace('#', '')
+      const r = parseInt(hex.slice(0, 2), 16) / 255
+      const g = parseInt(hex.slice(2, 4), 16) / 255
+      const b = parseInt(hex.slice(4, 6), 16) / 255
+      // Relative luminance (sRGB)
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+      root.style.setProperty('--color-on-primary', lum > 0.5 ? '#111111' : '#ffffff')
+    }
   }, [effectiveTheme])
 
   // Apply the user's text-size preference globally by exposing a single
@@ -135,6 +155,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )
@@ -142,13 +164,20 @@ function App() {
 
   return (
     <>
+      {/* Desktop top navigation bar */}
+      <TopNav />
+
       <Routes>
-        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin/*" element={<AdminConsolePage />} />
         <Route path="/quick-capture" element={<QuickCapturePage />} />
         <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/tools/:toolId" element={<ToolFramePage />} />
+        <Route path="/db/*" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><DbBrowserPage /></Suspense>} />
+        <Route path="/chat/*" element={<AppShell />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/*" element={<AppShell />} />
       </Routes>
 
@@ -158,6 +187,9 @@ function App() {
       {quickCaptureOpen && (
         <QuickCaptureOverlay onClose={() => setQuickCaptureOpen(false)} />
       )}
+
+      {/* Bottom tab bar - mobile only */}
+      <BottomTabBar />
     </>
   )
 }

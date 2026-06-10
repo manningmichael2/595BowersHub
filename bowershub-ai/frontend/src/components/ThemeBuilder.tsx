@@ -46,6 +46,8 @@ import type { ThemeTokens } from '../stores/settings'
 
 export interface ThemeBuilderProps {
   themeId?: number
+  editMode?: boolean  // When true, PATCH existing theme instead of creating new
+  initialName?: string
   onSave: (theme: any) => void
   onClose: () => void
 }
@@ -86,11 +88,11 @@ const DEFAULT_TOKENS: ThemeTokens = {
 
 // ---- Component ------------------------------------------------------------
 
-export default function ThemeBuilder({ themeId, onSave, onClose }: ThemeBuilderProps) {
+export default function ThemeBuilder({ themeId, editMode, initialName, onSave, onClose }: ThemeBuilderProps) {
   const user = useAuthStore(s => s.user)
   const isAdmin = user?.role === 'admin'
 
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName || '')
   const [tokens, setTokens] = useState<ThemeTokens>(DEFAULT_TOKENS)
   // Mirror tokens with a parallel "raw text" map so the user can type
   // freely (e.g. `#abc12`) without us snapping back to the last-valid
@@ -126,8 +128,10 @@ export default function ThemeBuilder({ themeId, onSave, onClose }: ThemeBuilderP
           setRawText(
             Object.fromEntries(TOKEN_FIELDS.map(f => [f.key, seeded[f.key]])),
           )
-          if (typeof found.name === 'string') {
+          if (typeof found.name === 'string' && !editMode) {
             setName(`${found.name} (copy)`)
+          } else if (typeof found.name === 'string' && !initialName) {
+            setName(found.name)
           }
         }
       })
@@ -200,11 +204,21 @@ export default function ThemeBuilder({ themeId, onSave, onClose }: ThemeBuilderP
     setSaving(true)
     setErrorMsg(null)
     try {
-      const res = await api.post('/api/themes', {
-        name: name.trim(),
-        tokens_json: tokens,
-        publish: isAdmin && publish,
-      })
+      let res
+      if (editMode && themeId) {
+        // PATCH existing theme
+        res = await api.patch(`/api/themes/${themeId}`, {
+          name: name.trim(),
+          tokens_json: tokens,
+        })
+      } else {
+        // POST new theme
+        res = await api.post('/api/themes', {
+          name: name.trim(),
+          tokens_json: tokens,
+          publish: isAdmin && publish,
+        })
+      }
       onSave(res.data)
       onClose()
     } catch (err: any) {

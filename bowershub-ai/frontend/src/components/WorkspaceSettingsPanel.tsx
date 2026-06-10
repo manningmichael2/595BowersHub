@@ -174,7 +174,7 @@ export default function WorkspaceSettingsPanel({
   // ---- Render ----------------------------------------------------------
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60"
@@ -182,12 +182,12 @@ export default function WorkspaceSettingsPanel({
         aria-hidden="true"
       />
 
-      {/* Right-side panel (full-screen on mobile) */}
+      {/* Right-side panel (full-screen on mobile, centered overlay on desktop) */}
       <div
         className="
-          relative ml-auto w-full sm:max-w-2xl bg-[#1a1a2e]
-          border-l border-gray-700 shadow-2xl
-          flex flex-col h-full
+          relative mx-auto w-full sm:max-w-4xl bg-[#1a1a2e]
+          border border-gray-700 shadow-2xl rounded-lg sm:rounded-xl
+          flex flex-col h-full sm:h-[90vh] sm:my-auto
         "
         role="dialog"
         aria-modal="true"
