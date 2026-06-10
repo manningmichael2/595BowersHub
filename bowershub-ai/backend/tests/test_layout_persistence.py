@@ -256,7 +256,7 @@ async def simulate_get_layouts(pool: MockPool, user_id: int) -> dict[str, Any]:
 @given(pages=layout_update_st())
 @settings(
     max_examples=100,
-    suppress_health_check=[HealthCheck.too_slow],
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
 )
 def test_property_layout_persistence_round_trip(pages: list[dict[str, Any]]) -> None:
     """

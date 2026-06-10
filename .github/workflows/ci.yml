@@ -46,11 +46,33 @@ jobs:
         run: npm run build
 
   backend:
-    name: Backend (pure tests)
+    name: Backend (full suite + from-empty schema)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: bowershub-ai
+    # The DB-backed tests create ephemeral databases on this service and build
+    # the schema from the squashed baseline via run_migrations() — so the full
+    # suite is also the "schema builds from empty" gate (project-review.md C2).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: michael
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U michael"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: michael
+      DB_PASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -62,14 +84,8 @@ jobs:
             bowershub-ai/requirements-test.txt
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-test.txt
-      - name: Pure tests (no database)
-        run: PYTHONPATH=. python -m pytest backend/tests/properties -q
-      # TODO(C2 — reproducible schema): once run_migrations() can build a fresh
-      # database, add a Postgres `services:` block here and replace the line
-      # above with the full suite, e.g.:
-      #   env: { DB_HOST: localhost, DB_PORT: 5432, DB_USER: michael, DB_PASSWORD: postgres }
-      #   run: PYTHONPATH=. python -m pytest -q
-      # and add a dedicated "schema builds from empty" migration test.
+      - name: Full test suite (Postgres-backed)
+        run: PYTHONPATH=. python -m pytest -q
 
   secrets:
     name: Secret scan (gitleaks)
