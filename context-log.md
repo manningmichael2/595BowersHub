@@ -64,3 +64,15 @@ Started executing the review's game plan. Chose **Phase 0 = same-day risk reduce
 - [Next]: Phase 1 true blockers — (1) reproducible-from-zero schema + verified off-site backups (C2), (2) real `ask-db` sandbox + per-app scoped DB roles (C1/C7), (3) CI with from-empty migration test + secrets scan (C5). Note: the dynamic-model-discovery task (§9.6) is still queued; the WIP batch re-added hardcoded `HAIKU_MODEL`/`SONNET_MODEL` to `config.py` (`SONNET_MODEL` stale), so §9.6 still applies.
 
 ---
+
+## [2026-06-09] Session Notes — Claude Code (CI pipeline, C5)
+
+Built the first CI pipeline (`.github/workflows/ci.yml`) — partial close of C5. Merged to `main` (workflow = branch per chunk → merge → delete).
+
+- [Done][CI]: Three independent jobs, **green from day one**: **frontend** (`npm ci` → `tsc --noEmit` → `vitest --run` → `vite build`), **backend** (Python 3.12, installs reqs + reqs-test, runs the **pure** suite `pytest backend/tests/properties`), **secrets** (gitleaks v8.21.2 pinned binary, `gitleaks detect` over full history). Triggers on push-to-main + all PRs; `concurrency` cancels superseded runs. All job commands validated locally before merge.
+- [Discovery][C2 confirmed in CI terms]: Validated the **full** backend suite against a real Postgres 16 (Docker) — **NOT green**: 395 passed, **7 failed, 36 errored**. The 36 errors are router/integration tests whose fixtures call `run_migrations()`, which **cannot build a fresh DB** (the C2 duplicate/crashing-migration problem, now reproduced concretely). The 7 failures are separate pre-existing assertion failures: `test_finance_endpoints` (3 — finance summary/balances), `test_db_browser_images`, `test_branding_store_integration`, `test_migrations_009_010`. **This is why the backend job runs only the pure suite for now.**
+- [Deferred to C2]: Adding a Postgres `services:` block + full `pytest -q` + a from-empty-schema migration test is a **C2 deliverable** — there's a `TODO(C2)` marker in the backend job. CI's value: when C2 fixes the schema build, flipping the backend job to the full suite turns the integration tests into a permanent regression gate (and the 7 stragglers must be triaged then).
+- [Note][gitleaks]: Full **git history is clean** (0 leaks — the old SimpleFin credential is not in the current 8-commit history). A filesystem (`--no-git`) scan flags 4 items, all in **gitignored** files (`bowershub-ai/.env`, a `.hypothesis` cache) that CI never checks out — so git-mode `gitleaks detect` is the correct, green choice.
+- [Next]: still the Phase 1 blockers — **C2** (reproducible schema + off-site backups) is now the unblock-everything item (it also lights up the full backend CI), then **C1/C7** (ask-db sandbox + scoped roles). §9.6 model-discovery and the workspace-membership admin flow remain queued.
+
+---
