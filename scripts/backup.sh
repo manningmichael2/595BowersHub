@@ -10,12 +10,15 @@
 # Run as: crontab -e → 0 3 * * * /home/michael/KiroProject/scripts/backup.sh
 # (runs at 3am daily)
 #
-# Storage options (configure ONE):
-#   A) Local directory (default — good for testing, NOT a real backup)
-#   B) Hetzner Storage Box via rsync/ssh (~$4/mo for 1TB)
-#   C) Backblaze B2 via restic
+# Off-site: each run is rsynced to Google Drive via rclone (step 7), so backups
+# survive an SSD failure. Verify the off-site copy with:  rclone lsd gdrive:595BowersHub-Backups/
 #
-# Current: Option A (local). Switch to B or C once remote storage is set up.
+# RESTORE (bare-metal disaster recovery), in order:
+#   1. createuser/roles:  psql -U <super> -f globals.sql      (roles + grants; see step 0)
+#   2. createdb finance:  createdb -U michael finance
+#   3. restore data:      pg_restore -U michael -d finance --no-owner postgres_finance.dump
+# Restoring globals first is REQUIRED — the DB dump GRANTs to finance_reader, which
+# must exist or pg_restore errors on every grant (found via restore test 2026-06-09).
 
 set -euo pipefail
 
@@ -34,6 +37,15 @@ PG_USER="michael"
 mkdir -p "${BACKUP_DIR}"
 
 echo "[$(date)] Starting backup to ${BACKUP_DIR}"
+
+# === 0. Cluster globals (roles + grants) ===
+# REQUIRED for a clean restore: the DB dump grants to finance_reader, which must
+# exist first. A single-DB pg_dump does NOT capture roles, so dump them here.
+# (Contains role password hashes — fine for a private backup, never commit it.)
+echo "[$(date)] Dumping cluster globals (roles)..."
+docker exec "${PG_CONTAINER}" pg_dumpall -U "${PG_USER}" --globals-only \
+  > "${BACKUP_DIR}/globals.sql"
+echo "[$(date)] Globals: $(du -sh "${BACKUP_DIR}/globals.sql" | cut -f1)"
 
 # === 1. Postgres dump ===
 echo "[$(date)] Dumping Postgres..."
