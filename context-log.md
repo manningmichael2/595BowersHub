@@ -132,3 +132,18 @@ Finished C7 — stop every service connecting as cluster superuser `michael`. On
 - [Status]: review's foundation blockers all addressed — Phase 0, **C2** (schema+backups), **C1** (ask-db sandbox), **C5** (CI), **C7** (scoped roles, db-admin retired, pins, IP). Pending DEPLOY (one restart applies 0002/0003 + baseline adoption; then run the C7 cutover for the role switch). After deploy, the roadmap opens to features (pgvector §8.3, model discovery §9.6) and converting the 4 xfailed mock tests to real-DB tests.
 
 ---
+
+## [2026-06-10] Session Notes — Claude Code (DEPLOYED the foundation work: baseline + 0002/0003 + C7 cutover)
+
+Owner asked to "send it — deploy every step." Executed the full deploy that prior sessions had left as the owner's call. **All foundation work is now LIVE.** (Began by confirming the app was *not* mid-deploy — the running container predated every foundation commit; nothing was half-applied. A browser refresh resolved the owner's "app isn't working".)
+
+- [Pre-flight verified pre-deploy state was clean]: container up since 2026-06-08 (predates commits), `bh_migrations` had only the old 001–022 filename rows (no checksum col), app connected as superuser `michael`, `finance_reader` still over-permissive (could read `public.bh_users`), scoped roles absent. Confirmed = fully undeployed, not partial.
+- [Step 0 — backup]: ran `scripts/backup.sh` → `/home/michael/backups/2026-06-10_0248` (globals.sql 950B, postgres_finance.dump 1.9M, files 235M), rsynced off-site to Drive. Verified on disk before touching anything.
+- [Step 1 — code deploy]: `./scripts/deploy.sh bowershub-ai` (rebuild from source). On boot the new runner: **adopted** `0001_baseline.sql` (not re-run — `bh_users` exists), applied **`0002`** (locked down `finance_reader`) + **`0003`** (created `bowershub_app` + `dashboard_reader`, NOLOGIN), added the `checksum` column. Verified: `finance_reader` SELECT on `bh_users` now **f** (hash exposure closed), `finance` USAGE still **t**.
+- [Step 2 — C7 cutover] (per `docs/c7-db-roles-cutover.md`): set passwords + LOGIN on `bowershub_app`/`dashboard_reader`; reassigned ownership of all app objects to `bowershub_app` (**0** left owned by `michael`); switched `bowershub-ai/.env` → `DB_USER=bowershub_app` and `/home/michael/dashboard/.env` → `DB_USER=dashboard_reader` (passwords in the .env files + globals backup only, never repo); `docker compose up -d` recreated both. **Verified live**: app connects as `bowershub_app` (`is_superuser`=**off**), `pg_read_file` → permission denied, ask-db `SET ROLE finance_reader` still blocks `bh_users`. No superuser app connections remain (n8n still on `michael` — known follow-up).
+- [Step 3 — decommission]: `docker stop/rm db-admin` (was `unless-stopped`; removal is permanent). Port 5002 dead.
+- [Step 4 — verify + backup]: end-to-end through Caddy `GET /` + `/api/health` → 200, `database:true`, a live websocket user connected, **zero** runtime/permission errors post-cutover. Ran a second `backup.sh` to capture the new role hashes in globals.
+- [Known cosmetic]: `bowershub-ai` shows Docker `(unhealthy)` — pre-existing, the image healthcheck calls `curl` which isn't installed in the container, so it always fails despite the app being fine. **Follow-up (1-line):** fix the healthcheck to use python/wget, or install curl, so docker/monitoring reflects real health.
+- [Next]: foundations fully shipped. Remaining follow-ups — move **n8n**'s Postgres cred off `michael`; fix the curl healthcheck; convert the 4 xfailed mock tests to real-DB. Then the planned feature work: **dynamic model discovery (§9.6)** and pgvector semantic memory (§8.3).
+
+---
