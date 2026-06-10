@@ -47,3 +47,4 @@ simpleeval==1.0.3
 
 # Email sending (native send-email skill)
 aiosmtplib==3.0.2
+sqlglot==30.10.0

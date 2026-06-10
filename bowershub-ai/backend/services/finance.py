@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from backend.database import get_pool
+from backend.services.sql_guard import validate_select
 
 logger = logging.getLogger(__name__)
 
@@ -273,11 +274,8 @@ async def spending_summary(month: Optional[str] = None) -> dict:
 # ask-db — NL→SQL via Anthropic Haiku, then execute against read-only role
 # =========================================================================
 
-# SQL safety check
-_DANGEROUS_SQL = re.compile(
-    r'\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|EXEC|EXECUTE)\b',
-    re.IGNORECASE,
-)
+# SQL safety is enforced by sql_guard.validate_select() (sqlglot parse) plus the
+# de-escalated read-only execution in ask_db() — see below.
 
 # Cache the schema info for 5 minutes (built once per request, schema rarely changes)
 _SCHEMA_CACHE: Dict[str, Any] = {"text": None, "expires_at": 0}
@@ -304,23 +302,16 @@ async def _build_schema_prompt() -> str:
         sections = []
         for s in schemas:
             schema = s["table_schema"]
-            # Skip BowersHub internal tables
+            # Skip public entirely: finance_reader (the role ask-db executes as)
+            # has no access to public — it holds the bh_* auth/user tables. All
+            # queryable domain data lives in finance/inventory/house/cook/files.
             if schema == "public":
-                # Only include finance tables, not bh_*
-                tables = await conn.fetch("""
-                    SELECT table_name FROM information_schema.tables
-                    WHERE table_schema = 'public'
-                      AND table_name NOT LIKE 'bh_%'
-                      AND table_name NOT LIKE 'db_admin_%'
-                      AND table_type = 'BASE TABLE'
-                    ORDER BY table_name
-                """)
-            else:
-                tables = await conn.fetch("""
-                    SELECT table_name FROM information_schema.tables
-                    WHERE table_schema = $1 AND table_type = 'BASE TABLE'
-                    ORDER BY table_name
-                """, schema)
+                continue
+            tables = await conn.fetch("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_schema = $1 AND table_type = 'BASE TABLE'
+                ORDER BY table_name
+            """, schema)
             
             for t in tables:
                 table = t["table_name"]
@@ -437,26 +428,28 @@ async def ask_db(question: str) -> dict:
     
     if not sql:
         return {"error": "Haiku returned empty SQL"}
-    
-    # Safety: reject anything that's not SELECT
-    if _DANGEROUS_SQL.search(sql):
+
+    # Safety layer 1: parse and require a single read-only SELECT (sqlglot).
+    ok, reason = validate_select(sql)
+    if not ok:
         return {
-            "error": "Generated SQL contains write operations — refusing to execute",
+            "error": f"Refused to execute generated SQL: {reason}",
             "sql_generated": sql,
-            "_display": f"⚠️ Refused to execute non-SELECT SQL.\n\n```sql\n{sql}\n```",
+            "_display": f"⚠️ Refused to execute generated SQL ({reason}).\n\n```sql\n{sql}\n```",
         }
-    if not sql.upper().lstrip().startswith("SELECT") and not sql.upper().lstrip().startswith("WITH"):
-        return {
-            "error": "Generated SQL is not a SELECT",
-            "sql_generated": sql,
-            "_display": f"⚠️ Generated SQL is not a SELECT statement.\n\n```sql\n{sql}\n```",
-        }
-    
-    # Execute (use the same superuser role; finance_reader role is preferred but not required)
+
+    # Safety layer 2: execute with least privilege — drop to the read-only
+    # finance_reader role (no access to bh_* / auth tables, not superuser) in a
+    # READ ONLY transaction with a statement timeout. Even a malicious SELECT
+    # can't read credentials, write, run server programs, or run unbounded.
     pool = get_pool()
     try:
         async with pool.acquire() as conn:
-            rows = await conn.fetch(sql)
+            async with conn.transaction():
+                await conn.execute("SET TRANSACTION READ ONLY")
+                await conn.execute("SET LOCAL statement_timeout = '5000ms'")
+                await conn.execute("SET LOCAL ROLE finance_reader")
+                rows = await conn.fetch(sql)
     except Exception as e:
         return {
             "error": f"SQL execution failed: {e}",
