@@ -49,3 +49,16 @@ First session run via **Claude Code CLI** (alongside Kiro; Kiro credits exhauste
 - [TODO][later]: when foundations land, `/spec mobile-code-agent` → `.kiro/specs/mobile-code-agent/` (requirements/design/tasks) capturing the CMA call sequence above.
 
 ---
+
+## [2026-06-09] Session Notes — Claude Code (Phase 0 security stopgaps)
+
+Started executing the review's game plan. Chose **Phase 0 = same-day risk reducers** (hours, low blast radius) before the heavier Phase 1 blockers. Work is on branch `foundation/phase-0-security`.
+
+- [Handoff]: Found ~60 uncommitted files of in-progress feature work (CalDAV calendar, budget/inbox/reminder/gameday alert jobs, morning briefing scheduler, dashboard + db_browser router registration, `/files` static serving, slash-command flags, frontend sweep) — **not mine**. Snapshotted as commit `dd6e04f` ("WIP: in-progress feature batch …") to start Phase 0 from a clean tree. **That batch ships 4 failing frontend test files** (FieldHint, SettingsPanels, useDashboardWidget, dashboardIntegration — 17 tests) that pre-date Phase 0; whoever owns it should fix before merge.
+- [Done][C7/CORS]: Replaced `allow_origins=["*"]` (`main.py:186`) with an explicit allowlist via new `resolve_cors_origins()` (`config.py`) — combines `PUBLIC_URL` + comma-sep `CORS_ORIGINS` + localhost dev origins, drops any `*` (invalid with `allow_credentials`). Documented both env vars in `.env.example`.
+- [Done][C7/rate-limit]: Wired the previously-dead `RateLimiter` onto `/api/auth/login` — new `login` limit (5/min) keyed **per-IP** via new `client_ip()` helper that honors `X-Forwarded-For` (we sit behind Caddy). `RateLimiter.check()` generalized from `user_id:int` to `Subject = Union[int,str]`. Verified: 5 allowed / rest 429, distinct IPs isolated.
+- [Done][C1/ask-db stopgap]: Added admin-only gate in `skill_executor.execute()` for `ADMIN_ONLY_SKILLS = {ask-db, finance-query}` (new `_user_is_admin()` role lookup). Non-admins now can't run LLM-SQL on the superuser pool via chat. **Stopgap only** — real fix (least-priv role + `sqlglot` + read-only txn) is still Phase 1. `TODO(phase-1)` left in code to swap this for a DB-driven per-skill min-role column.
+- [Done][C6/frontend]: Added top-level `ErrorBoundary` (no more white-screen on render throw) + a minimal zustand toast system (`stores/toast.ts`, `components/Toaster.tsx`) wired into `main.tsx`. Wired the two silent error paths to toasts: WS `error` event (the "typing indicator vanishes" gap) and the API 401 session-expiry. `tsc --noEmit` clean; touched/created files' tests pass.
+- [Next]: Phase 1 true blockers — (1) reproducible-from-zero schema + verified off-site backups (C2), (2) real `ask-db` sandbox + per-app scoped DB roles (C1/C7), (3) CI with from-empty migration test + secrets scan (C5). Note: the dynamic-model-discovery task (§9.6) is still queued; the WIP batch re-added hardcoded `HAIKU_MODEL`/`SONNET_MODEL` to `config.py` (`SONNET_MODEL` stale), so §9.6 still applies.
+
+---
