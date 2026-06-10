@@ -49,3 +49,4 @@ Thumbs.db
 
 # Claude Code — personal settings (permissions allowlist) stay local
 .claude/settings.local.json
+/live_schema.sql
