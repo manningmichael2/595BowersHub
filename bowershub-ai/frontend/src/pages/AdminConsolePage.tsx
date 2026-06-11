@@ -41,6 +41,7 @@ const SECTIONS: SectionDef[] = [
   { slug: 'commands', label: 'Slash Commands', icon: '⌨️' },
   { slug: 'patterns', label: 'Routing Patterns', icon: '🔀' },
   { slug: 'api-registry', label: 'API Registry', icon: '🔌' },
+  { slug: 'models', label: 'Models', icon: '🤖' },
   { slug: 'cost', label: 'Cost', icon: '💰' },
   { slug: 'audit', label: 'Audit Log', icon: '📋' },
   { slug: 'themes', label: 'Theme Management', icon: '🎨' },
@@ -147,6 +148,7 @@ export default function AdminConsolePage() {
               <Route path="commands" element={<SlashCommandsSection />} />
               <Route path="patterns" element={<PatternsSection />} />
               <Route path="api-registry" element={<ApiRegistrySection />} />
+              <Route path="models" element={<ModelsSection />} />
               <Route path="cost" element={<CostSection />} />
               <Route path="audit" element={<AuditSection />} />
               <Route path="themes" element={<ThemeManagementSection />} />
@@ -534,6 +536,111 @@ function SkillsSection() {
         </div>
       )}
     </SectionStateGuard>
+  )
+}
+
+// ---- Cost section --------------------------------------------------------
+
+// ---- Models section ------------------------------------------------------
+
+interface CatalogModel {
+  id: string
+  provider: string
+  display_name: string
+}
+
+function ModelsSection() {
+  // Lists the live catalog (public DTO — active models, no prices) and exposes
+  // the operator refresh (R2.3): POST /api/admin/models/refresh discovers from
+  // the Anthropic Models API + Ollama, upserting models while preserving
+  // operator-set prices. Runs even when the scheduled lever is off.
+  const { data, isLoading, error, reload } = useEndpointData<CatalogModel[]>('/api/models')
+  const [refreshing, setRefreshing] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    setResult(null)
+    setActionError(null)
+    try {
+      const res = await api.post('/api/admin/models/refresh')
+      const s = res.data
+      setResult(
+        `Refresh ${s.complete ? 'complete' : 'partial (some sources errored — nothing deactivated)'} — ` +
+          `${s.added} added, ${s.reactivated} reactivated, ${s.deactivated} deactivated, ` +
+          `${s.price_flagged} price-flagged.`,
+      )
+      await reload()
+    } catch (err: any) {
+      setActionError(err?.response?.data?.detail || 'Refresh failed')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h3 className="text-sm font-medium text-gray-300">Model Catalog</h3>
+          <p className="text-xs text-gray-500 mt-0.5 max-w-xl">
+            DB-driven model list. Refresh discovers models from the Anthropic Models API
+            and Ollama; operator-set prices in <span className="font-mono">bh_model_rates</span> are
+            preserved. Runs on a schedule too — this triggers one immediately.
+          </p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="px-3 py-2 rounded-lg text-sm bg-indigo-500/15 text-indigo-200 hover:bg-indigo-500/25 border border-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+        >
+          {refreshing ? 'Refreshing…' : '↻ Refresh now'}
+        </button>
+      </div>
+
+      {result && (
+        <div className="bg-green-900/20 border border-green-800 rounded-lg px-4 py-2 text-sm text-green-300 mb-4">
+          {result}
+        </div>
+      )}
+      {actionError && (
+        <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-2 text-sm text-red-300 mb-4">
+          {actionError}
+        </div>
+      )}
+
+      <SectionStateGuard isLoading={isLoading} error={error}>
+        <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
+            <thead>
+              <tr className="border-b border-gray-800">
+                <th className="text-left px-4 py-2 text-gray-400">Model ID</th>
+                <th className="text-left px-4 py-2 text-gray-400">Provider</th>
+                <th className="text-left px-4 py-2 text-gray-400">Display Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data && data.length > 0 ? (
+                data.map(m => (
+                  <tr key={m.id} className="border-b border-gray-800/50">
+                    <td className="px-4 py-2 text-gray-300 font-mono text-xs">{m.id}</td>
+                    <td className="px-4 py-2 text-gray-400">{m.provider}</td>
+                    <td className="px-4 py-2 text-gray-300">{m.display_name}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
+                    No models
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </SectionStateGuard>
+    </div>
   )
 }
 
