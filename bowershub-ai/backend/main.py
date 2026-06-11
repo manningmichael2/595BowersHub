@@ -62,6 +62,12 @@ async def lifespan(app: FastAPI):
     await run_migrations(pool)
     app.state.pool = pool
 
+    # Warm the model-catalog resolver cache (T1: after migrations, before scheduler) so
+    # role/alias + cost lookups never take a per-call DB round-trip and never race an
+    # empty cache on the first request.
+    from backend.services.model_catalog import init_resolver
+    await init_resolver(pool)
+
     # Seed admin user on first run
     from backend.services.auth import AuthService
     auth_service = AuthService(pool, config)

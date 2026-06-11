@@ -50,10 +50,11 @@
 - [ ] On any incomplete fetch: serve last-known, deactivate nothing (R2.4).
 - [ ] **Tests:** (ephemeral Postgres) admin-edited price survives a refresh; new model → provisional+flagged; absent across N complete fetches → inactive (single incomplete fetch deactivates nothing); an **alias-targeted** model absent from N complete fetches is **not** deactivated (alias-protection); a complete Anthropic-only fetch does **not** age-out Ollama/Bedrock rows (provider-scoped); concurrent admin+scheduled refresh serialize — proven by holding one refresh open at the injected `asyncio.Event` gate and asserting the second blocks until release; no-op refresh is a logged no-op.
 
-## Task 5: Catalog read + Resolver + singleton + lifespan cache warm (precondition T1)
+## Task 5: Catalog read + Resolver + singleton + lifespan cache warm (precondition T1) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 2, Task 4
 - **Requirements:** R4.1, R4.4, R3.4, R2.6
+- **Outcome:** `Resolver` in `services/model_catalog.py` — in-process cache of all rows (incl. inactive, for historical cost) + role aliases; `resolve_role`/`default_chat_model` off the cache (no per-call DB hit), fail-closed to a same-tier active model on a dangling/inactive alias; `row_for_cost`/`price_for` exact-match-first (Bedrock reads its own row — B1) with same-provider `normalize_key` fallback; `list_active`/`get` for the read path. Module singleton `get_resolver()`/`init_resolver(pool)` (mirrors `database.get_pool`); warmed in `main.py` lifespan **after `run_migrations`, before the scheduler** (T1). `CatalogRefresh.invalidate` now awaits an async hook so refresh rebuilds the cache. Tests `tests/test_model_resolver.py` (5 DB-backed) prove role resolution, cache-not-DB (mutate-without-reload), fail-closed, exact-match Bedrock + inactive cost lookup, and refresh→invalidate→reload. **18/18** model-catalog tests green.
 - [ ] `Catalog.list_active()` and the read-through in-process cache; `get_resolver()` module-level singleton (mirrors `database.py` `get_pool()`).
 - [ ] `Resolver.resolve_role(role)` and `default_chat_model()` off the cache (no per-call DB hit); fail-closed to a known-good active tier model + alert on inactive/dangling alias.
 - [ ] Exact-match-first key lookup with a same-provider `normalize_key` fallback (so Bedrock rows id 5/14 resolve to their own priced row, never collapsed onto bare `claude-*`).

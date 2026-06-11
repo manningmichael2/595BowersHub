@@ -19,12 +19,18 @@ context window but NO pricing, so `DiscoveredModel` deliberately has no price fi
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
+
+
+class ModelNotAvailableError(Exception):
+    """Raised when no active model can be resolved for a role."""
 
 
 # Provisional pricing for brand-new models (R3.2) and the cost miss-path (R3.3).
@@ -358,7 +364,10 @@ class CatalogRefresh:
             )
         else:
             logger.info(f"model catalog refresh ({trigger}): no changes (no-op)")
-        self._invalidate()
+        # invalidate may be sync (no-op) or async (resolver.reload) — Task 5 wires the latter.
+        res = self._invalidate()
+        if inspect.isawaitable(res):
+            await res
         return summary
 
     async def _stale_misses(self, conn) -> int:
@@ -402,3 +411,129 @@ class CatalogRefresh:
             m.supports_vision, m.supports_tools, m.max_output_tokens, m.max_input_tokens,
             m.supports_thinking, m.supports_effort, m.supports_structured_outputs,
         )
+
+
+# ---------------------------------------------------------------------------
+# Read cache + resolution (Task 5) — Resolver
+# ---------------------------------------------------------------------------
+def normalize_key(model_id: str) -> str:
+    """Strip provider/version decoration to a bare lookup key (R3.4 fallback only).
+
+    NOT used to collapse providers: exact-match is tried first (so a Bedrock id like
+    `us.anthropic.claude-…-v1:0` reads its OWN priced row), and this only runs on an
+    exact miss to find a same-base row."""
+    s = model_id
+    for p in ("us.anthropic.", "anthropic."):
+        if s.startswith(p):
+            s = s[len(p):]
+            break
+    s = re.sub(r"-v\d+:\d+$", "", s)   # bedrock '-v1:0'
+    s = re.sub(r":\d+$", "", s)        # trailing ':0'
+    return s
+
+
+class Resolver:
+    """In-process read cache for the model catalog + role/alias resolution.
+
+    Backs `/api/models` (list_active), cost lookups (row_for_cost — exact-match incl.
+    inactive rows so historical usage still prices), and role aliases (resolve_role,
+    default_chat_model) — all off the cache, so the router hot path takes NO per-call
+    DB round-trip (perf NFR). Rebuilt by `reload()` on refresh/admin-edit."""
+
+    _TIER_KEYWORDS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "local": ""}
+
+    def __init__(self, pool):
+        self._pool = pool
+        self._by_id: Dict[str, dict] = {}     # ALL rows (active + inactive) for cost lookups
+        self._aliases: Dict[str, str] = {}    # role -> model_id
+
+    async def reload(self) -> None:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch("SELECT * FROM public.bh_model_rates")
+            aliases = await conn.fetch("SELECT role, model_id FROM public.bh_model_aliases")
+        self._by_id = {r["model_id"]: dict(r) for r in rows}
+        self._aliases = {r["role"]: r["model_id"] for r in aliases}
+
+    async def _ensure_loaded(self) -> None:
+        if not self._by_id:           # belt-and-suspenders: warm-on-first-read if lifespan warm was skipped
+            await self.reload()
+
+    # --- catalog reads -----------------------------------------------------
+    def list_active(self) -> List[dict]:
+        return [r for r in self._by_id.values() if r.get("is_active")]
+
+    def get(self, model_id: str) -> Optional[dict]:
+        return self._by_id.get(model_id)
+
+    def row_for_cost(self, model_id: str) -> Optional[dict]:
+        """Exact-match (incl. inactive) first; same-base normalize fallback (R3.4)."""
+        row = self._by_id.get(model_id)
+        if row is not None:
+            return row
+        target = normalize_key(model_id)
+        for rid, r in self._by_id.items():
+            if normalize_key(rid) == target:
+                return r
+        return None
+
+    def price_for(self, model_id: str):
+        r = self.row_for_cost(model_id)
+        if r is None or r.get("input_cost_per_mtok") is None or r.get("output_cost_per_mtok") is None:
+            return None
+        return (float(r["input_cost_per_mtok"]), float(r["output_cost_per_mtok"]))
+
+    # --- role resolution ---------------------------------------------------
+    def resolve_role(self, role: str) -> str:
+        """Resolve a logical role ('haiku'/'sonnet'/'opus'/'local') to a concrete,
+        active model_id. Fail-closed (R3.4): if the alias is missing/inactive, fall
+        back to a known-good active model in the same tier and alert."""
+        mid = self._aliases.get(role)
+        if mid is not None:
+            row = self._by_id.get(mid)
+            if row is not None and row.get("is_active"):
+                return mid
+            logger.error(
+                f"model alias '{role}' -> '{mid}' is inactive/missing; failing closed to a same-tier model"
+            )
+        fallback = self._fallback_for_tier(role)
+        if fallback is None:
+            raise ModelNotAvailableError(f"no active model resolves for role '{role}'")
+        return fallback
+
+    def default_chat_model(self) -> str:
+        return self.resolve_role("sonnet")
+
+    def _fallback_for_tier(self, role: str) -> Optional[str]:
+        keyword = self._TIER_KEYWORDS.get(role, role)
+        want_provider = "ollama" if role == "local" else "anthropic"
+        candidates = [
+            r["model_id"] for r in self._by_id.values()
+            if r.get("is_active") and r.get("provider") == want_provider
+            and (keyword == "" or keyword in r["model_id"].lower())
+        ]
+        if candidates:
+            return sorted(candidates)[-1]   # deterministic; later/dated IDs sort last
+        # last resort: any active model of the right provider
+        any_active = [r["model_id"] for r in self._by_id.values()
+                      if r.get("is_active") and r.get("provider") == want_provider]
+        return sorted(any_active)[-1] if any_active else None
+
+
+# Module-level singleton (mirrors database.py _pool / get_pool / init_pool).
+_resolver: Optional["Resolver"] = None
+
+
+async def init_resolver(pool) -> "Resolver":
+    """Construct + warm the resolver cache. Call in lifespan AFTER run_migrations
+    and BEFORE the scheduler (T1), so the first request never races an empty cache."""
+    global _resolver
+    _resolver = Resolver(pool)
+    await _resolver.reload()
+    logger.info(f"model resolver warmed: {len(_resolver._by_id)} models, {len(_resolver._aliases)} roles")
+    return _resolver
+
+
+def get_resolver() -> "Resolver":
+    if _resolver is None:
+        raise RuntimeError("model resolver not initialized — call init_resolver(pool) in lifespan")
+    return _resolver
