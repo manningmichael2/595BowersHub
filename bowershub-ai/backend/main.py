@@ -305,11 +305,16 @@ async def list_slash_commands(workspace_id: int = 0):
 
 @app.get("/api/models")
 async def list_models():
-    """List available AI models."""
-    if hasattr(app.state, 'model_provider'):
-        models = await app.state.model_provider.list_models()
-        return [m.model_dump() for m in models]
-    return []
+    """List available AI models from the DB-backed catalog (single source of truth).
+
+    Served through an allowlist public DTO: id/provider/display_name + capability/context
+    fields, NO pricing (R1.2/R5.2). The model picker contract (id/provider/display_name)
+    is unchanged — `id` is the model_id string."""
+    from backend.services.model_catalog import get_resolver
+    try:
+        return get_resolver().list_active_public()
+    except RuntimeError:
+        return []   # resolver not yet warmed (pre-lifespan); never in normal operation
 
 
 # --- WebSocket endpoint ---

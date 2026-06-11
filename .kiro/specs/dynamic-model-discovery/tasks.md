@@ -70,10 +70,11 @@
 - [ ] `POST /api/admin/models/refresh` (`Depends(require_admin)`) → `CatalogRefresh.refresh(trigger="admin")`, returns the `RefreshSummary`. Define behavior when `model_discovery_enabled` is false: the **admin** trigger still runs (it's an explicit operator action — only the scheduled job is gated by the setting).
 - [ ] **Tests:** admin refresh requires admin (401/403 without); a sub-floor `model_discovery_interval_hours` DB value is clamped to the floor; disabling `model_discovery_enabled` stops the scheduled job but an admin `POST /refresh` still works.
 
-## Task 7: `GET /api/models` reads the catalog via a public DTO (phase P2)
+## Task 7: `GET /api/models` reads the catalog via a public DTO (phase P2) — ✅ DONE
 - **Effort:** S
 - **Dependencies:** Task 5
 - **Requirements:** R1.2, R5.2
+- **Outcome:** `/api/models` now serves `get_resolver().list_active_public()` instead of the ephemeral provider list — the DB catalog is the single source for the picker (R1.2). `Resolver.list_active_public()` is an **explicit allowlist projection** (`id`=model_id string + `provider`/`display_name` + capability/context), **no price fields** and no internal lifecycle columns, so future `bh_model_rates` columns can't auto-leak (R5.2). Picker contract (`id`/`provider`/`display_name`) unchanged. Test asserts string-id, active-only, exact allowlist, no `*cost*`. **6/6** resolver tests green; frontend `npx tsc --noEmit` clean (`ModelPicker.tsx` untouched).
 - [ ] Repoint `main.py:270` to `Catalog.list_active()`, serialized through a dedicated public DTO that is an **explicit allowlist projection** (`id/provider/display_name` + additive `supports_*`/context) — not `dict(row)` minus price — so future `0005`/later columns never auto-surface on the public endpoint.
 - [ ] **Tests:** `/api/models` returns active rows with the unchanged `id/provider/display_name` contract and **no** `*_cost_per_mtok` fields; `frontend npx tsc --noEmit` + `npm test` clean (`ModelPicker.tsx` unchanged).
 

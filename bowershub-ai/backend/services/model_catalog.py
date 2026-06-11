@@ -462,6 +462,26 @@ class Resolver:
     def list_active(self) -> List[dict]:
         return [r for r in self._by_id.values() if r.get("is_active")]
 
+    # Explicit allowlist for the PUBLIC /api/models endpoint — never `dict(row)` minus
+    # price, so new bh_model_rates columns can't auto-leak. NO price fields (R5.2).
+    # `id` is the model_id STRING the frontend selects (not the integer PK).
+    _PUBLIC_FIELDS = (
+        "provider", "display_name", "max_input_tokens", "max_output_tokens",
+        "supports_vision", "supports_tools",
+        "supports_thinking", "supports_effort", "supports_structured_outputs",
+    )
+
+    def list_active_public(self) -> List[dict]:
+        out = []
+        for r in self._by_id.values():
+            if not r.get("is_active"):
+                continue
+            dto = {"id": r["model_id"]}
+            for f in self._PUBLIC_FIELDS:
+                dto[f] = r.get(f)
+            out.append(dto)
+        return out
+
     def get(self, model_id: str) -> Optional[dict]:
         return self._by_id.get(model_id)
 

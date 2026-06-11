@@ -111,6 +111,30 @@ async def test_cost_key_exact_match_bedrock_and_inactive(fresh_db, db_settings):
         await pool.close()
 
 
+async def test_public_dto_has_no_price_and_active_only(fresh_db, db_settings):
+    pool = await _apply_migrations(fresh_db, db_settings)
+    try:
+        r = Resolver(pool)
+        async with pool.acquire() as c:
+            await c.execute("UPDATE public.bh_model_rates SET is_active=false WHERE model_id='claude-opus-4-5'")
+        await r.reload()
+        dtos = r.list_active_public()
+        ids = {d["id"] for d in dtos}
+        assert "claude-sonnet-4-6" in ids                 # id is the model_id STRING
+        assert "claude-opus-4-5" not in ids               # inactive excluded
+        sample = next(d for d in dtos if d["id"] == "claude-sonnet-4-6")
+        assert set(sample) == {                           # exact allowlist — no extras leak
+            "id", "provider", "display_name", "max_input_tokens", "max_output_tokens",
+            "supports_vision", "supports_tools", "supports_thinking",
+            "supports_effort", "supports_structured_outputs",
+        }
+        # no pricing / internal lifecycle fields anywhere in the public payload
+        for d in dtos:
+            assert not any(k for k in d if "cost" in k or k in ("needs_price_confirmation", "missed_fetch_count", "is_active"))
+    finally:
+        await pool.close()
+
+
 async def test_refresh_invalidate_rebuilds_cache_and_singleton(fresh_db, db_settings):
     pool = await _apply_migrations(fresh_db, db_settings)
     try:
