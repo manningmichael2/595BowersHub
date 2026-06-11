@@ -16,6 +16,7 @@ Fallback: if Ollama is unreachable or returns garbage, logs the error and
 skips — the next run will pick up the same uncategorized transactions.
 """
 import json
+from backend.services.model_catalog import resolve_role
 import logging
 from typing import Optional
 
@@ -27,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 OLLAMA_URL = "http://ollama:11434"
-MODEL = "llama3.2:3b"
 BATCH_SIZE = 50
 MAX_TRANSACTIONS = 500
 
@@ -155,7 +155,7 @@ async def run_categorizer() -> dict:
         "updated": total_updated,
         "fallback_to_other": total_fallback,
         "errors": errors,
-        "model": MODEL,
+        "model": resolve_role("local"),
     }
     logger.info(f"Categorizer: {summary}")
     return summary
@@ -168,7 +168,7 @@ async def _call_ollama(prompt: str) -> Optional[str]:
             resp = await client.post(
                 f"{OLLAMA_URL}/api/chat",
                 json={
-                    "model": MODEL,
+                    "model": resolve_role("local"),
                     "messages": [
                         {
                             "role": "system",

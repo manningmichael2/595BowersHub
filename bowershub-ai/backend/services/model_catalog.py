@@ -559,6 +559,36 @@ def get_resolver() -> "Resolver":
     return _resolver
 
 
+# Cold-start fallback for role resolution when the resolver cache isn't warmed
+# (tests / very early startup). Same canonical IDs as the 0005 alias seed and the
+# StaticDiscoverySource — model_catalog.py is the single documented home for these
+# residual literals (R2.4); every other service resolves roles, never literals.
+_FALLBACK_ROLE_MODEL = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-6",
+    "opus": "claude-opus-4-5-20251101",
+    "local": "llama3.2:3b",
+}
+
+
+def resolve_role(role: str) -> str:
+    """Module-level role resolver (R4.2/R4.3) — the seam every service uses instead of
+    a hardcoded model id. Uses the warmed resolver cache (DB-driven, no per-call DB hit)
+    when available; otherwise the documented cold-start canonical default. Never raises,
+    so it's safe at call sites that may run before lifespan warms the cache."""
+    if _resolver is not None:
+        try:
+            return _resolver.resolve_role(role)
+        except ModelNotAvailableError:
+            pass
+    return _FALLBACK_ROLE_MODEL.get(role, _FALLBACK_ROLE_MODEL["sonnet"])
+
+
+def default_chat_model() -> str:
+    """Default chat model, resolved from the DB (R4.4)."""
+    return resolve_role("sonnet")
+
+
 # ---------------------------------------------------------------------------
 # Cost (Task 8) — the single cost home
 # ---------------------------------------------------------------------------

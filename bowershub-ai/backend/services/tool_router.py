@@ -14,6 +14,7 @@ Key principle: Adding a new capability = registering an API in the DB.
 No code changes needed.
 """
 import json
+from backend.services.model_catalog import resolve_role
 import logging
 from typing import Optional
 
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 def _get_haiku_model() -> str:
     """Get the Haiku model ID. Reads from env or uses default."""
     import os
-    return os.environ.get("HAIKU_MODEL", "claude-haiku-4-5-20251001")
+    return resolve_role("haiku")
 
 logger = logging.getLogger(__name__)
 

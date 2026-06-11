@@ -15,6 +15,7 @@ Triggered via:
 - Scheduled nightly cleanup via apscheduler
 """
 import logging
+from backend.services.model_catalog import resolve_role
 import os
 from typing import Any, Dict, List
 
@@ -23,7 +24,6 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434")
-OLLAMA_MODEL = "llama3.2:3b"
 FILEWRITER_URL = os.environ.get("FILEWRITER_URL", "http://filewriter:5001")
 
 # Email categories and their actions
@@ -71,7 +71,7 @@ async def classify_email(sender: str, subject: str, preview: str) -> str:
             resp = await client.post(
                 f"{OLLAMA_URL}/api/generate",
                 json={
-                    "model": OLLAMA_MODEL,
+                    "model": resolve_role("local"),
                     "prompt": prompt,
                     "stream": False,
                     "options": {"temperature": 0.1, "num_predict": 10},

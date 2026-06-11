@@ -4,6 +4,7 @@ silently persists important facts, decisions, and preferences.
 """
 
 import json
+from backend.services.model_catalog import resolve_role
 import logging
 import os
 from datetime import datetime
@@ -59,7 +60,7 @@ Assistant: {assistant_message}"""
 
         try:
             result = await self.model_provider.complete(
-                model="claude-haiku-4-5-20251001",
+                model=resolve_role("haiku"),
                 messages=[{"role": "user", "content": self.CAPTURE_PROMPT.format(
                     user_message=user_msg[:2000],
                     assistant_message=assistant_msg[:2000],

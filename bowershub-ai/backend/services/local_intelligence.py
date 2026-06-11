@@ -11,6 +11,7 @@ This is NOT a replacement for Haiku/Sonnet — it's a cheap pre-processor
 that reduces unnecessary L3 escalations and improves skill dispatch accuracy.
 """
 import json
+from backend.services.model_catalog import resolve_role
 import logging
 import os
 from typing import Optional
@@ -20,7 +21,6 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434")
-MODEL = os.environ.get("LOCAL_MODEL", "llama3.2:3b")
 
 
 async def _call_ollama(prompt: str, max_tokens: int = 150, temperature: float = 0.1) -> Optional[str]:
@@ -30,7 +30,7 @@ async def _call_ollama(prompt: str, max_tokens: int = 150, temperature: float = 
             resp = await client.post(
                 f"{OLLAMA_URL}/api/generate",
                 json={
-                    "model": MODEL,
+                    "model": resolve_role("local"),
                     "prompt": prompt,
                     "stream": False,
                     "options": {"temperature": temperature, "num_predict": max_tokens},
@@ -224,7 +224,7 @@ async def is_available() -> bool:
             if resp.status_code == 200:
                 data = resp.json()
                 models = [m.get("name", "") for m in data.get("models", [])]
-                return any(MODEL.split(":")[0] in m for m in models)
+                return any(resolve_role("local").split(":")[0] in m for m in models)
     except Exception:
         pass
     return False

@@ -571,11 +571,6 @@ class ModelProvider:
         return models
 
     def get_default_chat_model(self) -> str:
-        """Return the best available default chat model."""
-        if "anthropic" in self.providers:
-            return "claude-sonnet-4-5"
-        if "bedrock" in self.providers:
-            return "us.anthropic.claude-sonnet-4-5-v1:0"
-        if "ollama" in self.providers:
-            return "llama3.2:3b"
-        return "claude-sonnet-4-5"
+        """Return the default chat model, resolved from the DB-backed catalog (R4.4)."""
+        from backend.services.model_catalog import default_chat_model
+        return default_chat_model()
