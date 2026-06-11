@@ -5,6 +5,7 @@ spending-summary, and ask-db (NL→SQL).
 All return dict with optional '_display' key containing pre-formatted markdown.
 """
 import json
+from backend.services.model_catalog import resolve_role
 import logging
 import re
 from datetime import date, timedelta
@@ -400,7 +401,7 @@ async def ask_db(question: str) -> dict:
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-haiku-4-5",
+                    "model": resolve_role("haiku"),
                     "max_tokens": 1024,
                     "system": schema_prompt,
                     "messages": [{"role": "user", "content": question}],

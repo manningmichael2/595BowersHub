@@ -121,16 +121,3 @@ class CostTracker:
                 f"Consider using /commands for common lookups to save costs."
             )
         return None
-
-    @staticmethod
-    def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-        """Calculate cost in USD. Uses hardcoded rates as fallback."""
-        rates = {
-            "claude-haiku-4-5-20251001": (0.80, 4.00),
-            "claude-sonnet-4-5": (3.00, 15.00),
-            "claude-sonnet-4": (3.00, 15.00),
-            "claude-opus-4-5": (15.00, 75.00),
-        }
-        input_rate, output_rate = rates.get(model, (3.00, 15.00))
-        cost = (input_tokens * input_rate / 1_000_000) + (output_tokens * output_rate / 1_000_000)
-        return round(cost, 6)

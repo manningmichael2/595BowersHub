@@ -62,6 +62,19 @@ async def lifespan(app: FastAPI):
     await run_migrations(pool)
     app.state.pool = pool
 
+    # Warm the model-catalog resolver cache (T1: after migrations, before scheduler) so
+    # role/alias + cost lookups never take a per-call DB round-trip and never race an
+    # empty cache on the first request. Build the shared CatalogRefresh (one instance →
+    # one single-flight lock for both the scheduler job and the admin refresh endpoint);
+    # its invalidate hook rebuilds the resolver cache after each refresh.
+    from backend.services.model_catalog import (
+        init_resolver, build_default_sources, CatalogRefresh,
+    )
+    resolver = await init_resolver(pool)
+    app.state.catalog_refresh = CatalogRefresh(
+        pool, build_default_sources(config), invalidate=resolver.reload,
+    )
+
     # Seed admin user on first run
     from backend.services.auth import AuthService
     auth_service = AuthService(pool, config)
@@ -150,6 +163,29 @@ async def lifespan(app: FastAPI):
         CronTrigger(hour=7, minute=0),
         id="morning_briefing",
         name="Morning Briefing",
+        replace_existing=True,
+    )
+
+    # Model catalog discovery — refresh the DB-backed model list on a schedule (R2.2).
+    # Interval is DB-driven (floored); the `model_discovery_enabled` lever is checked at
+    # fire time so it can be toggled without a restart (admin POST /refresh ignores it).
+    from backend.services.model_catalog import get_discovery_config
+    _md_interval_hours, _ = await get_discovery_config(pool)
+
+    async def _run_model_discovery():
+        try:
+            _, enabled = await get_discovery_config(app.state.pool)
+            if not enabled:
+                return
+            await app.state.catalog_refresh.refresh(trigger="scheduled")
+        except Exception as e:
+            logger.error(f"Model catalog discovery failed: {e}")
+
+    scheduler.add_job(
+        _run_model_discovery,
+        IntervalTrigger(hours=_md_interval_hours),
+        id="model_discovery",
+        name="Model catalog discovery",
         replace_existing=True,
     )
 
@@ -269,11 +305,16 @@ async def list_slash_commands(workspace_id: int = 0):
 
 @app.get("/api/models")
 async def list_models():
-    """List available AI models."""
-    if hasattr(app.state, 'model_provider'):
-        models = await app.state.model_provider.list_models()
-        return [m.model_dump() for m in models]
-    return []
+    """List available AI models from the DB-backed catalog (single source of truth).
+
+    Served through an allowlist public DTO: id/provider/display_name + capability/context
+    fields, NO pricing (R1.2/R5.2). The model picker contract (id/provider/display_name)
+    is unchanged — `id` is the model_id string."""
+    from backend.services.model_catalog import get_resolver
+    try:
+        return get_resolver().list_active_public()
+    except RuntimeError:
+        return []   # resolver not yet warmed (pre-lifespan); never in normal operation
 
 
 # --- WebSocket endpoint ---

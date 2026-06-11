@@ -56,11 +56,8 @@ class Config:
     ADMIN_EMAIL: str = "admin@bowershub.local"
     ADMIN_PASSWORD: str = ""
 
-    # Model IDs — single source of truth for all model references.
-    # Update these when Anthropic releases new versions.
-    HAIKU_MODEL: str = "claude-haiku-4-5-20251001"
-    SONNET_MODEL: str = "claude-sonnet-4-5-20250514"
-    LOCAL_MODEL: str = "llama3.2:3b"
+    # Model IDs are no longer hardcoded here — they are DB-driven and resolved via
+    # backend.services.model_catalog.resolve_role(...) (spec: dynamic-model-discovery).
 
     @property
     def database_url(self) -> str:

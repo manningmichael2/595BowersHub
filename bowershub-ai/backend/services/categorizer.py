@@ -2,20 +2,21 @@
 Transaction Categorizer — in-process replacement for the n8n Categorizer workflow.
 
 Runs as a scheduled job (apscheduler) after SimpleFin nightly sync, or on-demand.
-Uses the local Ollama model (llama3.2:3b) instead of Anthropic Haiku for zero-cost
+Uses the configured local Ollama model (resolved from the DB catalog) for zero-cost
 classification.
 
 Logic mirrors the n8n workflow:
 1. Fetch uncategorized transactions from Postgres (up to 500)
 2. Fetch leaf categories + few-shot examples from category_examples
 3. Build a classification prompt per batch (50 txns per batch)
-4. Send to Ollama llama3.2:3b
+4. Send to the local Ollama model
 5. Parse JSON response, update transaction rows
 
 Fallback: if Ollama is unreachable or returns garbage, logs the error and
 skips — the next run will pick up the same uncategorized transactions.
 """
 import json
+from backend.services.model_catalog import resolve_role
 import logging
 from typing import Optional
 
@@ -27,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 OLLAMA_URL = "http://ollama:11434"
-MODEL = "llama3.2:3b"
 BATCH_SIZE = 50
 MAX_TRANSACTIONS = 500
 
@@ -155,7 +155,7 @@ async def run_categorizer() -> dict:
         "updated": total_updated,
         "fallback_to_other": total_fallback,
         "errors": errors,
-        "model": MODEL,
+        "model": resolve_role("local"),
     }
     logger.info(f"Categorizer: {summary}")
     return summary
@@ -168,7 +168,7 @@ async def _call_ollama(prompt: str) -> Optional[str]:
             resp = await client.post(
                 f"{OLLAMA_URL}/api/chat",
                 json={
-                    "model": MODEL,
+                    "model": resolve_role("local"),
                     "messages": [
                         {
                             "role": "system",

@@ -4,6 +4,7 @@ Hooks are workspace-scoped and fire on defined events with optional conditions.
 """
 
 import asyncio
+from backend.services.model_catalog import resolve_role
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -420,7 +421,7 @@ class HookEngine:
         retry (R11.12).
         """
         prompt = config.get("prompt", "")
-        model = config.get("model", "claude-haiku-4-5-20251001")
+        model = config.get("model") or resolve_role("haiku")
 
         result = await self.model_provider.complete(
             model=model,

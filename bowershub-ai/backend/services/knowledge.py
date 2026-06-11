@@ -7,6 +7,7 @@ Replaces the n8n Knowledge Memory workflow (9fTh1G0THWgI6XB3).
 - recall: searches /knowledge/ via filewriter's /search endpoint
 """
 import logging
+from backend.services.model_catalog import resolve_role
 import re
 from datetime import date
 from typing import Optional
@@ -235,7 +236,7 @@ async def _check_dedup(topic: str, existing: str, new_fact: str) -> dict:
             resp = await client.post(
                 f"{OLLAMA_URL}/api/chat",
                 json={
-                    "model": "llama3.2:3b",
+                    "model": resolve_role("local"),
                     "messages": [
                         {"role": "system", "content": "You are a deduplication classifier. Return ONLY the JSON object requested."},
                         {"role": "user", "content": prompt},

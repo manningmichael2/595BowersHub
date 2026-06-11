@@ -16,6 +16,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 from backend.config import Config
 from backend.database import get_pool
 from backend.models.message import CompletionResult, StreamChunk, ToolCall
+from backend.services.model_catalog import resolve_role
 from backend.services.model_provider import ModelProvider
 from backend.services.skill_executor import (
     SkillExecutor, SkillResult, SkillExecutionError, SkillPermissionError,
@@ -233,11 +234,11 @@ Present this data in a clear, conversational way. Use markdown formatting (table
                 return RoutingResult(
                     layer="L2",
                     content=tool_result["content"],
-                    model_used=tool_result.get("model_used", self.config.HAIKU_MODEL),
+                    model_used=tool_result.get("model_used", resolve_role("haiku")),
                     input_tokens=tool_result.get("input_tokens", 0),
                     output_tokens=tool_result.get("output_tokens", 0),
                     cost_usd=self._calculate_cost(
-                        self.config.HAIKU_MODEL,
+                        resolve_role("haiku"),
                         tool_result.get("input_tokens", 0),
                         tool_result.get("output_tokens", 0),
                     ),
@@ -647,7 +648,7 @@ Present this data in a clear, conversational way. Use markdown formatting (table
         """Handle /local — chat with the local Ollama model for free.
         
         Streams the response via WebSocket just like L3, but uses the local
-        Ollama model (llama3.2:3b) at zero cost.
+        local Ollama model at zero cost.
         """
         if not args.strip():
             help_text = """**🖥️ /local — Free local AI chat**
@@ -667,7 +668,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         # Stream response from Ollama
         ws_manager = getattr(self, '_ws_manager', None)
 
-        model = "llama3.2:3b"
+        model = resolve_role("local")
         messages = [{"role": "user", "content": args.strip()}]
 
         full_content = ""
@@ -1074,7 +1075,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         try:
             result = await asyncio.wait_for(
                 self.model_provider.complete(
-                    model=self.config.HAIKU_MODEL,
+                    model=resolve_role("haiku"),
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=256,
                 ),
@@ -1163,7 +1164,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
                 else:
                     # Complex data — Haiku formatting pass for clean mobile rendering
                     formatting_result = await self.model_provider.complete(
-                        model=self.config.HAIKU_MODEL,
+                        model=resolve_role("haiku"),
                         messages=[{"role": "user", "content": (
                             f"You are formatting data for a mobile chat app. The user asked: \"{original_message}\"\n\n"
                             f"Raw response:\n{display_content[:5000]}\n\n"
@@ -1183,7 +1184,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             else:
                 # Wrap in conversational language via a short Haiku call
                 formatting_result = await self.model_provider.complete(
-                    model=self.config.HAIKU_MODEL,
+                    model=resolve_role("haiku"),
                     messages=[{"role": "user", "content": self.FORMATTING_PROMPT.format(
                         question=original_message,
                         raw_data=raw_formatted[:3000],  # Cap context size
@@ -1197,10 +1198,10 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             return RoutingResult(
                 layer="L2",
                 content=content,
-                model_used=self.config.HAIKU_MODEL,
+                model_used=resolve_role("haiku"),
                 input_tokens=total_input,
                 output_tokens=total_output,
-                cost_usd=self._calculate_cost(self.config.HAIKU_MODEL, total_input, total_output),
+                cost_usd=self._calculate_cost(resolve_role("haiku"), total_input, total_output),
                 skill_name=skill_name,
             )
 
@@ -1211,7 +1212,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             return RoutingResult(
                 layer="L2",
                 content=f"I tried to look that up but the {e.skill_name} skill had an issue. {e.detail or 'Try again?'}",
-                model_used=self.config.HAIKU_MODEL,
+                model_used=resolve_role("haiku"),
                 skill_name=skill_name,
             )
 
@@ -1554,16 +1555,8 @@ Then call the remember tool with both the inferred topic and the fact. Don't ask
         return content
 
     def _calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        """Calculate cost in USD based on model rates."""
-        # Heuristic pricing based on model name
-        lower = model.lower()
-        if "haiku" in lower:
-            input_rate, output_rate = 0.80, 4.00
-        elif "opus" in lower:
-            input_rate, output_rate = 15.00, 75.00
-        elif "sonnet" in lower:
-            input_rate, output_rate = 3.00, 15.00
-        else:
-            input_rate, output_rate = 3.00, 15.00  # Default to Sonnet pricing
-        cost = (input_tokens * input_rate / 1_000_000) + (output_tokens * output_rate / 1_000_000)
-        return round(cost, 6)
+        """Calculate cost in USD. Delegates to the single catalog-reading cost function
+        (DB price by exact key, non-zero heuristic floor on a miss) — the heuristic no
+        longer lives here. All three call sites route through this one home (R3.3)."""
+        from backend.services.model_catalog import cost_for
+        return cost_for(model, input_tokens, output_tokens)
