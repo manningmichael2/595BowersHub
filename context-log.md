@@ -242,3 +242,14 @@ Closed the pricing-visibility gaps: prices are now viewable/editable in the Mode
 - [Next] standing follow-ups unchanged (curl healthcheck, n8n SQLite prune, 4 xfailed→real-DB, dead `model_provider._infer_pricing`/`list_models`). Then pgvector (§8.3).
 
 ---
+
+## [2026-06-11] Session Notes — Claude Code (Models UX: inline reference, save-on-blur, Confirm; roles decision pending)
+
+UX iteration on the Models admin section per owner feedback, + a flagged architecture decision on role naming. On `main` @ `2cea4fb`.
+
+- [Inline reference] `/api/admin/models` now returns `ref_input_cost`/`ref_output_cost` (best-matching `bh_model_price_rules` rule via LATERAL join). Each row shows the canonical reference inline, amber when it differs — immediately surfaces the stale bare `claude-opus-4-5` ($15 actual vs $5 ref) residual.
+- [No Save button] Prices save on blur/Enter; editing clears the unconfirmed flag. Flagged rows whose price already matches get a one-click **Confirm** (clears the flag without editing) — fixed the confirm-without-edit gap. Dropped the standalone reference table (now inline). tsc clean, 219/219 frontend tests, deployed + verified in bundle.
+- [DECISION PENDING — semantic roles] Owner is right that `bh_model_aliases` roles should be intent-based, not vendor-tier names. Current usage (grounded): `haiku`=cheap/fast utility (~12 sites), `local`=ollama background (~5), `sonnet`=default chat/L3; **`opus` is seeded but referenced by nothing** (L3 = "Sonnet/selected"). Proposed rename: `sonnet→chat`, `haiku→fast` (not "budget" — it's a fast worker), `opus→reasoning` (and wire L3 to it), `local→local`. **Not implemented** — needs owner sign-off on names; it's a rename migration (role is a PK) + ~20 `resolve_role()` sites + default/cost fallbacks + tests.
+- [Next] (a) the semantic-roles rename once names are confirmed; (b) standing follow-ups (curl healthcheck, n8n SQLite prune, 4 xfailed→real-DB, dead `model_provider` methods, bare `opus-4-5` will age out). Then pgvector (§8.3).
+
+---
