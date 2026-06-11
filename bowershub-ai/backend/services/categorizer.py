@@ -2,14 +2,14 @@
 Transaction Categorizer — in-process replacement for the n8n Categorizer workflow.
 
 Runs as a scheduled job (apscheduler) after SimpleFin nightly sync, or on-demand.
-Uses the local Ollama model (llama3.2:3b) instead of Anthropic Haiku for zero-cost
+Uses the configured local Ollama model (resolved from the DB catalog) for zero-cost
 classification.
 
 Logic mirrors the n8n workflow:
 1. Fetch uncategorized transactions from Postgres (up to 500)
 2. Fetch leaf categories + few-shot examples from category_examples
 3. Build a classification prompt per batch (50 txns per batch)
-4. Send to Ollama llama3.2:3b
+4. Send to the local Ollama model
 5. Parse JSON response, update transaction rows
 
 Fallback: if Ollama is unreachable or returns garbage, logs the error and

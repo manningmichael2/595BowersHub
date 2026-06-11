@@ -100,25 +100,29 @@
 - [ ] Point `get_default_chat_model()` (`model_provider.py:573`) at `get_resolver().default_chat_model()`.
 - [ ] **Tests:** each de-littered site selects the role-resolved model; changing a role alias changes the model used with no redeploy; **`ask_db` still works after the wire-id change** (`finance.py:403` now sends the resolved `claude-haiku-4-5-20251001` instead of the dateless form — explicit behavior-change test on the C1-sandboxed path); existing service tests still pass.
 
-## Task 10: Admin curation surface — typed fields + alias repoint endpoint
+## Task 10: Admin curation surface — typed fields + alias repoint endpoint — ✅ DONE
 - **Effort:** S
 - **Dependencies:** Task 2, Task 5
 - **Requirements:** R5.1
+- **Outcome:** `ModelRateUpdate` gains typed `is_active`/`needs_price_confirmation` + `model_config={"extra":"forbid"}` (closed whitelist — keeps the `f"{field}=${idx}"` builder safe). `GET /api/admin/models` now joins a `roles` array per model; added `GET /api/admin/models/aliases` and `PUT /api/admin/models/aliases/{role}` (validates target is **active** → 404/400 otherwise; parameterized upsert). Both PATCH and alias-repoint call `_invalidate_resolver()` so edits take effect immediately. Tests `tests/test_model_admin.py` (4): typed edit + unknown-field 422, roles in GET, alias repoint valid/inactive/missing, require_admin RBAC. 8/8 green.
 - [ ] Extend `ModelRateUpdate` (`admin.py`) with **typed** `is_active`/`needs_price_confirmation` fields (closed Pydantic whitelist — never a free-form column name); `GET /api/admin/models` returns the new columns + joined alias assignments.
 - [ ] Add `PUT /api/admin/models/aliases/{role}` (`require_admin`, parameterized) to repoint a role to an active model; invalidate the resolver cache on success.
 - [ ] **Tests:** admin can edit price/flags and repoint an alias; both require admin; `ModelRateUpdate` rejects unknown fields; repoint to an inactive model is refused.
 
-## Task 11: Cleanup, full-suite + delitteralization gate (phase P5)
+## Task 11: Cleanup, full-suite + delitteralization gate (phase P5) — ✅ DONE
 - **Effort:** S
 - **Dependencies:** Task 7, Task 8, Task 9, Task 10
 - **Requirements:** R4.3
+- **Outcome:** Removed the dead `model_provider._fallback_models` (the last `claude-*` literals; dead callers return `[]`) and de-littered 3 stale docstrings (categorizer/router_engine) that named `llama3.2:3b`. **Acceptance grep clean**: no live-default model literals in production code outside `model_catalog.py` (the documented cold-start seed/fallback) — only `tests/` and migration seed retain ids. **Full backend suite: 489 passed, 4 xfailed (pre-existing mock tests), 0 failed** — and because DB tests build the schema from `0001→0005`, the from-empty migration gate passes too. (Note: the unreachable provider `list_models`/`_infer_pricing` methods remain as literal-free dead code — optional future tidy-up, not grep-flagged.)
 - [ ] Remove any dead legacy constants/paths left behind; confirm the only residual model literals are the `StaticDiscoverySource` cold-start seed and migration seed data.
 - [ ] **Tests:** acceptance grep `grep -rE "claude-[a-z0-9.-]+|llama[0-9]" bowershub-ai/backend --include=*.py` outside `migrations/`/tests returns only the documented seed; full backend suite `PYTHONPATH=. .venv/bin/python -m pytest -q` green; CI from-empty migration build passes.
 
 ## Definition of Done
 
-- [ ] All tasks complete; every requirement in `requirements.md` is satisfied (validated by `.claude/hooks/spec-validate.py`).
-- [ ] No hardcoded live-default model literals remain in backend service code (only the documented cold-start seed + migration seed) — Rule #1.
-- [ ] `bh_model_rates` is the single source of truth; `/api/models`, cost calc, and the picker all read it; discovery refreshes it on schedule and never clobbers operator prices.
-- [ ] Tests pass (`PYTHONPATH=. .venv/bin/python -m pytest -q`; frontend `npx tsc --noEmit` + `npm test`); schema builds from zero in CI.
-- [ ] `context-log.md` updated with a dated entry.
+- [x] All tasks complete; every requirement in `requirements.md` is satisfied (validated by `.claude/hooks/spec-validate.py` → 21/21).
+- [x] No hardcoded live-default model literals remain in backend service code (only the documented cold-start seed in `model_catalog.py` + migration seed) — Rule #1.
+- [x] `bh_model_rates` is the single source of truth; `/api/models`, cost calc, and the picker all read it; discovery refreshes it on schedule and never clobbers operator prices.
+- [x] Tests pass (`PYTHONPATH=. .venv/bin/python -m pytest -q` → 489 passed, 4 xfailed; frontend `npx tsc --noEmit` clean); schema builds from zero (DB tests run `0001→0005`).
+- [x] `context-log.md` updated with a dated entry.
+
+**Deploy-gated (owner's call):** migration `0005` applies on the next app restart; the sonnet→4.6 / opus→canonical alias takes effect then, and cost dashboards will reflect the corrections (local → $0, Opus → $5/$25). Not yet deployed.

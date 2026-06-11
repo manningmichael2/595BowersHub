@@ -138,7 +138,7 @@ class AnthropicProvider(BaseProvider):
                 )
                 if resp.status_code != 200:
                     logger.warning(f"Anthropic /v1/models returned {resp.status_code}")
-                    return self._fallback_models()
+                    return []
 
                 data = resp.json()
                 models = []
@@ -162,19 +162,7 @@ class AnthropicProvider(BaseProvider):
                 return models
         except Exception as e:
             logger.warning(f"Failed to fetch Anthropic models: {e}")
-            return self._fallback_models()
-
-    def _fallback_models(self) -> List[ModelInfo]:
-        """Hardcoded fallback if the models API is unreachable."""
-        return [
-            ModelInfo(id="claude-haiku-4-5", provider="anthropic", display_name="Claude Haiku 4.5",
-                      supports_vision=True, supports_tools=True, max_output_tokens=8192,
-                      input_cost_per_mtok=0.80, output_cost_per_mtok=4.00),
-            ModelInfo(id="claude-sonnet-4-5", provider="anthropic", display_name="Claude Sonnet 4.5",
-                      supports_vision=True, supports_tools=True, max_output_tokens=8192,
-                      input_cost_per_mtok=3.00, output_cost_per_mtok=15.00),
-        ]
-
+            return []
 
 class BedrockProvider(BaseProvider):
     """AWS Bedrock provider using boto3."""

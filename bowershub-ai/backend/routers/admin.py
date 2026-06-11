@@ -19,10 +19,30 @@ class UserUpdate(BaseModel):
 
 
 class ModelRateUpdate(BaseModel):
+    # Closed whitelist — the f"{field} = ${idx}" builder in update_model_rate is safe
+    # ONLY because these are typed Pydantic fields, never free-form column names (R5.1).
+    model_config = {"extra": "forbid"}   # reject unknown fields outright
     input_cost_per_mtok: Optional[float] = None
     output_cost_per_mtok: Optional[float] = None
     supports_vision: Optional[bool] = None
     supports_tools: Optional[bool] = None
+    is_active: Optional[bool] = None
+    needs_price_confirmation: Optional[bool] = None
+
+
+class AliasUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    model_id: str
+
+
+async def _invalidate_resolver() -> None:
+    """Rebuild the resolver cache after an admin edit so changes take effect at once.
+    No-op when the resolver isn't initialized (e.g. unit tests without lifespan)."""
+    try:
+        from backend.services.model_catalog import get_resolver
+        await get_resolver().reload()
+    except RuntimeError:
+        pass
 
 
 @router.get("/users")
@@ -149,10 +169,29 @@ async def cost_dashboard(
 
 @router.get("/models")
 async def list_models(user: dict = Depends(require_admin)):
-    """List all model rates."""
+    """List all model rates (incl. price, lifecycle, price-confirm flag) with the
+    role aliases each model fills (R5.1)."""
     pool = get_pool()
     async with pool.acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM public.bh_model_rates ORDER BY provider, model_id")
+        rows = await conn.fetch(
+            """
+            SELECT r.*,
+                   COALESCE(array_agg(a.role) FILTER (WHERE a.role IS NOT NULL), '{}') AS roles
+            FROM public.bh_model_rates r
+            LEFT JOIN public.bh_model_aliases a ON a.model_id = r.model_id
+            GROUP BY r.id
+            ORDER BY r.provider, r.model_id
+            """
+        )
+    return [dict(r) for r in rows]
+
+
+@router.get("/models/aliases")
+async def list_model_aliases(user: dict = Depends(require_admin)):
+    """The role -> model_id map ("current haiku/sonnet/opus/local")."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT role, model_id, updated_at FROM public.bh_model_aliases ORDER BY role")
     return [dict(r) for r in rows]
 
 
@@ -180,6 +219,34 @@ async def update_model_rate(model_id: int, body: ModelRateUpdate, user: dict = D
         )
     if not row:
         raise HTTPException(status_code=404, detail="Model not found")
+    await _invalidate_resolver()   # price/lifecycle edits take effect immediately
+    return dict(row)
+
+
+@router.put("/models/aliases/{role}")
+async def set_model_alias(role: str, body: AliasUpdate, user: dict = Depends(require_admin)):
+    """Repoint a role ("current haiku/sonnet/opus/local") to another model (R5.1) —
+    "change current Sonnet via the DB, no redeploy". Target must be an ACTIVE model."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        target = await conn.fetchrow(
+            "SELECT is_active FROM public.bh_model_rates WHERE model_id = $1", body.model_id
+        )
+        if target is None:
+            raise HTTPException(status_code=404, detail="model_id not in catalog")
+        if not target["is_active"]:
+            raise HTTPException(status_code=400, detail="cannot point a role at an inactive model")
+        row = await conn.fetchrow(
+            """
+            INSERT INTO public.bh_model_aliases (role, model_id, updated_by, updated_at)
+            VALUES ($1, $2, $3, now())
+            ON CONFLICT (role) DO UPDATE SET model_id = EXCLUDED.model_id,
+                                             updated_by = EXCLUDED.updated_by, updated_at = now()
+            RETURNING role, model_id, updated_at
+            """,
+            role, body.model_id, user.get("id"),
+        )
+    await _invalidate_resolver()   # the router/ask_db tier now resolves to the new model
     return dict(row)
 
 

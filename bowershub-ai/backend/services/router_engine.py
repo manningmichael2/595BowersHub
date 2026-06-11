@@ -648,7 +648,7 @@ Present this data in a clear, conversational way. Use markdown formatting (table
         """Handle /local — chat with the local Ollama model for free.
         
         Streams the response via WebSocket just like L3, but uses the local
-        Ollama model (llama3.2:3b) at zero cost.
+        local Ollama model at zero cost.
         """
         if not args.strip():
             help_text = """**🖥️ /local — Free local AI chat**

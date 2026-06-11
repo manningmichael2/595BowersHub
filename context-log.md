@@ -173,3 +173,16 @@ Dogfooded the `/spec` workflow on the planned next feature (§9.6). Authored a c
 - [Next]: implementation is a separate effort — work `tasks.md` top-to-bottom starting at Task 1 (verify the installed `anthropic` SDK actually exposes `models.list()` capabilities/context fields on the pinned version). Migration `0005` is the next free number after `0004_n8n_scoped_role`.
 
 ---
+
+## [2026-06-11] Session Notes — Claude Code (dynamic-model-discovery IMPLEMENTED, tasks 1-11)
+
+Implemented the full `dynamic-model-discovery` spec on branch `feature/dynamic-model-discovery` (8 commits). DB-driven model catalog replaces hardcoded model IDs (§9.6 / Rule #1). **Not deployed** — 0005 applies on next app restart (owner's call).
+
+- [T0/P0] `anthropic==0.105.0` `models.list()` verified (id/display_name/max_input_tokens/max_tokens/capabilities all populated). Migration `0005`: lifecycle+capability+price-confirm columns on `bh_model_rates`, `bh_model_aliases` (role→model_id, FK+guard), `bh_model_refresh_log`, discovery settings. T0 finding: `models.list()` returns canonical dated IDs, not the bare seed forms → aliases reseeded to canonical (sonnet→**claude-sonnet-4-6**, opus→claude-opus-4-5-20251101) + alias-targeted models are never auto-deactivated.
+- [P1] `services/model_catalog.py`: injectable `DiscoverySource`s (Anthropic SDK / Ollama / Static cold-start) → `CatalogRefresh` (single-flight upsert; preserves operator prices; provider-scoped churn-safe deactivation via `missed_fetch_count`; audit log) → `Resolver` read cache (role aliases + cost lookup, no per-call DB hit; fail-closed) warmed in lifespan. Scheduler job (DB-driven interval, floored 6h) + `POST /api/admin/models/refresh`.
+- [P2] `/api/models` reads the catalog via an allowlist public DTO (no price fields). [P3] cost consolidated to one `cost_for()` (exact-match incl. inactive → normalize → non-zero heuristic floor; never silent 0); 3 router callers + dead `CostTracker` removed. **Cost-parity (live diff):** Claude cloud cost-neutral; local/Ollama corrected $3/$15→**$0**; Opus corrected stale $15/$75→**$5/$25** (all corrections, no regressions).
+- [P4] delitteralized ~14 sites to `resolve_role(...)`; removed `os.environ.get` model overrides + dead `config.py` constants; `get_default_chat_model` → DB. [P5] removed dead `_fallback_models`; **acceptance grep clean** (only `model_catalog.py` documented seed retains literals).
+- [Verify] spec-validate 21/21 traceable; **full suite 489 passed / 4 xfailed / 0 failed** (DB tests build `0001→0005` = from-empty gate); frontend `tsc` clean.
+- [Next] deploy the branch (merge → restart applies 0005; verify scheduled discovery runs + cost dashboards reflect corrections). Optional tidy-up: remove the now-dead provider `list_models`/`_infer_pricing` methods in `model_provider.py` (literal-free, unflagged).
+
+---
