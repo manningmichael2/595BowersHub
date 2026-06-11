@@ -228,3 +228,17 @@ Resolved the price-confirmation follow-up from the entry above by replacing the 
 - [Next] (a) optional: price-edit + confirm control in the Models admin section (would let the flag clear and rules be edited without a migration); (b) standing follow-ups unchanged (curl healthcheck, n8n SQLite prune, 4 xfailed→real-DB, dead `model_provider._infer_pricing`/`list_models`). Then pgvector (§8.3).
 
 ---
+
+## [2026-06-11] Session Notes — Claude Code (price visibility + edit UI + cost backfill)
+
+Closed the pricing-visibility gaps: prices are now viewable/editable in the Models admin section, the canonical reference is surfaced in-UI, and historical Cost-dashboard numbers were re-costed at corrected rates. On `main` @ `8b684f1`.
+
+- [Found, reused] The backend already had it: `GET /api/admin/models` returns full rows (prices + roles + `needs_price_confirmation`), and `PATCH /api/admin/models/{id}` edits rates with resolver invalidation. So this was frontend wiring + one reference endpoint + a backfill — no new costing infra.
+- [Models UI] Rewrote `ModelsSection` (`AdminConsolePage.tsx`) to read `/api/admin/models`: shows In/Out $/MTok, roles, and an `⚠ unconfirmed` badge; inline price edit → `PATCH /api/admin/models/{id}` where **Save sets the rate and clears `needs_price_confirmation`** (the missing confirm path — the flag can finally clear). Kept the Refresh button.
+- [Reference] New `GET /api/admin/models/price-rules` + a "Reference pricing (canonical)" table from `bh_model_price_rules` — the operator can double-check actual prices against Anthropic's published rates without re-searching. (The B reference is persisted in that table; the notes say "canonical".)
+- [Backfill — 0008] The Cost dashboard sums `bh_messages.cost_usd`, frozen at send time, so the 0006/0007 fixes were forward-only. 0008 recomputes `cost_usd` for exact catalog-matched messages using current rates (same formula/round(6) as `cost_for`; only-changed rows → idempotent; no-op on fresh builds). History here was tiny and 100% exact-match: **45 sonnet-4-5 (unchanged $3/$15) + 23 haiku (→$1/$5)**. Took a fresh backup (`2026-06-11_1730`) before the financial-record mutation.
+- [Judgment, per "unless you think that's a bad idea"] Price UI + reference: clearly good, low-risk. Backfill: the one with a real trade-off — it overwrites historical cost in place. Did it because it *corrects* always-wrong values (not rewriting legitimately-different historical pricing), it's deterministic/re-runnable, exact-match only, and backed up first. Flagged the immutability point.
+- [Verify] tsc clean; full frontend suite **219/219**; backend compiles; both migrations validated against real Postgres pre-deploy. Live post-deploy: 0008 applied; all 23 haiku rows match the corrected formula (`all_match=t`); dashboard `by_model` now sums at corrected rates; new UI + reference endpoint confirmed in the served bundle. Admin GET/PATCH endpoints couldn't be curled end-to-end (token-mint blocked by auto-mode) — covered by the frontend tests + DB-level data checks; the live edit click-test is the owner's.
+- [Next] standing follow-ups unchanged (curl healthcheck, n8n SQLite prune, 4 xfailed→real-DB, dead `model_provider._infer_pricing`/`list_models`). Then pgvector (§8.3).
+
+---
