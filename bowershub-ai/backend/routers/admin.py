@@ -186,6 +186,21 @@ async def list_models(user: dict = Depends(require_admin)):
     return [dict(r) for r in rows]
 
 
+@router.get("/models/price-rules")
+async def list_model_price_rules(user: dict = Depends(require_admin)):
+    """The canonical provisional-pricing rules (bh_model_price_rules, 0006) — the
+    operator-curated reference of what each model family *should* cost, grounded in
+    Anthropic's published rates. Discovery applies these to new models; surfaced here
+    so the actual catalog prices can be double-checked against the reference."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT provider, pattern, input_cost_per_mtok, output_cost_per_mtok, priority, note "
+            "FROM public.bh_model_price_rules ORDER BY priority DESC, pattern"
+        )
+    return [dict(r) for r in rows]
+
+
 @router.get("/models/aliases")
 async def list_model_aliases(user: dict = Depends(require_admin)):
     """The role -> model_id map ("current haiku/sonnet/opus/local")."""

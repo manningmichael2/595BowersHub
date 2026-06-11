@@ -543,18 +543,33 @@ function SkillsSection() {
 
 // ---- Models section ------------------------------------------------------
 
-interface CatalogModel {
-  id: string
+interface AdminModel {
+  id: number                            // numeric row id — the PATCH key
+  model_id: string
   provider: string
   display_name: string
+  input_cost_per_mtok: number | null    // $/MTok (admin-only — not in the public DTO)
+  output_cost_per_mtok: number | null
+  needs_price_confirmation: boolean
+  is_active: boolean
+  roles: string[]
+}
+
+interface PriceRule {
+  provider: string | null
+  pattern: string
+  input_cost_per_mtok: number
+  output_cost_per_mtok: number
+  priority: number
+  note: string | null
 }
 
 function ModelsSection() {
-  // Lists the live catalog (public DTO — active models, no prices) and exposes
-  // the operator refresh (R2.3): POST /api/admin/models/refresh discovers from
-  // the Anthropic Models API + Ollama, upserting models while preserving
-  // operator-set prices. Runs even when the scheduled lever is off.
-  const { data, isLoading, error, reload } = useEndpointData<CatalogModel[]>('/api/models')
+  // Admin catalog view (/api/admin/models, prices incl.) with inline price editing
+  // (PATCH /api/admin/models/{id}), the operator refresh (R2.3), and the canonical
+  // pricing reference (bh_model_price_rules, 0006) so actual prices can be checked.
+  const { data, isLoading, error, reload } = useEndpointData<AdminModel[]>('/api/admin/models')
+  const rules = useEndpointData<PriceRule[]>('/api/admin/models/price-rules')
   const [refreshing, setRefreshing] = useState(false)
   const [result, setResult] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -585,9 +600,10 @@ function ModelsSection() {
         <div>
           <h3 className="text-sm font-medium text-gray-300">Model Catalog</h3>
           <p className="text-xs text-gray-500 mt-0.5 max-w-xl">
-            DB-driven model list. Refresh discovers models from the Anthropic Models API
-            and Ollama; operator-set prices in <span className="font-mono">bh_model_rates</span> are
-            preserved. Runs on a schedule too — this triggers one immediately.
+            DB-driven model list with operator-owned prices ($/MTok). Edit a price and
+            Save to set it and clear the unconfirmed flag. Refresh discovers models from
+            the Anthropic Models API + Ollama (preserving your prices) — runs on a
+            schedule too; this triggers one now.
           </p>
         </div>
         <button
@@ -611,27 +627,24 @@ function ModelsSection() {
       )}
 
       <SectionStateGuard isLoading={isLoading} error={error}>
-        <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto">
-          <table className="w-full text-sm min-w-[500px]">
+        <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto mb-6">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-gray-800">
                 <th className="text-left px-4 py-2 text-gray-400">Model ID</th>
-                <th className="text-left px-4 py-2 text-gray-400">Provider</th>
-                <th className="text-left px-4 py-2 text-gray-400">Display Name</th>
+                <th className="text-left px-3 py-2 text-gray-400">Provider</th>
+                <th className="text-left px-3 py-2 text-gray-400">Roles</th>
+                <th className="text-right px-3 py-2 text-gray-400">In $/MTok</th>
+                <th className="text-right px-3 py-2 text-gray-400">Out $/MTok</th>
+                <th className="text-left px-3 py-2 text-gray-400"></th>
               </tr>
             </thead>
             <tbody>
               {data && data.length > 0 ? (
-                data.map(m => (
-                  <tr key={m.id} className="border-b border-gray-800/50">
-                    <td className="px-4 py-2 text-gray-300 font-mono text-xs">{m.id}</td>
-                    <td className="px-4 py-2 text-gray-400">{m.provider}</td>
-                    <td className="px-4 py-2 text-gray-300">{m.display_name}</td>
-                  </tr>
-                ))
+                data.map(m => <ModelRow key={m.id} model={m} onSaved={reload} />)
               ) : (
                 <tr>
-                  <td colSpan={3} className="px-4 py-4 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-4 text-center text-gray-500">
                     No models
                   </td>
                 </tr>
@@ -640,7 +653,105 @@ function ModelsSection() {
           </table>
         </div>
       </SectionStateGuard>
+
+      <h3 className="text-sm font-medium text-gray-300 mb-1">Reference pricing (canonical)</h3>
+      <p className="text-xs text-gray-500 mb-3 max-w-xl">
+        Operator-curated rules from <span className="font-mono">bh_model_price_rules</span> — what
+        each model family should cost per Anthropic's published rates. Discovery applies the
+        highest-priority matching rule to new models; check the table above against this.
+      </p>
+      <SectionStateGuard isLoading={rules.isLoading} error={rules.error}>
+        <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto">
+          <table className="w-full text-sm min-w-[560px]">
+            <thead>
+              <tr className="border-b border-gray-800">
+                <th className="text-left px-4 py-2 text-gray-400">Pattern</th>
+                <th className="text-left px-3 py-2 text-gray-400">Provider</th>
+                <th className="text-right px-3 py-2 text-gray-400">In $/MTok</th>
+                <th className="text-right px-3 py-2 text-gray-400">Out $/MTok</th>
+                <th className="text-left px-3 py-2 text-gray-400">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.data?.map((r, i) => (
+                <tr key={i} className="border-b border-gray-800/50">
+                  <td className="px-4 py-2 text-gray-300 font-mono text-xs">{r.pattern}</td>
+                  <td className="px-3 py-2 text-gray-400">{r.provider ?? 'any'}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">${Number(r.input_cost_per_mtok).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-gray-300">${Number(r.output_cost_per_mtok).toFixed(2)}</td>
+                  <td className="px-3 py-2 text-gray-500 text-xs">{r.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </SectionStateGuard>
     </div>
+  )
+}
+
+function fmtRate(v: number | null): string {
+  return v == null ? '' : String(Number(v))
+}
+
+function ModelRow({ model, onSaved }: { model: AdminModel; onSaved: () => Promise<void> | void }) {
+  const [inCost, setInCost] = useState(fmtRate(model.input_cost_per_mtok))
+  const [outCost, setOutCost] = useState(fmtRate(model.output_cost_per_mtok))
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const dirty = inCost !== fmtRate(model.input_cost_per_mtok) || outCost !== fmtRate(model.output_cost_per_mtok)
+  const valid = inCost.trim() !== '' && outCost.trim() !== '' && !isNaN(Number(inCost)) && !isNaN(Number(outCost))
+
+  const save = async () => {
+    setSaving(true)
+    setErr(null)
+    try {
+      // Saving a price is an explicit confirmation → clear the unconfirmed flag.
+      await api.patch(`/api/admin/models/${model.id}`, {
+        input_cost_per_mtok: Number(inCost),
+        output_cost_per_mtok: Number(outCost),
+        needs_price_confirmation: false,
+      })
+      await onSaved()
+    } catch (e: any) {
+      setErr(e?.response?.data?.detail || 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cell = 'w-20 bg-[#1a1a2e] border border-gray-700 rounded px-2 py-1 text-right text-gray-200 focus:border-indigo-500 focus:outline-none'
+  return (
+    <tr className={'border-b border-gray-800/50 ' + (model.is_active ? '' : 'opacity-50')}>
+      <td className="px-4 py-2 text-gray-300 font-mono text-xs">
+        {model.model_id}
+        {model.needs_price_confirmation && (
+          <span className="ml-2 text-amber-400" title="Provisional price — set and Save to confirm">⚠ unconfirmed</span>
+        )}
+        {!model.is_active && <span className="ml-2 text-gray-600">(inactive)</span>}
+      </td>
+      <td className="px-3 py-2 text-gray-400">{model.provider}</td>
+      <td className="px-3 py-2 text-indigo-300 text-xs">{model.roles?.join(', ')}</td>
+      <td className="px-3 py-2 text-right">
+        <input className={cell} value={inCost} onChange={e => setInCost(e.target.value)} inputMode="decimal" />
+      </td>
+      <td className="px-3 py-2 text-right">
+        <input className={cell} value={outCost} onChange={e => setOutCost(e.target.value)} inputMode="decimal" />
+      </td>
+      <td className="px-3 py-2">
+        {dirty && (
+          <button
+            onClick={save}
+            disabled={saving || !valid}
+            className="px-2.5 py-1 rounded text-xs bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border border-indigo-500/30 disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        )}
+        {err && <span className="text-red-400 text-xs ml-2">{err}</span>}
+      </td>
+    </tr>
   )
 }
 
