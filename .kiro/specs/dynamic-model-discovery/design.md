@@ -48,7 +48,7 @@ All new code lives in **`bowershub-ai/backend/services/model_catalog.py`** (one 
   - **R1.5 chat-target filter — concrete rule:** keep a model only if it is a usable text-conversation target. Primary signal: the `id` is in the chat family (`claude-*`) **and** the `capabilities` dict does not mark it embedding-only; if `capabilities` exposes a structured-output / messages capability leaf, require it. Because the exact `capabilities` schema varies by SDK version (see precondition T0), the filter is implemented defensively: unknown/missing capability → fall back to an allow-by-id-prefix rule (`claude-`), never silently drop a chat model.
   - **SDK field fallback (M3/R1.3):** field availability is verified for the installed `anthropic` version in precondition **T0** before build. If `max_input_tokens` / `capabilities` are absent on the pinned SDK, the source writes `NULL` context and `false`/`NULL` capability flags rather than guessing — "as available" per R1.3. The design does **not** re-introduce the old fabricated `True/True/4096` guesses (`model_provider.py:156-158`).
 - **`OllamaDiscoverySource`**: keeps `/api/tags`; contributes to the same catalog (R2.1). Ollama's API supplies **no** capability/context metadata, so Ollama rows get `NULL` `max_input_tokens` and `false` capability flags — acceptable for the picker (display only) and for R1.5 (Ollama IDs are local-chat targets by construction). `complete=False` if `/api/tags` errors.
-- **`StaticDiscoverySource`**: the documented cold-start seed (R2.4) — the **only** place hardcoded model literals live, replacing the scattered `_fallback_models` (`model_provider.py:167`, which uses dateless `claude-haiku-4-5`/`claude-sonnet-4-5`). This is the single residual the acceptance grep allow-lists. **Its model_ids MUST match the alias-seed model_ids exactly** (`claude-haiku-4-5-20251001`, `claude-sonnet-4-5`, `claude-opus-4-5`, `llama3.2:3b`) — otherwise a cold-start catalog built only from the static seed would not contain the rows the aliases point at, and `resolve_role` would fail closed on first boot. (Note: the old dateless forms in `_fallback_models`/`get_default_chat_model` are *not* carried over.)
+- **`StaticDiscoverySource`**: the documented cold-start seed (R2.4) — the **only** place hardcoded model literals live, replacing the scattered `_fallback_models` (`model_provider.py:167`, which uses dateless `claude-haiku-4-5`/`claude-sonnet-4-5`). This is the single residual the acceptance grep allow-lists. **Its model_ids MUST match the alias-seed model_ids exactly** (`claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `llama3.2:3b` — the canonical IDs per the T0 decision) — otherwise a cold-start catalog built only from the static seed would not contain the rows the aliases point at, and `resolve_role` would fail closed on first boot. (Note: the old dateless forms in `_fallback_models`/`get_default_chat_model` are *not* carried over.)
 - Injectable: `CatalogRefresh` takes `list[DiscoverySource]`; tests pass a `FakeDiscoverySource` with scripted pages (R2.6) — no live URL reached.
 
 ### `CatalogRefresh` (orchestration seam)
@@ -61,8 +61,10 @@ All new code lives in **`bowershub-ai/backend/services/model_catalog.py`** (one 
       SET missed_fetch_count = missed_fetch_count + 1,
           is_active = (missed_fetch_count + 1 < $stale_misses)   -- deactivate at the Nth consecutive complete-miss
     WHERE provider = ANY($complete_providers)
-      AND model_id <> ALL($seen_ids);
+      AND model_id <> ALL($seen_ids)
+      AND model_id NOT IN (SELECT model_id FROM public.bh_model_aliases);  -- alias-targeted models are never auto-deactivated
    ```
+   **Alias-protection invariant (approved T0 decision):** a model that is the target of any role alias is never auto-deactivated — even if discovery stops returning it — so a "current X" role can never be aged-out from under the operator. The day-one aliases point at canonical discoverable IDs anyway (so this is belt-and-suspenders), but it also makes future operator repoints safe. (`bh_model_aliases.model_id` is indexed/PK-joined; this sub-select is cheap.)
    Semantics pinned: with `stale_misses=3`, a model deactivates on its **3rd** consecutive complete-miss (count goes 1→2→3, `is_active` flips false when the post-increment count ≥ 3). A single reappearance resets `missed_fetch_count=0, is_active=true` via step 2's upsert. Never delete (R1.4).
 4. Build `RefreshSummary{added, reactivated, deactivated, price_flagged}`, insert a `bh_model_refresh_log` row (with the full per-model detail in its `summary jsonb`), and log it; a no-change run is a logged no-op (R2.5). (`unchanged` is derivable and lives only in the `jsonb`, not a column.)
 5. Invalidate the in-process catalog + alias caches; release the lock.
@@ -129,12 +131,23 @@ CREATE TABLE public.bh_model_aliases (
     updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
--- Day-one seed mapped to REAL existing active rows, NOT the stale config.py constants (R4.1; config.py:62 matches no row)
+-- Aliases must point at the CANONICAL IDs discovery actually returns (T0 finding: models.list() returns dated
+-- canonical IDs, not the bare config.py forms). Ensure those rows exist before seeding, so the FK + guard pass AND
+-- discovery keeps the alias targets fresh (so they're never deactivated). haiku's canonical id is already seed row
+-- id 1; sonnet-4-6 and the dated opus are inserted here with current known prices (seed data, like the 8 existing
+-- rows); discovery refreshes their capabilities on first run. (Approved T0 decision; sonnet → 4.6.)
+INSERT INTO public.bh_model_rates
+    (provider, model_id, display_name, input_cost_per_mtok, output_cost_per_mtok, supports_vision, supports_tools, max_output_tokens)
+VALUES
+  ('anthropic', 'claude-sonnet-4-6',        'Claude Sonnet 4.6', 3.00, 15.00, true, true, 64000),
+  ('anthropic', 'claude-opus-4-5-20251101', 'Claude Opus 4.5',   5.00, 25.00, true, true, 64000)
+ON CONFLICT (model_id) DO NOTHING;
+
 INSERT INTO public.bh_model_aliases (role, model_id) VALUES
-  ('haiku',  'claude-haiku-4-5-20251001'),   -- existing seed row id 1
-  ('sonnet', 'claude-sonnet-4-5'),           -- existing seed row id 12  (NOT claude-sonnet-4-5-20250514)
-  ('opus',   'claude-opus-4-5'),             -- existing seed row id 13
-  ('local',  'llama3.2:3b');                 -- existing seed row id 10
+  ('haiku',  'claude-haiku-4-5-20251001'),   -- seed row id 1 (already canonical + discoverable)
+  ('sonnet', 'claude-sonnet-4-6'),           -- inserted above; current best Sonnet
+  ('opus',   'claude-opus-4-5-20251101'),    -- inserted above; canonical dated Opus
+  ('local',  'llama3.2:3b');                 -- seed row id 10 (Ollama; OllamaDiscoverySource keeps it fresh)
 
 -- Guard: abort the migration if any seeded role fails to resolve to an ACTIVE row (a typo can never go dark) — R4.1.
 -- The guard references only model_ids that exist in the 0001 seed block, so a from-zero 0001→…→0005 build always

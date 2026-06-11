@@ -2,22 +2,25 @@
 
 > Each task traces to one or more requirements in `requirements.md`. Work top-to-bottom; the order follows the design's phased, git-revertable rollout (T0 precondition → P0 migration → P1 discovery shadow-writes → P2 read cutover → P3 cost cutover → P4 delitteralize → P5 cleanup). Nothing on the hot cost path changes until P3, and that is gated by the cost-parity review.
 
-## Task 1: Verify the Anthropic SDK discovery fields (precondition T0)
+## Task 1: Verify the Anthropic SDK discovery fields (precondition T0) — ✅ DONE
 - **Effort:** S
 - **Dependencies:** none
 - **Requirements:** R1.3, R2.1
-- [ ] Introspect the pinned `anthropic` SDK (or make one live `client.models.list()` call) to confirm which fields are exposed: `id`, `display_name`, `max_input_tokens`, `max_tokens`, and the `capabilities` mapping shape.
-- [ ] Record the result (and any missing fields) as a short note in the spec/PR; decide the per-field fallback (absent field → `NULL`/`false`, never the old fabricated `True/4096` guesses).
-- [ ] Confirm `models.list()` auto-paginates on iteration (do not rely on `.data`).
-- [ ] **Tests:** none (investigation task); output is the documented field-availability matrix that gates Task 3.
+- [x] Introspect the pinned `anthropic` SDK (or make one live `client.models.list()` call) to confirm which fields are exposed: `id`, `display_name`, `max_input_tokens`, `max_tokens`, and the `capabilities` mapping shape.
+- [x] Record the result (and any missing fields) as a short note in the spec/PR; decide the per-field fallback (absent field → `NULL`/`false`, never the old fabricated `True/4096` guesses).
+- [x] Confirm `models.list()` auto-paginates on iteration (do not rely on `.data`).
+- [x] **Tests:** none (investigation task); output is the documented field-availability matrix that gates Task 3.
+- **Outcome:** `anthropic==0.105.0`; all design-assumed fields are real **and** populated live (no NULL fallback needed today; defensive guard kept). Full matrix + live result in `T0-sdk-verification.md`. **Surfaced a gating finding:** the alias seed's bare `claude-sonnet-4-5` / `claude-opus-4-5` IDs are **not** returned by `models.list()` (it returns canonical dated IDs), so they'd be deactivated by discovery and break `resolve_role` — must be resolved before Task 2/Task 4 (see that note + the decision below).
 
-## Task 2: Migration `0005_dynamic_model_discovery.sql` (phase P0)
+## Task 2: Migration `0005_dynamic_model_discovery.sql` (phase P0) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R1.4, R3.2, R4.1, R2.2, R2.5
+- **Outcome:** `migrations/0005_dynamic_model_discovery.sql` written + validated on a throwaway PG16 (`0001`→`0005` from zero): applies clean, guard passes, 10 rows all active / 0 falsely-flagged, 2 canonical rows inserted, all 4 aliases resolve to active rows, `bh_model_refresh_log` + 3 discovery settings present, and **idempotent on re-run** (`ADD COLUMN/CREATE TABLE IF NOT EXISTS` + `ON CONFLICT DO NOTHING`). Safe for the live DB (additive, guarded); deploys on next app restart per the owner. (`0002`–`0004` are role-only migrations that don't touch these tables; real chain applies `0005` after them.)
 - [ ] Add lifecycle/capability/price-confirm columns to `bh_model_rates` (`is_active`, `last_seen_at`, `missed_fetch_count`, `needs_price_confirmation`, `max_input_tokens`, `supports_thinking`, `supports_effort`, `supports_structured_outputs`) with the design's defaults.
 - [ ] Explicit backfill `UPDATE` of the existing seed rows (`is_active=true`, `last_seen_at=now()`, `missed_fetch_count=0`, `needs_price_confirmation=false`).
-- [ ] Create `bh_model_aliases` (`role` PK, `model_id` FK → `bh_model_rates(model_id)`); seed `haiku/sonnet/opus/local` to **real existing active rows** (ids 1/12/13/10), not the stale `config.py` constants.
+- [ ] Insert the canonical alias-target rows that `models.list()` returns but `0001` lacks (`claude-sonnet-4-6`, `claude-opus-4-5-20251101`) with current known prices, `ON CONFLICT DO NOTHING` (T0 decision — so aliases sit on discovery-refreshed rows). `claude-haiku-4-5-20251001` (id 1) and `llama3.2:3b` (id 10) already exist.
+- [ ] Create `bh_model_aliases` (`role` PK, `model_id` FK → `bh_model_rates(model_id)`); seed to the **canonical discoverable IDs**: haiku→`claude-haiku-4-5-20251001`, sonnet→`claude-sonnet-4-6`, opus→`claude-opus-4-5-20251101`, local→`llama3.2:3b` (per the approved T0 decision — not the stale bare/`config.py` forms).
 - [ ] Add the `DO $$ ... RAISE EXCEPTION` guard that aborts if any seeded role fails to resolve to an active row.
 - [ ] Create `bh_model_refresh_log` (audit table). Insert the three `bh_platform_settings` rows (`model_discovery_interval_hours`, `model_discovery_stale_misses`, `model_discovery_enabled`) with `ON CONFLICT (key) DO NOTHING`.
 - [ ] **Migration:** `bowershub-ai/backend/migrations/0005_dynamic_model_discovery.sql` (forward-only, next free number, parameterized DDL, single transaction).
@@ -30,7 +33,7 @@
 - [ ] Define `DiscoveredModel` (no price field) and the `DiscoverySource` Protocol returning `DiscoveryResult{models, complete}` in `services/model_catalog.py`.
 - [ ] `AnthropicDiscoverySource` via the SDK `client.models.list()` (paged), mapping real `display_name`/`max_input_tokens`/`max_output_tokens`/capabilities; any exception/partial page → `complete=False`.
 - [ ] Chat-target filter (R1.5): keep `claude-*` chat targets; defensive fallback to an id-prefix rule when `capabilities` is unavailable; never silently drop a chat model.
-- [ ] `OllamaDiscoverySource` (`/api/tags`, NULL caps) and `StaticDiscoverySource` (the single documented cold-start seed — replaces `_fallback_models`). **Pin the static seed model_ids to exactly the alias-seed ids** (`claude-haiku-4-5-20251001`, `claude-sonnet-4-5`, `claude-opus-4-5`, `llama3.2:3b`) — not the dateless `_fallback_models` forms — so a cold-start catalog still satisfies the alias FK and `resolve_role`.
+- [ ] `OllamaDiscoverySource` (`/api/tags`, NULL caps) and `StaticDiscoverySource` (the single documented cold-start seed — replaces `_fallback_models`). **Pin the static seed model_ids to exactly the alias-seed ids** (`claude-haiku-4-5-20251001`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `llama3.2:3b` — the canonical IDs per the T0 decision) — not the dateless `_fallback_models` forms — so a cold-start catalog still satisfies the alias FK and `resolve_role`.
 - [ ] Sources are constructed **outside** `ModelProvider` and injected, so tests can substitute a `FakeDiscoverySource`; the fake exposes an injectable `asyncio.Event` gate (a suspension point inside discovery) so single-flight serialization is observably testable (Task 4).
 - [ ] **Tests:** `FakeDiscoverySource` drives model-appears / model-disappears / API-down(`complete=False`) / empty-cold-start; assert chat-target filtering, that no network is hit, and that **every alias role resolves against a catalog built only from the `StaticDiscoverySource` seed** (cold-start coherence).
 
@@ -40,10 +43,10 @@
 - **Requirements:** R1.1, R1.4, R3.1, R3.2, R2.5, R2.4
 - [ ] `refresh(trigger)` under an `asyncio.Lock` (single-flight): run sources, compute `complete_providers`.
 - [ ] Upsert by `model_id` (`ON CONFLICT DO UPDATE`) writing identity/caps/context + `last_seen_at`/`missed_fetch_count=0`/`is_active=true`, **omitting both price columns** for existing rows (preserve operator prices, R3.1); new rows get heuristic provisional price + `needs_price_confirmation=true` (R3.2).
-- [ ] Provider-scoped, churn-safe deactivation: increment `missed_fetch_count` only for `complete_providers`' unseen rows; deactivate at the `stale_misses` threshold; never delete.
+- [ ] Provider-scoped, churn-safe deactivation: increment `missed_fetch_count` only for `complete_providers`' unseen rows; deactivate at the `stale_misses` threshold; **never deactivate a model that is the target of a role alias** (alias-protection invariant, T0 decision); never delete.
 - [ ] Compute `RefreshSummary{added, reactivated, deactivated, price_flagged}` (reactivated from prior `is_active=false`), write `bh_model_refresh_log` + structured log; invalidate the in-process caches.
 - [ ] On any incomplete fetch: serve last-known, deactivate nothing (R2.4).
-- [ ] **Tests:** (ephemeral Postgres) admin-edited price survives a refresh; new model → provisional+flagged; absent across N complete fetches → inactive (single incomplete fetch deactivates nothing); a complete Anthropic-only fetch does **not** age-out Ollama/Bedrock rows (provider-scoped); concurrent admin+scheduled refresh serialize — proven by holding one refresh open at the injected `asyncio.Event` gate and asserting the second blocks until release; no-op refresh is a logged no-op.
+- [ ] **Tests:** (ephemeral Postgres) admin-edited price survives a refresh; new model → provisional+flagged; absent across N complete fetches → inactive (single incomplete fetch deactivates nothing); an **alias-targeted** model absent from N complete fetches is **not** deactivated (alias-protection); a complete Anthropic-only fetch does **not** age-out Ollama/Bedrock rows (provider-scoped); concurrent admin+scheduled refresh serialize — proven by holding one refresh open at the injected `asyncio.Event` gate and asserting the second blocks until release; no-op refresh is a logged no-op.
 
 ## Task 5: Catalog read + Resolver + singleton + lifespan cache warm (precondition T1)
 - **Effort:** M
