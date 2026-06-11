@@ -49,6 +49,33 @@ def _infer_pricing(model_id: str) -> tuple:
     return (3.00, 15.00)
 
 
+async def _provisional_pricing(conn, m: "DiscoveredModel") -> tuple:
+    """R3.2 provisional price for a NEWLY discovered model, from the operator-curated
+    bh_model_price_rules table (0006) — kills the hardcoded _infer_pricing ladder for
+    the discovery path (NO-HARDCODING Rule #1). Highest-priority rule whose LIKE
+    `pattern` matches the id wins (ties → longer pattern), optionally provider-scoped.
+    Falls back to the _infer_pricing floor if no rule matches OR the table is absent
+    (fail-safe: never silently returns 0 for an unknown model). The cost MISS-path
+    (cost_for) deliberately still uses _infer_pricing so the cost-parity gate holds."""
+    try:
+        row = await conn.fetchrow(
+            """
+            SELECT input_cost_per_mtok, output_cost_per_mtok
+            FROM public.bh_model_price_rules
+            WHERE (provider IS NULL OR provider = $1)
+              AND $2 LIKE pattern
+            ORDER BY priority DESC, length(pattern) DESC
+            LIMIT 1
+            """,
+            m.provider, m.id,
+        )
+    except Exception:  # table missing (pre-0006) or query error — fall back, never crash discovery
+        row = None
+    if row is not None:
+        return float(row["input_cost_per_mtok"]), float(row["output_cost_per_mtok"])
+    return _infer_pricing(m.id)
+
+
 # ---------------------------------------------------------------------------
 # Discovery seam (Task 3)
 # ---------------------------------------------------------------------------
@@ -396,7 +423,7 @@ class CatalogRefresh:
         )
 
     async def _insert_new(self, conn, m: DiscoveredModel) -> None:
-        in_cost, out_cost = _infer_pricing(m.id)  # provisional, flagged (R3.2)
+        in_cost, out_cost = await _provisional_pricing(conn, m)  # provisional, flagged (R3.2)
         await conn.execute(
             """
             INSERT INTO public.bh_model_rates

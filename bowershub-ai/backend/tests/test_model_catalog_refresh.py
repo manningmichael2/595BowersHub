@@ -88,7 +88,37 @@ async def test_new_model_persisted_and_flagged_existing_price_preserved(fresh_db
                 "FROM public.bh_model_rates WHERE model_id='claude-brandnew-9'")
             assert new["is_active"] is True
             assert new["needs_price_confirmation"] is True             # R3.2 flagged
-            assert float(new["input_cost_per_mtok"]) == 3.00           # provisional heuristic (default tier)
+            assert float(new["input_cost_per_mtok"]) == 3.00           # no rule matches → _infer_pricing floor
+    finally:
+        await pool.close()
+
+
+async def test_provisional_pricing_from_rules_table(fresh_db, db_settings):
+    """0006: new models get provisional prices from the operator-curated
+    bh_model_price_rules table, not the stale _infer_pricing ladder. Opus → 5/25
+    (current-tier rule, NOT the old 15/75), Ollama → 0/0 (provider rule, NOT 3/15),
+    unmatched → the _infer_pricing floor. Still flagged for operator review (R3.2)."""
+    pool = await _apply_migrations(fresh_db, db_settings)
+    try:
+        src_anthropic = FakeSource("anthropic", [
+            _dm("claude-opus-4-9-20260601", max_input_tokens=1000000),  # opus rule → 5/25
+            _dm("claude-mystery-2", max_input_tokens=200000),           # no rule → floor 3/15
+        ])
+        src_ollama = FakeSource("ollama", [_dm("phi4:14b", provider="ollama")])  # provider rule → 0/0
+        await CatalogRefresh(pool, [src_anthropic, src_ollama]).refresh(trigger="admin")
+        async with pool.acquire() as c:
+            opus = await c.fetchrow(
+                "SELECT input_cost_per_mtok, output_cost_per_mtok, needs_price_confirmation "
+                "FROM public.bh_model_rates WHERE model_id='claude-opus-4-9-20260601'")
+            assert (float(opus["input_cost_per_mtok"]), float(opus["output_cost_per_mtok"])) == (5.00, 25.00)
+            assert opus["needs_price_confirmation"] is True            # rule sets the value, not the confirmation
+            local = await c.fetchrow(
+                "SELECT input_cost_per_mtok, output_cost_per_mtok "
+                "FROM public.bh_model_rates WHERE model_id='phi4:14b'")
+            assert (float(local["input_cost_per_mtok"]), float(local["output_cost_per_mtok"])) == (0.00, 0.00)
+            unknown = await c.fetchval(
+                "SELECT input_cost_per_mtok FROM public.bh_model_rates WHERE model_id='claude-mystery-2'")
+            assert float(unknown) == 3.00                              # _infer_pricing floor (no rule)
     finally:
         await pool.close()
 
