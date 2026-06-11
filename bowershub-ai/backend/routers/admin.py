@@ -176,10 +176,20 @@ async def list_models(user: dict = Depends(require_admin)):
         rows = await conn.fetch(
             """
             SELECT r.*,
+                   ref.input_cost_per_mtok  AS ref_input_cost,
+                   ref.output_cost_per_mtok AS ref_output_cost,
                    COALESCE(array_agg(a.role) FILTER (WHERE a.role IS NOT NULL), '{}') AS roles
             FROM public.bh_model_rates r
             LEFT JOIN public.bh_model_aliases a ON a.model_id = r.model_id
-            GROUP BY r.id
+            LEFT JOIN LATERAL (
+                SELECT input_cost_per_mtok, output_cost_per_mtok
+                FROM public.bh_model_price_rules
+                WHERE (provider IS NULL OR provider = r.provider)
+                  AND r.model_id LIKE pattern
+                ORDER BY priority DESC, length(pattern) DESC
+                LIMIT 1
+            ) ref ON true
+            GROUP BY r.id, ref.input_cost_per_mtok, ref.output_cost_per_mtok
             ORDER BY r.provider, r.model_id
             """
         )
