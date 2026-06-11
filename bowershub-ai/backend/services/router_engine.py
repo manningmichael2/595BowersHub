@@ -1554,16 +1554,8 @@ Then call the remember tool with both the inferred topic and the fact. Don't ask
         return content
 
     def _calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        """Calculate cost in USD based on model rates."""
-        # Heuristic pricing based on model name
-        lower = model.lower()
-        if "haiku" in lower:
-            input_rate, output_rate = 0.80, 4.00
-        elif "opus" in lower:
-            input_rate, output_rate = 15.00, 75.00
-        elif "sonnet" in lower:
-            input_rate, output_rate = 3.00, 15.00
-        else:
-            input_rate, output_rate = 3.00, 15.00  # Default to Sonnet pricing
-        cost = (input_tokens * input_rate / 1_000_000) + (output_tokens * output_rate / 1_000_000)
-        return round(cost, 6)
+        """Calculate cost in USD. Delegates to the single catalog-reading cost function
+        (DB price by exact key, non-zero heuristic floor on a miss) — the heuristic no
+        longer lives here. All three call sites route through this one home (R3.3)."""
+        from backend.services.model_catalog import cost_for
+        return cost_for(model, input_tokens, output_tokens)

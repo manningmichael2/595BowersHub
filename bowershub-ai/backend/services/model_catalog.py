@@ -560,6 +560,34 @@ def get_resolver() -> "Resolver":
 
 
 # ---------------------------------------------------------------------------
+# Cost (Task 8) — the single cost home
+# ---------------------------------------------------------------------------
+def cost_for(model_id: str, input_tokens: int, output_tokens: int) -> float:
+    """The ONE cost function (R3.3). Prices from the catalog by exact key (incl.
+    inactive rows, so historical usage of a deactivated model still prices) with a
+    same-provider normalize fallback (R3.4). On a miss/NULL price, falls back to the
+    provisional name heuristic and WARNs — it must NEVER return 0 for an unknown model
+    (that would be a silent under-billing regression). Resolver-optional: if the cache
+    isn't warmed it goes straight to the heuristic, so it never raises and is safe in
+    tests/early-startup.
+
+    The miss-path is byte-identical to the legacy RouterEngine._calculate_cost heuristic
+    (same rates, same round(6)) so the cost-parity gate holds."""
+    in_rate = out_rate = None
+    if _resolver is not None:
+        row = _resolver.row_for_cost(model_id)
+        if row is not None and row.get("input_cost_per_mtok") is not None \
+                and row.get("output_cost_per_mtok") is not None:
+            in_rate = float(row["input_cost_per_mtok"])
+            out_rate = float(row["output_cost_per_mtok"])
+    if in_rate is None:
+        logger.warning(f"no catalog price for model {model_id!r}; using provisional heuristic")
+        in_rate, out_rate = _infer_pricing(model_id)
+    cost = (input_tokens * in_rate / 1_000_000) + (output_tokens * out_rate / 1_000_000)
+    return round(cost, 6)
+
+
+# ---------------------------------------------------------------------------
 # Wiring helpers (Task 6) — sources factory + discovery config
 # ---------------------------------------------------------------------------
 MIN_DISCOVERY_INTERVAL_HOURS = 6   # floor so we never hammer the rate-limited /v1/models
