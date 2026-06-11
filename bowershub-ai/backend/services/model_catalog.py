@@ -537,3 +537,38 @@ def get_resolver() -> "Resolver":
     if _resolver is None:
         raise RuntimeError("model resolver not initialized — call init_resolver(pool) in lifespan")
     return _resolver
+
+
+# ---------------------------------------------------------------------------
+# Wiring helpers (Task 6) — sources factory + discovery config
+# ---------------------------------------------------------------------------
+MIN_DISCOVERY_INTERVAL_HOURS = 6   # floor so we never hammer the rate-limited /v1/models
+
+
+def build_default_sources(config) -> List[DiscoverySource]:
+    """Construct the live discovery sources OUTSIDE ModelProvider (so they're
+    injectable). Anthropic always; Ollama when configured."""
+    import anthropic
+    sources: List[DiscoverySource] = [
+        AnthropicDiscoverySource(anthropic.AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY))
+    ]
+    ollama_url = getattr(config, "OLLAMA_URL", None)
+    if ollama_url:
+        sources.append(OllamaDiscoverySource(ollama_url))
+    return sources
+
+
+async def get_discovery_config(pool) -> tuple:
+    """Read DB-driven discovery config (R2.2): returns (interval_hours, enabled).
+    Interval is clamped to the floor; both fall back to sane defaults if unset."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT key, value_json FROM public.bh_platform_settings WHERE key LIKE 'model_discovery_%'"
+        )
+    cfg = {}
+    for r in rows:
+        v = r["value_json"]
+        cfg[r["key"]] = json.loads(v) if isinstance(v, str) else v
+    interval = int(cfg.get("model_discovery_interval_hours", {}).get("hours", 24))
+    enabled = bool(cfg.get("model_discovery_enabled", {}).get("enabled", True))
+    return max(MIN_DISCOVERY_INTERVAL_HOURS, interval), enabled

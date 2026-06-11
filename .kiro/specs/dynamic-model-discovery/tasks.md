@@ -61,10 +61,11 @@
 - [ ] Warm the resolver + catalog caches in `lifespan` **after `run_migrations(pool)` (`main.py:62`) and before the scheduler block (`main.py:87`)** so the `0005` columns exist before the first read; define empty-cache reads as single-DB-read-then-memoize (never crash).
 - [ ] **Tests:** post-migration every role resolves to an active row; repoint `sonnet` alias → L3/ask_db target changes with no DB round-trip on the hot path; dangling alias fails closed; Bedrock key resolves to its own row.
 
-## Task 6: Scheduler job + admin refresh endpoint (phase P1)
+## Task 6: Scheduler job + admin refresh endpoint (phase P1) — ✅ DONE
 - **Effort:** S
 - **Dependencies:** Task 4
 - **Requirements:** R2.2, R2.3, R2.5
+- **Outcome:** `main.py` lifespan builds the shared `CatalogRefresh` (`build_default_sources(config)`, `invalidate=resolver.reload`) on `app.state` and adds an `AsyncIOScheduler` `model_discovery` job — interval from `get_discovery_config` (DB-driven, floored to ≥6h), with the `model_discovery_enabled` lever checked at fire time (runtime toggle, no restart). `POST /api/admin/models/refresh` (`require_admin`) shares the single-flight instance and runs even when the lever is off (explicit operator action); returns the `RefreshSummary`. Tests `tests/test_model_discovery_wiring.py` (4): require_admin (401/403), admin trigger invokes refresh, 503 when uninitialized, interval-clamp + enabled lever. **22/22** model-discovery tests green; edited files compile clean.
 - [ ] Add the `AsyncIOScheduler` job (`main.py`) reading `model_discovery_interval_hours` and clamping to the enforced floor (≥ 6h), `replace_existing=True`, no-op when `model_discovery_enabled` is false.
 - [ ] `POST /api/admin/models/refresh` (`Depends(require_admin)`) → `CatalogRefresh.refresh(trigger="admin")`, returns the `RefreshSummary`. Define behavior when `model_discovery_enabled` is false: the **admin** trigger still runs (it's an explicit operator action — only the scheduled job is gated by the setting).
 - [ ] **Tests:** admin refresh requires admin (401/403 without); a sub-floor `model_discovery_interval_hours` DB value is clamped to the floor; disabling `model_discovery_enabled` stops the scheduled job but an admin `POST /refresh` still works.

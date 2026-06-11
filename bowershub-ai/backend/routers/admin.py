@@ -183,6 +183,24 @@ async def update_model_rate(model_id: int, body: ModelRateUpdate, user: dict = D
     return dict(row)
 
 
+@router.post("/models/refresh")
+async def refresh_models(request: Request, user: dict = Depends(require_admin)):
+    """Trigger an immediate model-catalog discovery refresh (R2.3). Shares the
+    single-flight lock with the scheduled job; runs even when the scheduled-write
+    lever (`model_discovery_enabled`) is off — this is an explicit operator action."""
+    catalog_refresh = getattr(request.app.state, "catalog_refresh", None)
+    if catalog_refresh is None:
+        raise HTTPException(status_code=503, detail="Model discovery not initialized")
+    summary = await catalog_refresh.refresh(trigger="admin")
+    return {
+        "added": summary.added,
+        "reactivated": summary.reactivated,
+        "deactivated": summary.deactivated,
+        "price_flagged": summary.price_flagged,
+        "complete": summary.complete,
+    }
+
+
 @router.get("/audit")
 async def get_audit_log(
     limit: int = Query(default=50, ge=1, le=500),
