@@ -26,10 +26,11 @@
 - [ ] **Migration:** `bowershub-ai/backend/migrations/0005_dynamic_model_discovery.sql` (forward-only, next free number, parameterized DDL, single transaction).
 - [ ] **Tests:** apply against a fresh empty PG (from-zero `0001→…→0005`) and against a prod-like clone; assert all 8 rows backfilled active, all 4 aliases resolve to active rows, guard passes, and a re-run is idempotent.
 
-## Task 3: Discovery sources — `DiscoverySource` + Anthropic/Ollama/Static (phase P1)
+## Task 3: Discovery sources — `DiscoverySource` + Anthropic/Ollama/Static (phase P1) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R2.1, R1.3, R1.5, R2.4, R2.6
+- **Outcome:** `services/model_catalog.py` (discovery section): `DiscoveredModel` (no price), `DiscoveryResult{models, complete}`, `DiscoverySource` Protocol, `AnthropicDiscoverySource` (async SDK `models.list()`, auto-paged, real caps, chat-target filter, partial→`complete=False`), `OllamaDiscoverySource`, `StaticDiscoverySource` (cold-start seed, IDs match the 0005 aliases, `complete=False`). Tests `tests/test_model_discovery.py` (9 pass, no network) incl. a `FakeDiscoverySource` with an `asyncio.Event` gate for Task 4's single-flight test. **Live smoke-tested**: real `discover()` → complete, 9 models, all 3 Anthropic alias targets discovered (T0 fix holds end-to-end).
 - [ ] Define `DiscoveredModel` (no price field) and the `DiscoverySource` Protocol returning `DiscoveryResult{models, complete}` in `services/model_catalog.py`.
 - [ ] `AnthropicDiscoverySource` via the SDK `client.models.list()` (paged), mapping real `display_name`/`max_input_tokens`/`max_output_tokens`/capabilities; any exception/partial page → `complete=False`.
 - [ ] Chat-target filter (R1.5): keep `claude-*` chat targets; defensive fallback to an id-prefix rule when `capabilities` is unavailable; never silently drop a chat model.
@@ -37,10 +38,11 @@
 - [ ] Sources are constructed **outside** `ModelProvider` and injected, so tests can substitute a `FakeDiscoverySource`; the fake exposes an injectable `asyncio.Event` gate (a suspension point inside discovery) so single-flight serialization is observably testable (Task 4).
 - [ ] **Tests:** `FakeDiscoverySource` drives model-appears / model-disappears / API-down(`complete=False`) / empty-cold-start; assert chat-target filtering, that no network is hit, and that **every alias role resolves against a catalog built only from the `StaticDiscoverySource` seed** (cold-start coherence).
 
-## Task 4: `CatalogRefresh` orchestration — upsert, deactivation, single-flight, audit (phase P1)
+## Task 4: `CatalogRefresh` orchestration — upsert, deactivation, single-flight, audit (phase P1) — ✅ DONE
 - **Effort:** L
 - **Dependencies:** Task 2, Task 3
 - **Requirements:** R1.1, R1.4, R3.1, R3.2, R2.5, R2.4
+- **Outcome:** `CatalogRefresh` in `services/model_catalog.py` — single-flight `asyncio.Lock`; upsert by `model_id` that refreshes identity/caps + `last_seen_at`/`missed_fetch_count=0`/`is_active` but **never** touches price/`needs_price_confirmation` on existing rows (R3.1); new rows get the byte-identical `_infer_pricing` provisional price + flag (R3.2); provider-scoped, alias-protected, churn-safe deactivation via `missed_fetch_count` (R1.4); cold-start static seed when empty (R2.4); `RefreshSummary` + `bh_model_refresh_log` audit row + `invalidate()` hook (wired in Task 5). Tests `tests/test_model_catalog_refresh.py` (4 DB-backed) cover price-preserve+new-flag, churn/alias/provider deactivation, incomplete-deactivates-nothing, single-flight+audit+no-op. **13/13** discovery+refresh tests green on ephemeral PG.
 - [ ] `refresh(trigger)` under an `asyncio.Lock` (single-flight): run sources, compute `complete_providers`.
 - [ ] Upsert by `model_id` (`ON CONFLICT DO UPDATE`) writing identity/caps/context + `last_seen_at`/`missed_fetch_count=0`/`is_active=true`, **omitting both price columns** for existing rows (preserve operator prices, R3.1); new rows get heuristic provisional price + `needs_price_confirmation=true` (R3.2).
 - [ ] Provider-scoped, churn-safe deactivation: increment `missed_fetch_count` only for `complete_providers`' unseen rows; deactivate at the `stale_misses` threshold; **never deactivate a model that is the target of a role alias** (alias-protection invariant, T0 decision); never delete.
