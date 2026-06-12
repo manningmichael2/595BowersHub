@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import load_config, Config
 from backend.database import init_pool, close_pool, run_migrations
+from backend.http_client import init_http_client, close_http_client
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +43,10 @@ async def lifespan(app: FastAPI):
     config = load_config()
     app.state.config = config
     logger.info("Configuration loaded")
+
+    # Initialize global HTTP client
+    init_http_client()
+    logger.info("Global HTTP client initialized")
 
     # Initialize database pool
     retries = 5
@@ -101,6 +106,7 @@ async def lifespan(app: FastAPI):
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
     from backend.services.categorizer import run_categorizer
+    from backend.services.embedding_worker import run_embedding_worker
     from backend.services.alerts import check_budgets, check_inbox, check_reminders
     from backend.services.gameday_alerts import check_gameday_alerts
 
@@ -111,6 +117,15 @@ async def lifespan(app: FastAPI):
         CronTrigger(hour=2, minute=30),
         id="categorizer",
         name="Transaction Categorizer (local model)",
+        replace_existing=True,
+    )
+
+    # Run embedding worker every 2 minutes to keep semantic memory fresh (eventual consistency)
+    scheduler.add_job(
+        run_embedding_worker,
+        IntervalTrigger(minutes=2),
+        id="embedding_worker",
+        name="Semantic Memory Embedding Worker",
         replace_existing=True,
     )
     # Budget alerts — check every hour
@@ -207,6 +222,7 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, 'hook_engine'):
         await app.state.hook_engine.shutdown()
     await close_pool()
+    await close_http_client()
     logger.info("BowersHub AI shut down")
 
 

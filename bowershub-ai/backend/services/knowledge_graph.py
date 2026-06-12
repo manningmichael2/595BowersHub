@@ -17,8 +17,27 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from backend.database import get_pool
+from backend.config import load_config
+from backend.services.embeddings import EmbeddingsClient
+from backend.services.hybrid_retrieval import HybridRetriever
 
 logger = logging.getLogger(__name__)
+
+# Cached hybrid retriever for knowledge graph search (R3.3)
+_hybrid_retriever: Optional[HybridRetriever] = None
+
+
+def _get_hybrid_retriever():
+    global _hybrid_retriever
+    if _hybrid_retriever is None:
+        try:
+            config = load_config()
+            pool = get_pool()
+            client = EmbeddingsClient(config.OLLAMA_URL, pool)
+            _hybrid_retriever = HybridRetriever(client, pool)
+        except Exception as e:
+            logger.warning(f"Failed to initialize hybrid retriever: {e}")
+    return _hybrid_retriever
 
 
 # ---- Write Operations --------------------------------------------------------
@@ -213,32 +232,60 @@ async def recall_related(entity_name: str, depth: int = 1) -> dict:
 
 async def recall_graph(query: str, limit: int = 15) -> dict:
     """
-    Full-text search across the entire knowledge graph.
-    Searches entity names, summaries, and attribute values.
+    Hybrid (vector + full-text) search across the entire knowledge graph.
     Returns matching entities with their connections.
+    
+    Satisfies R3.2, R3.3.
     """
-    pool = get_pool()
-    async with pool.acquire() as conn:
-        # Full-text search on entities
-        entities = await conn.fetch("""
-            SELECT e.*,
-                   ts_rank(to_tsvector('english', e.name || ' ' || COALESCE(e.summary, '')),
-                           plainto_tsquery('english', $1)) as rank
-            FROM public.bh_entities e
-            WHERE e.is_active = true
-              AND (
-                  to_tsvector('english', e.name || ' ' || COALESCE(e.summary, '')) @@ plainto_tsquery('english', $1)
-                  OR LOWER(e.name) LIKE '%' || LOWER($1) || '%'
-                  OR e.attributes::text ILIKE '%' || $1 || '%'
-              )
-            ORDER BY rank DESC, e.updated_at DESC
-            LIMIT $2
-        """, query, limit)
-
-        if not entities:
+    retriever = _get_hybrid_retriever()
+    if retriever:
+        # Hybrid retrieval (R3.2)
+        rows = await retriever.search_hybrid(
+            query=query,
+            source_type='entity',
+            limit=limit
+        )
+        
+        if not rows:
             return {"found": False, "query": query, "entities": [], "_display": f"No knowledge found for **{query}**. Try `/remember` to teach me something."}
 
-        # For each entity, get its immediate relationships
+        # Format rows to look like the legacy entities query result
+        entities = []
+        for r in rows:
+            # Reconstruct the entity dict from the flat result
+            # Hybrid search returns {source_id, rrf_score, name, summary, is_active}
+            entities.append({
+                "id": r["source_id"],
+                "name": r["name"],
+                "summary": r["summary"],
+                "is_active": r["is_active"],
+                "rank": r["rrf_score"]
+            })
+    else:
+        # Fallback to legacy full-text search (R3.3)
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            entities = await conn.fetch("""
+                SELECT e.*,
+                       ts_rank(to_tsvector('english', e.name || ' ' || COALESCE(e.summary, '')),
+                               plainto_tsquery('english', $1)) as rank
+                FROM public.bh_entities e
+                WHERE e.is_active = true
+                  AND (
+                      to_tsvector('english', e.name || ' ' || COALESCE(e.summary, '')) @@ plainto_tsquery('english', $1)
+                      OR LOWER(e.name) LIKE '%' || LOWER($1) || '%'
+                      OR e.attributes::text ILIKE '%' || $1 || '%'
+                  )
+                ORDER BY rank DESC, e.updated_at DESC
+                LIMIT $2
+            """, query, limit)
+
+    if not entities:
+        return {"found": False, "query": query, "entities": [], "_display": f"No knowledge found for **{query}**. Try `/remember` to teach me something."}
+
+    # For each entity, get its immediate relationships
+    pool = get_pool()
+    async with pool.acquire() as conn:
         results = []
         for e in entities:
             rels = await conn.fetch("""
@@ -252,8 +299,16 @@ async def recall_graph(query: str, limit: int = 15) -> dict:
                 WHERE (r.from_entity_id = $1 OR r.to_entity_id = $1) AND r.is_active = true
                 LIMIT 10
             """, e["id"])
+            
+            # If we don't have the full entity row (hybrid path), fetch it now
+            if "entity_type" not in e:
+                full_entity = await conn.fetchrow("SELECT * FROM public.bh_entities WHERE id = $1", e["id"])
+                e_dict = dict(full_entity) if full_entity else e
+            else:
+                e_dict = dict(e)
+                
             results.append({
-                "entity": dict(e),
+                "entity": e_dict,
                 "connections": [dict(r) for r in rels],
             })
 

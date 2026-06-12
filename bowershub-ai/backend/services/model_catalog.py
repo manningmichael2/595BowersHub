@@ -203,21 +203,22 @@ class OllamaDiscoverySource:
 
     async def discover(self) -> DiscoveryResult:
         import httpx
+        from backend.http_client import get_http_client
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{self.base_url}/api/tags")
-                resp.raise_for_status()
-                data = resp.json()
-                models = []
-                for m in data.get("models", []):
-                    name = m["name"]
-                    models.append(DiscoveredModel(
-                        id=name,
-                        provider="ollama",
-                        display_name=name.replace(":", " ").title(),
-                        supports_tools=("hermes" in name.lower() or "qwen" in name.lower()),
-                        is_embedding=await self._is_embedding(client, name),
-                    ))
+            client = get_http_client()
+            resp = await client.get(f"{self.base_url}/api/tags", timeout=5.0)
+            resp.raise_for_status()
+            data = resp.json()
+            models = []
+            for m in data.get("models", []):
+                name = m["name"]
+                models.append(DiscoveredModel(
+                    id=name,
+                    provider="ollama",
+                    display_name=name.replace(":", " ").title(),
+                    supports_tools=("hermes" in name.lower() or "qwen" in name.lower()),
+                    is_embedding=await self._is_embedding(client, name),
+                ))
             return DiscoveryResult(models=models, complete=True)
         except Exception as e:
             logger.warning(f"Ollama model discovery failed: {e}")

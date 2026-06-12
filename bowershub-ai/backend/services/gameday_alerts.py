@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Set
 
 import httpx
+from backend.http_client import get_http_client
 
 from backend.services.pushover import send_notification
 from backend.services.sports_score import MY_TEAMS, TEAM_LEAGUE_MAP, LEAGUES, _expand_team_filter
@@ -56,11 +57,11 @@ async def check_gameday_alerts():
 
         try:
             url = f"{ESPN_BASE}/{sport_path}/{league_path}/scoreboard?dates={today_yyyymmdd}"
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url)
-                if resp.status_code >= 400:
-                    continue
-                data = resp.json()
+            client = get_http_client()
+            resp = await client.get(url, timeout=10.0)
+            if resp.status_code >= 400:
+                continue
+            data = resp.json()
         except Exception as e:
             logger.debug(f"Gameday alert: ESPN fetch failed for {team_name}: {e}")
             continue

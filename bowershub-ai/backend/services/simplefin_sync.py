@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 from backend.database import get_pool
 
@@ -48,10 +49,10 @@ async def sync_simplefin(window_days: int = 14) -> dict:
     url = f"{SIMPLEFIN_URL}?start-date={start_ts}"
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.get(url, headers={"Authorization": SIMPLEFIN_AUTH})
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_http_client()
+        resp = await client.get(url, headers={"Authorization": SIMPLEFIN_AUTH}, timeout=60.0)
+        resp.raise_for_status()
+        data = resp.json()
     except httpx.HTTPStatusError as e:
         logger.error(f"SimpleFin HTTP error: {e.response.status_code}")
         return {

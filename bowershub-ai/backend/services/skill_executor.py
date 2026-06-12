@@ -7,6 +7,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 from backend.config import Config
 from backend.database import get_pool
@@ -145,11 +146,11 @@ class SkillExecutor:
         logger.info(f"Executing skill '{skill_name}': {method} {url}")
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, read=30.0)) as client:
-                if method == "GET":
-                    response = await client.get(url)
-                else:
-                    response = await client.post(url, json=params)
+            client = get_http_client()
+            if method == "GET":
+                response = await client.get(url, timeout=httpx.Timeout(5.0, read=30.0))
+            else:
+                response = await client.post(url, json=params, timeout=httpx.Timeout(5.0, read=30.0))
 
             if response.status_code >= 400:
                 raise SkillExecutionError(

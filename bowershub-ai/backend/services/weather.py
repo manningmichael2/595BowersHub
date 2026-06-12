@@ -10,6 +10,7 @@ import logging
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -17,25 +18,41 @@ logger = logging.getLogger(__name__)
 DEFAULT_LOCATION = "Detroit,MI"
 
 
-async def get_weather(location: Optional[str] = None) -> dict:
+async def get_weather(location: Optional[str] = None, user_id: Optional[int] = None) -> dict:
     """
     Get current weather + 3-day forecast for a location.
     
     Args:
         location: City, zip, airport code, or landmark. 
                   Examples: "New Orleans", "10001", "LAX", "Eiffel Tower"
-                  Defaults to Detroit,MI if not specified.
+                  If None, tries to use user_id's settings_json["location"].
+                  Defaults to Detroit,MI if still not specified.
+        user_id: Optional user ID to look up preferred location.
     """
+    if not location and user_id:
+        from backend.database import get_pool
+        try:
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                settings = await conn.fetchval(
+                    "SELECT settings_json FROM public.bh_users WHERE id = $1",
+                    user_id
+                )
+                if settings and isinstance(settings, dict):
+                    location = settings.get("location")
+        except Exception as e:
+            logger.warning(f"Failed to fetch user location setting: {e}")
+
     loc = (location or "").strip() or DEFAULT_LOCATION
 
     # wttr.in with format=j1 returns structured JSON
     url = f"https://wttr.in/{loc}?format=j1"
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"User-Agent": "curl/8.0"})
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_http_client()
+        resp = await client.get(url, headers={"User-Agent": "curl/8.0"}, timeout=10.0)
+        resp.raise_for_status()
+        data = resp.json()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
             return {"error": f"Location not found: '{loc}'. Try a city name, zip code, or airport code."}

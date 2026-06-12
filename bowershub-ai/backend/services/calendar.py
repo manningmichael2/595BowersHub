@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -232,22 +233,22 @@ async def _fetch_events_raw(
 ) -> str:
     """Perform a CalDAV REPORT request and return the raw response body."""
     body = _build_report_body(start, end)
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.request(
-            method="REPORT",
-            url=url,
-            content=body.encode("utf-8"),
-            headers={
-                "Content-Type": "application/xml; charset=utf-8",
-                "Depth": "1",
-            },
-            auth=(user, password),
+    client = get_http_client()
+    resp = await client.request(
+        method="REPORT",
+        url=url,
+        content=body.encode("utf-8"),
+        headers={
+            "Content-Type": "application/xml; charset=utf-8",
+            "Depth": "1",
+        },
+        auth=(user, password),
+    )
+    if resp.status_code not in (200, 207):
+        raise RuntimeError(
+            f"CalDAV REPORT returned HTTP {resp.status_code}: {resp.text[:300]}"
         )
-        if resp.status_code not in (200, 207):
-            raise RuntimeError(
-                f"CalDAV REPORT returned HTTP {resp.status_code}: {resp.text[:300]}"
-            )
-        return resp.text
+    return resp.text
 
 
 # ──────────────────────────────────────────────
@@ -386,15 +387,15 @@ async def create_event(
         ical_body = "\r\n".join(ical_lines) + "\r\n"
         event_url = url.rstrip("/") + f"/{event_uid}.ics"
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.put(
-                event_url,
-                content=ical_body.encode("utf-8"),
-                headers={"Content-Type": "text/calendar; charset=utf-8"},
-                auth=(user, password),
-            )
-            if resp.status_code not in (200, 201, 204):
-                raise RuntimeError(f"CalDAV PUT returned HTTP {resp.status_code}: {resp.text[:300]}")
+        client = get_http_client()
+        resp = await client.put(
+            event_url,
+            content=ical_body.encode("utf-8"),
+            headers={"Content-Type": "text/calendar; charset=utf-8"},
+            auth=(user, password),
+        )
+        if resp.status_code not in (200, 201, 204):
+            raise RuntimeError(f"CalDAV PUT returned HTTP {resp.status_code}: {resp.text[:300]}")
 
         return {
             "ok": True,

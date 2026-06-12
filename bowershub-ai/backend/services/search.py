@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 from backend.config import Config
 from backend.database import get_pool
 from backend.services.file_manager import FileManager
+from backend.services.embeddings import EmbeddingsClient
+from backend.services.hybrid_retrieval import HybridRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,11 @@ class SearchService:
     def __init__(self, config: Config):
         self.config = config
         self.file_manager = FileManager(config)
+        
+        # Initialize semantic search components (R3.3)
+        pool = get_pool()
+        self.embeddings_client = EmbeddingsClient(config.OLLAMA_URL, pool)
+        self.hybrid_retriever = HybridRetriever(self.embeddings_client, pool)
 
     async def search(
         self,
@@ -114,41 +121,19 @@ class SearchService:
         self, query: str, workspace_ids: List[int],
         date_from: Optional[date], date_to: Optional[date], limit: int
     ) -> List[Dict[str, Any]]:
-        """Full-text search on messages using Postgres tsvector."""
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            sql = """
-                SELECT m.id, m.content, m.role, m.created_at, m.conversation_id,
-                       c.title as conversation_title, c.workspace_id,
-                       w.name as workspace_name,
-                       ts_rank(to_tsvector('english', m.content), plainto_tsquery('english', $1)) as rank
-                FROM public.bh_messages m
-                JOIN public.bh_conversations c ON c.id = m.conversation_id
-                JOIN public.bh_workspaces w ON w.id = c.workspace_id
-                WHERE to_tsvector('english', m.content) @@ plainto_tsquery('english', $1)
-                AND c.workspace_id = ANY($2)
-            """
-            params: List[Any] = [query, workspace_ids]
-            idx = 3
-
-            if date_from:
-                sql += f" AND m.created_at >= ${idx}"
-                params.append(date_from)
-                idx += 1
-            if date_to:
-                sql += f" AND m.created_at <= ${idx}"
-                params.append(date_to)
-                idx += 1
-
-            sql += f" ORDER BY rank DESC LIMIT ${idx}"
-            params.append(limit)
-
-            rows = await conn.fetch(sql, *params)
+        """Hybrid (vector + full-text) search on messages (R3.2, R3.3)."""
+        # Hybrid retrieval handles embedding and RRF merging
+        rows = await self.hybrid_retriever.search_hybrid(
+            query=query,
+            source_type='message',
+            limit=limit,
+            accessible_workspaces=workspace_ids
+        )
 
         results = []
         for r in rows:
             # Get surrounding context (1 message before and after)
-            context = await self._get_message_context(r["conversation_id"], r["id"])
+            context = await self._get_message_context(r["conversation_id"], r["source_id"])
             results.append({
                 "source_type": "message",
                 "content": r["content"][:500],
@@ -157,10 +142,10 @@ class SearchService:
                 "workspace_name": r["workspace_name"],
                 "conversation_id": r["conversation_id"],
                 "conversation_title": r["conversation_title"] or "Untitled",
-                "message_id": r["id"],
+                "message_id": r["source_id"],
                 "role": r["role"],
                 "created_at": r["created_at"].isoformat(),
-                "relevance": float(r["rank"]),
+                "relevance": float(r["rrf_score"]),
             })
         return results
 

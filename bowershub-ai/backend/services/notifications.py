@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 from backend.config import Config
 from backend.database import get_pool
@@ -164,15 +165,15 @@ class NotificationService:
         if url_title:
             data["url_title"] = url_title
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                "https://api.pushover.net/1/messages.json",
-                data=data,
-            )
-            if resp.status_code != 200:
-                logger.warning(f"Pushover returned {resp.status_code}: {resp.text}")
-                return False
-            return True
+        client = get_http_client()
+        resp = await client.post(
+            "https://api.pushover.net/1/messages.json",
+            data=data,
+        )
+        if resp.status_code != 200:
+            logger.warning(f"Pushover returned {resp.status_code}: {resp.text}")
+            return False
+        return True
 
     async def _send_pushover(self, title: str, message: str, priority: int = 0):
         """Backward-compatible private wrapper used by `send()`."""
