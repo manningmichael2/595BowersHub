@@ -181,6 +181,70 @@ class TestBuildColumnSql:
         )
         assert result == '"price" NUMERIC DEFAULT 0.00'
 
+    def test_negative_numeric_default_passes_through(self):
+        result = _build_column_sql(
+            {"name": "balance", "type": "integer", "nullable": True, "default": "-5"}
+        )
+        assert result == '"balance" INTEGER DEFAULT -5'
+
+    def test_keyword_default_now_is_allowed(self):
+        result = _build_column_sql(
+            {"name": "seen_at", "type": "timestamp", "nullable": True, "default": "now()"}
+        )
+        assert result == '"seen_at" TIMESTAMPTZ DEFAULT NOW()'
+
+    def test_boolean_keyword_default_canonicalized(self):
+        result = _build_column_sql(
+            {"name": "active", "type": "boolean", "nullable": True, "default": "false"}
+        )
+        assert result == '"active" BOOLEAN DEFAULT FALSE'
+
+    def test_plain_string_default_is_quoted(self):
+        # An unquoted word default is emitted as a string literal, not a bare ident.
+        result = _build_column_sql(
+            {"name": "status", "type": "text", "nullable": True, "default": "pending"}
+        )
+        assert result == '"status" TEXT DEFAULT \'pending\''
+
+    def test_quoted_string_default_preserved(self):
+        result = _build_column_sql(
+            {"name": "status", "type": "text", "nullable": True, "default": "'pending'"}
+        )
+        assert result == '"status" TEXT DEFAULT \'pending\''
+
+    def test_default_injection_is_neutralized(self):
+        # project-review.md C4: the DEFAULT clause was raw-interpolated. A crafted
+        # value must become an inert string literal, never executable SQL.
+        evil = "0); DROP TABLE public.bh_users; --"
+        result = _build_column_sql(
+            {"name": "qty", "type": "integer", "nullable": True, "default": evil}
+        )
+        # The entire payload is enclosed in one single-quoted literal — it cannot
+        # terminate the DEFAULT clause and start a new statement.
+        assert result == (
+            '"qty" INTEGER DEFAULT \'0); DROP TABLE public.bh_users; --\''
+        )
+        default_frag = result.split("DEFAULT ", 1)[1]
+        assert default_frag.startswith("'") and default_frag.endswith("'")
+
+    def test_default_with_embedded_quote_is_escaped(self):
+        result = _build_column_sql(
+            {"name": "note", "type": "text", "nullable": True, "default": "it's fine"}
+        )
+        # Single quote doubled inside the literal — no early string termination.
+        assert result == '"note" TEXT DEFAULT \'it\'\'s fine\''
+
+    def test_default_fake_closing_quote_is_neutralized(self):
+        # A value that opens but does not cleanly close a quoted literal must be
+        # re-quoted as a whole, not trusted as-is.
+        evil = "'); DROP TABLE x; --"
+        result = _build_column_sql(
+            {"name": "qty", "type": "integer", "nullable": True, "default": evil}
+        )
+        assert result == (
+            '"qty" INTEGER DEFAULT \'\'\'); DROP TABLE x; --\''
+        )
+
     def test_boolean_column(self):
         result = _build_column_sql({"name": "has_bearing", "type": "boolean", "nullable": True})
         assert result == '"has_bearing" BOOLEAN'
