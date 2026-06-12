@@ -278,3 +278,15 @@ Picked a thread that's **parallel-safe with the in-flight pgvector work** (touch
 - [Next] Highest-value parallel-safe follow-ups still open: (a) DB-backed L1 tests (slash-command + regex `bh_patterns` dispatch) and a WS chat e2e via `TestClient.websocket_connect` — the other half of C5; (b) C4 `db_browser.py` hardening (DDL `DEFAULT` injection sink + non-atomic mutation/undo + table allowlist); (c) C6 frontend (zod boundary validation, toast system, split `AdminConsolePage`); (d) delete the orphaned `/migrations` dir. Then pgvector (§8.3) continues in the other session.
 
 ---
+
+## [2026-06-11] Session Notes — Claude Code (C5 follow-ups: L1 + WebSocket e2e tests; DB-backed)
+
+Continued the C5 testing push from the prior entry — added the DB-backed half: Layer-1 routing and the WebSocket chat handler (the primary UX), both flagged in project-review.md C5 as having zero coverage. On branch `test/router-engine-core` (PR #6).
+
+- [Local DB] Ran the DB-backed suite against a throwaway `postgres:16-alpine` on host port 55432 ([[run-db-tests-locally]]) — `fresh_db` builds the schema from the squashed `0001_baseline.sql` chain, so the rich seed (workspaces 1-5, all skills, slash commands, etc.) is available without hand-seeding.
+- [`test_router_l1.py` — 6 tests] Real schema + a `NoCallProvider` (asserts L1 never calls a model) + a recording SkillExecutor (no n8n). Covers: `/help` lists seeded commands, `/new`, unknown-command message, **`/remember` `$args_first`/`$args_rest` templating** (splits "topic rest…" from the seeded jsonb template + bypass-workspace flag for global commands), **regex pattern matching** with `$1` capture-group extraction (seeds a `bh_patterns` row → dispatches the bound skill), and a no-match falls through both deterministic layers.
+- [`test_websocket_chat.py` — 8 tests] Scripted `FakeWebSocket` (no live socket/network) against the real DB. `handle_chat_message`: a `/help` message persists the user+assistant `bh_messages` rows (assistant tagged `routing_layer=L1`), emits typing+complete, no model call; plus empty-content / overlong-content / unknown-conversation guards. `websocket_chat_handler`: first-message-must-be-auth (close 4001), invalid-token reject, valid-token `auth_success`, ping→pong, unknown-type error — the full handshake/protocol.
+- [Verify] Both files green locally; **full suite 508→522, 0 failed** (the known test_model_resolver+test_model_admin cross-file isolation flake did not trigger this run). New WS file uses a ≥32-byte JWT secret to avoid the HMAC-key-length warning.
+- [Next] C5 essentially closed for the routing core (L1 deterministic + L2/L3 decisions + WS write-path + auth handshake). Remaining parallel-safe threads: C4 `db_browser.py` hardening (DDL DEFAULT injection sink + non-atomic mutation/undo + table allowlist), C6 frontend (zod boundary validation, toast system, split `AdminConsolePage`), and deleting the orphaned top-level `/migrations` dir. Then pgvector (§8.3) continues in the other session.
+
+---
