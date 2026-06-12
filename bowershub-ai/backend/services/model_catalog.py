@@ -97,6 +97,7 @@ class DiscoveredModel:
     supports_thinking: bool = False
     supports_effort: bool = False
     supports_structured_outputs: bool = False
+    is_embedding: bool = False                  # embedding-only model → excluded from the chat picker (R1.4)
 
 
 @dataclass
@@ -207,19 +208,34 @@ class OllamaDiscoverySource:
                 resp = await client.get(f"{self.base_url}/api/tags")
                 resp.raise_for_status()
                 data = resp.json()
-            models = []
-            for m in data.get("models", []):
-                name = m["name"]
-                models.append(DiscoveredModel(
-                    id=name,
-                    provider="ollama",
-                    display_name=name.replace(":", " ").title(),
-                    supports_tools=("hermes" in name.lower() or "qwen" in name.lower()),
-                ))
+                models = []
+                for m in data.get("models", []):
+                    name = m["name"]
+                    models.append(DiscoveredModel(
+                        id=name,
+                        provider="ollama",
+                        display_name=name.replace(":", " ").title(),
+                        supports_tools=("hermes" in name.lower() or "qwen" in name.lower()),
+                        is_embedding=await self._is_embedding(client, name),
+                    ))
             return DiscoveryResult(models=models, complete=True)
         except Exception as e:
             logger.warning(f"Ollama model discovery failed: {e}")
             return DiscoveryResult(models=[], complete=False)
+
+    async def _is_embedding(self, client, name: str) -> bool:
+        """Read Ollama's reported capabilities (/api/show) — NOT a name match (R1.4).
+        A pure embedding model advertises 'embedding' without 'completion'. Any
+        error/absent field → False (the DB seed/flag stays authoritative; a refresh
+        never *unsets* is_embedding, so a transient miss can't expose an embed model
+        in the picker)."""
+        try:
+            resp = await client.post(f"{self.base_url}/api/show", json={"model": name})
+            resp.raise_for_status()
+            caps = resp.json().get("capabilities") or []
+            return "embedding" in caps and "completion" not in caps
+        except Exception:
+            return False
 
 
 # Cold-start seed (R2.4). The ONLY hardcoded model literals in the catalog code —
@@ -415,12 +431,13 @@ class CatalogRefresh:
                 display_name = $2, max_input_tokens = $3, max_output_tokens = $4,
                 supports_vision = $5, supports_tools = $6, supports_thinking = $7,
                 supports_effort = $8, supports_structured_outputs = $9,
+                is_embedding = is_embedding OR $10,
                 is_active = true, last_seen_at = now(), missed_fetch_count = 0, updated_at = now()
             WHERE model_id = $1
             """,
             m.id, m.display_name, m.max_input_tokens, m.max_output_tokens,
             m.supports_vision, m.supports_tools, m.supports_thinking,
-            m.supports_effort, m.supports_structured_outputs,
+            m.supports_effort, m.supports_structured_outputs, m.is_embedding,
         )
 
     async def _insert_new(self, conn, m: DiscoveredModel) -> None:
@@ -430,14 +447,14 @@ class CatalogRefresh:
             INSERT INTO public.bh_model_rates
                 (provider, model_id, display_name, input_cost_per_mtok, output_cost_per_mtok,
                  supports_vision, supports_tools, max_output_tokens, max_input_tokens,
-                 supports_thinking, supports_effort, supports_structured_outputs,
+                 supports_thinking, supports_effort, supports_structured_outputs, is_embedding,
                  is_active, last_seen_at, missed_fetch_count, needs_price_confirmation)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, true, now(), 0, true)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, true, now(), 0, true)
             ON CONFLICT (model_id) DO NOTHING
             """,
             m.provider, m.id, m.display_name, in_cost, out_cost,
             m.supports_vision, m.supports_tools, m.max_output_tokens, m.max_input_tokens,
-            m.supports_thinking, m.supports_effort, m.supports_structured_outputs,
+            m.supports_thinking, m.supports_effort, m.supports_structured_outputs, m.is_embedding,
         )
 
 
@@ -471,6 +488,7 @@ class Resolver:
     # role -> model-id substring used to find a same-tier active model on fail-closed.
     # Keys are intent-based role names (0009); values stay vendor-tier substrings that
     # match concrete model_ids — do NOT rename the values.
+    # 'embed' resolves by the is_embedding flag (see _fallback_for_tier), not a keyword.
     _TIER_KEYWORDS = {"chat": "sonnet", "fast": "haiku", "deep": "opus", "local": ""}
 
     def __init__(self, pool):
@@ -507,6 +525,8 @@ class Resolver:
         for r in self._by_id.values():
             if not r.get("is_active"):
                 continue
+            if r.get("is_embedding"):
+                continue                  # embedding models are not chat-selectable (R1.4)
             dto = {"id": r["model_id"]}
             for f in self._PUBLIC_FIELDS:
                 dto[f] = r.get(f)
@@ -555,6 +575,11 @@ class Resolver:
         return self.resolve_role("chat")
 
     def _fallback_for_tier(self, role: str) -> Optional[str]:
+        if role == "embed":
+            # resolve by capability flag, never a name (R1.4); deterministic pick
+            cands = [r["model_id"] for r in self._by_id.values()
+                     if r.get("is_active") and r.get("is_embedding")]
+            return sorted(cands)[-1] if cands else None
         keyword = self._TIER_KEYWORDS.get(role, role)
         want_provider = "ollama" if role == "local" else "anthropic"
         candidates = [
@@ -599,6 +624,7 @@ _FALLBACK_ROLE_MODEL = {
     "chat": "claude-sonnet-4-6",
     "deep": "claude-opus-4-5-20251101",
     "local": "llama3.2:3b",
+    "embed": "bge-m3",      # matches the 0010 embed-alias seed (semantic-memory)
 }
 
 
@@ -681,3 +707,26 @@ async def get_discovery_config(pool) -> tuple:
     interval = int(cfg.get("model_discovery_interval_hours", {}).get("hours", 24))
     enabled = bool(cfg.get("model_discovery_enabled", {}).get("enabled", True))
     return max(MIN_DISCOVERY_INTERVAL_HOURS, interval), enabled
+
+
+# DB-driven embedding config (R1.2/R3.4). The seed lives in 0010; this default is
+# the cold-start fallback when the row is absent (mirrors the resolver fallbacks).
+_DEFAULT_EMBEDDING_CONFIG = {"model": "bge-m3", "dim": 1024, "version": 1, "metric": "cosine"}
+
+
+async def get_embedding_config(pool) -> dict:
+    """Read the `embedding_config` platform setting fresh (R3.4 wants the *current*
+    version each tick, never cached). Returns {model, dim, version, metric}; falls
+    back to the seeded default if the row is missing or malformed."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchval(
+            "SELECT value_json FROM public.bh_platform_settings WHERE key = 'embedding_config'"
+        )
+    if row is None:
+        return dict(_DEFAULT_EMBEDDING_CONFIG)
+    try:
+        cfg = json.loads(row) if isinstance(row, str) else dict(row)
+    except Exception:
+        return dict(_DEFAULT_EMBEDDING_CONFIG)
+    # merge over defaults so a partial row never drops a required key
+    return {**_DEFAULT_EMBEDDING_CONFIG, **cfg}

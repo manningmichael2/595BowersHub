@@ -58,6 +58,17 @@ async def fresh_db(fresh_db_name: str):
     finally:
         await admin.close()
 
+    # Pre-create the pgvector extension, mirroring the production superuser cutover
+    # (docs/semantic-memory-cutover.md): migration 0010 assumes `vector` already
+    # exists and guards loudly otherwise. The suite therefore runs against a
+    # pgvector-capable image (pgvector/pgvector:pg16). Tests that specifically
+    # exercise the missing-extension guard drop it themselves.
+    ext = await asyncpg.connect(database=fresh_db_name, **settings)
+    try:
+        await ext.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    finally:
+        await ext.close()
+
     try:
         yield fresh_db_name
     finally:
