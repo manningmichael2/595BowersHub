@@ -722,3 +722,78 @@ async def delete_pattern(pattern_id: int, user: dict = Depends(require_admin)):
     from backend.middleware.audit import AuditLogger
     await AuditLogger.log(user["id"], "delete_pattern", "pattern", pattern_id, {"rule": row["rule"]})
     return {"ok": True, "deleted": row["rule"]}
+
+
+@router.get("/semantic-memory/status")
+async def semantic_memory_status(user: dict = Depends(require_admin)):
+    """
+    Get semantic memory status: coverage, pending queue, dead-letters, active model.
+    Satisfies R4.2.
+    """
+    from backend.services.model_catalog import get_embedding_config, resolve_role
+    pool = get_pool()
+    
+    async with pool.acquire() as conn:
+        # Check if table exists
+        table_exists = await conn.fetchval("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'kb_chunks'
+            )
+        """)
+        if not table_exists:
+            return {"active": False, "error": "kb_chunks table not found"}
+
+        # Overall Stats
+        stats = await conn.fetchrow("""
+            SELECT 
+                COUNT(*) as total,
+                COALESCE(SUM(CASE WHEN embed_state = 'done' THEN 1 ELSE 0 END), 0) as done,
+                COALESCE(SUM(CASE WHEN embed_state = 'pending' THEN 1 ELSE 0 END), 0) as pending,
+                COALESCE(SUM(CASE WHEN embed_state = 'dead' THEN 1 ELSE 0 END), 0) as dead
+            FROM public.kb_chunks
+        """)
+        
+        # Source coverage
+        msg_total = await conn.fetchval("SELECT COUNT(*) FROM public.bh_messages WHERE role IN ('user', 'assistant')")
+        msg_done = await conn.fetchval("SELECT COUNT(*) FROM public.kb_chunks WHERE source_type = 'message' AND embed_state = 'done'")
+        
+        ent_total = await conn.fetchval("SELECT COUNT(*) FROM public.bh_entities WHERE is_active = true")
+        ent_done = await conn.fetchval("SELECT COUNT(*) FROM public.kb_chunks WHERE source_type = 'entity' AND embed_state = 'done'")
+        
+        # Latest errors
+        dead_letters = await conn.fetch("""
+            SELECT source_type, source_id, last_error, updated_at
+            FROM public.kb_chunks
+            WHERE embed_state = 'dead'
+            ORDER BY updated_at DESC
+            LIMIT 5
+        """)
+        
+        config = await get_embedding_config(pool)
+        active_model = resolve_role("embed")
+
+    return {
+        "active": True,
+        "model": active_model,
+        "config": config,
+        "stats": {
+            "total": stats["total"],
+            "done": int(stats["done"]),
+            "pending": int(stats["pending"]),
+            "dead": int(stats["dead"])
+        },
+        "coverage": {
+            "messages": {"done": msg_done, "total": msg_total, "pct": round(msg_done / msg_total * 100, 1) if msg_total > 0 else 100.0},
+            "entities": {"done": ent_done, "total": ent_total, "pct": round(ent_done / ent_total * 100, 1) if ent_total > 0 else 100.0},
+        },
+        "dead_letters": [
+            {
+                "source_type": r["source_type"],
+                "source_id": r["source_id"],
+                "error": r["last_error"],
+                "timestamp": r["updated_at"].isoformat()
+            } for r in dead_letters
+        ]
+    }

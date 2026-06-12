@@ -42,6 +42,23 @@ async def _init_connection(conn: asyncpg.Connection):
         "json", encoder=_encode, decoder=json.loads, schema="pg_catalog"
     )
 
+    # pgvector codec (semantic memory): lets asyncpg encode Python lists into the
+    # halfvec/vector columns the EmbeddingWorker writes. Guarded because register_vector
+    # needs the `vector` type to already exist, but this runs at pool init — on a fresh
+    # DB that is BEFORE migration 0010. A missing type must not crash pool init (that
+    # would pre-empt 0010's own loud guard, R1.5), so we attempt it and continue.
+    # In practice the worker only runs once the type exists (the cutover pre-creates
+    # it, else the 0010 guard aborts startup), so its connections always have the codec.
+    try:
+        from pgvector.asyncpg import register_vector
+        await register_vector(conn)
+    except Exception as e:
+        logger.debug(
+            "pgvector codec not registered (type may not exist yet — expected pre-0010): %s. "
+            "Run docs/semantic-memory-cutover.md if this persists after migrations.",
+            e,
+        )
+
 
 async def init_pool(config: Config) -> asyncpg.Pool:
     """Initialize the asyncpg connection pool."""

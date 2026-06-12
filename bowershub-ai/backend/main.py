@@ -106,6 +106,7 @@ async def lifespan(app: FastAPI):
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
     from backend.services.categorizer import run_categorizer
+    from backend.services.embedding_worker import run_embedding_worker
     from backend.services.alerts import check_budgets, check_inbox, check_reminders
     from backend.services.gameday_alerts import check_gameday_alerts
 
@@ -119,6 +120,14 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
+    # Run embedding worker every 2 minutes to keep semantic memory fresh (eventual consistency)
+    scheduler.add_job(
+        run_embedding_worker,
+        IntervalTrigger(minutes=2),
+        id="embedding_worker",
+        name="Semantic Memory Embedding Worker",
+        replace_existing=True,
+    )
     # Budget alerts — check every hour
     scheduler.add_job(
         check_budgets,

@@ -410,3 +410,14 @@ A Gemini-assisted session had committed/staged a large entangled batch on `main`
 - [Next] Resume pgvector on `feat/semantic-memory` (do the pgvector image cutover, then finish embeddings/worker/retrieval + their tests, re-add migration boot-guard). The remaining `model_catalog` http-pooling adoption (reverted with the file) can be re-applied there too.
 
 ---
+
+## [2026-06-12] Session Notes — Claude Code (semantic memory FINISHED + merged to main)
+
+Finished the pgvector/semantic-memory feature (quarantined earlier) and merged it onto the clean `main`. The infra cutover was already live (Postgres → `pgvector/pgvector:pg16`, `vector 0.8.2` in `finance`, `bge-m3` pulled).
+
+- [Finding] The feature was actually **complete** in the `backup/cleanup-2026-06-12` snapshot — the earlier "broken" assessment was a mid-flight commit (10d4e6f). The finished version (embeddings client, embedding worker, hybrid RRF retrieval, migrations 0010-0012, admin status, scoped retrieval wired into messages/entities) passes its full suite. Applied my two outstanding QA/QC fixes on top: weather per-user location wiring (a) and `FILEWRITER_URL` config (c).
+- [Integration] Ported the pgvector delta onto `main` (which already had the cleaned QA/QC + C6) as one commit — the a/c files were byte-identical so only the genuine semantic surface moved: migrations 0010-0012, services embeddings/embedding_worker/hybrid_retrieval, semantic versions of knowledge_graph/search/model_catalog, database.py pgvector codec, conftest CREATE EXTENSION, main.py embedding worker (every 2 min), admin `/semantic-memory/status`, requirements `pgvector`, cutover runbook, + 7 semantic test files.
+- [Verified] Backend **556 passed / 0 failed** against `pgvector/pgvector:pg16`; frontend tsc clean, 224 vitest, build OK. `feat/semantic-memory` + `backup/cleanup-2026-06-12` retain the full history.
+- [Next] Deploy `bowershub-ai` (backup first). On boot, migrations 0010-0012 apply against the live pgvector DB and the embedding worker backfills existing messages/entities over time (eventual consistency).
+
+---
