@@ -1,26 +1,17 @@
 import { create } from 'zustand'
+import { z } from 'zod'
 import { api } from '../services/api'
+import { parseLoose } from '../lib/validate'
+import {
+  WidgetTypeSchema,
+  PageLayoutSchema,
+  LayoutsResponseSchema,
+  type WidgetType,
+  type WidgetInstance,
+  type PageLayout,
+} from '../schemas/dashboard'
 
-export interface WidgetType {
-  id: number
-  widget_key: string
-  display_name: string
-  description: string
-  category: string
-  data_endpoint: string
-  default_config: Record<string, any>
-}
-
-export interface WidgetInstance {
-  widget_key: string
-  position: number
-  config_overrides: Record<string, any>
-}
-
-export interface PageLayout {
-  page_key: string
-  widgets: WidgetInstance[]
-}
+export type { WidgetType, WidgetInstance, PageLayout }
 
 interface DashboardState {
   availableWidgets: WidgetType[]
@@ -49,8 +40,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         api.get('/api/dashboard/layouts'),
       ])
 
-      const availableWidgets = widgetsRes.data
-      const pages: PageLayout[] = layoutsRes.data.pages || []
+      const availableWidgets = parseLoose(
+        z.array(WidgetTypeSchema),
+        widgetsRes.data,
+        'GET /api/dashboard/widgets'
+      )
+      const layoutData = parseLoose(
+        LayoutsResponseSchema,
+        layoutsRes.data,
+        'GET /api/dashboard/layouts'
+      )
+      const pages = layoutData.pages || []
 
       // Convert pages array into a Record keyed by page_key
       const layouts: Record<string, PageLayout> = {}

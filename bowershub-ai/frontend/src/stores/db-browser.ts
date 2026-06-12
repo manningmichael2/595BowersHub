@@ -7,99 +7,42 @@
  */
 
 import { create } from 'zustand'
+import { z } from 'zod'
 import { api } from '../services/api'
+import { parseLoose } from '../lib/validate'
+import {
+  SchemaInfoSchema,
+  ColumnMetaSchema,
+  FieldHintSchema,
+  SavedViewSchema,
+  UndoEntrySchema,
+  ImportResultSchema,
+  RelationGroupSchema,
+  RowsResponseSchema,
+  type SchemaInfo,
+  type TableInfo,
+  type ColumnMeta,
+  type FieldHint,
+  type FilterCondition,
+  type LayoutConfig,
+  type SavedView,
+  type UndoEntry,
+  type RelationGroup,
+  type ImportResult,
+} from '../schemas/db-browser'
 
-// ---- Types ----------------------------------------------------------------
-
-export interface SchemaInfo {
-  name: string
-  tables: TableInfo[]
-}
-
-export interface TableInfo {
-  name: string
-  column_count: number
-  row_count: number
-  has_link_table: boolean
-}
-
-export interface ColumnMeta {
-  column_name: string
-  data_type: string
-  is_nullable: string
-  column_default: string | null
-  is_pk: boolean
-  fk_schema?: string
-  fk_table?: string
-  fk_column?: string
-}
-
-export interface FieldHint {
-  column_name: string
-  input_type: 'text' | 'number' | 'fraction' | 'select' | 'url' | 'date' | 'boolean' | 'textarea'
-  options: string[] | null
-  prefix: string | null
-  suffix: string | null
-  min_val: number | null
-  max_val: number | null
-  step: number | null
-  placeholder: string | null
-}
-
-export interface FilterCondition {
-  column: string
-  operator: 'eq' | 'neq' | 'contains' | 'gt' | 'lt' | 'is_null' | 'has_value'
-  value: string
-}
-
-export interface LayoutConfig {
-  list: {
-    columns: { name: string; visible: boolean; position: number }[]
-  }
-  detail: {
-    fields: { name: string; visible: boolean; position: number; width: 25 | 33 | 50 | 100; height: 'small' | 'medium' | 'large' }[]
-  }
-}
-
-export interface SavedView {
-  id: string
-  name: string
-  schema_name: string
-  table_name: string
-  config: {
-    filters: FilterCondition[]
-    sortColumn: string | null
-    sortDirection: 'asc' | 'desc' | null
-    columns: { name: string; visible: boolean; position: number }[]
-  }
-  created_at: string
-  updated_at: string
-}
-
-export interface UndoEntry {
-  id: number
-  session_id: string
-  schema_name: string
-  table_name: string
-  row_id: string
-  operation_type: 'update' | 'insert' | 'delete' | 'bulk_update'
-  previous_values: Record<string, any> | null
-  new_values: Record<string, any> | null
-  is_undone: boolean
-}
-
-export interface RelationGroup {
-  schema: string
-  table: string
-  fk_column: string
-  total_count: number
-  rows: Record<string, any>[]
-}
-
-export interface ImportResult {
-  total_rows: number
-  imported_rows: number
-  failed_rows: { line_number: number; error: string }[]
+// Re-exported so existing call sites keep working
+export type {
+  SchemaInfo,
+  TableInfo,
+  ColumnMeta,
+  FieldHint,
+  FilterCondition,
+  LayoutConfig,
+  SavedView,
+  UndoEntry,
+  RelationGroup,
+  ImportResult,
 }
 
 // ---- State shape ----------------------------------------------------------
@@ -286,7 +229,8 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
     set({ schemasLoading: true })
     try {
       const res = await api.get('/api/db/schemas')
-      set({ schemas: res.data, schemasLoading: false })
+      const schemas = parseLoose(z.array(SchemaInfoSchema), res.data, 'GET /api/db/schemas')
+      set({ schemas, schemasLoading: false })
     } catch {
       set({ schemasLoading: false })
     }
@@ -313,7 +257,8 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
     // Load columns
     try {
       const res = await api.get(`/api/db/${schema}/${table}/columns`)
-      set({ columns: res.data })
+      const columns = parseLoose(z.array(ColumnMetaSchema), res.data, `GET /api/db/${schema}/${table}/columns`)
+      set({ columns })
     } catch {
       set({ columns: [] })
     }
@@ -336,10 +281,11 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
     try {
       const qs = buildRowsQueryString(get())
       const res = await api.get(`/api/db/${activeSchema}/${activeTable}/rows?${qs}`)
+      const data = parseLoose(RowsResponseSchema, res.data, `GET /api/db/${activeSchema}/${activeTable}/rows`)
       set({
-        rows: res.data.rows,
-        totalRows: res.data.total_rows,
-        filteredRows: res.data.filtered_rows,
+        rows: data.rows,
+        totalRows: data.total_rows,
+        filteredRows: data.filtered_rows,
         rowsLoading: false,
       })
     } catch {
@@ -393,7 +339,8 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
 
     try {
       const res = await api.get(`/api/db/${activeSchema}/${activeTable}/rows/${id}`)
-      set({ activeRow: res.data, dirtyFields: new Set() })
+      const data = parseLoose(z.record(z.string(), z.any()), res.data, `GET /api/db/${activeSchema}/${activeTable}/rows/${id}`)
+      set({ activeRow: data, dirtyFields: new Set() })
     } catch {
       set({ activeRow: null })
     }
@@ -413,7 +360,8 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       updates,
       headers
     )
-    set({ activeRow: res.data, dirtyFields: new Set() })
+    const data = parseLoose(z.record(z.string(), z.any()), res.data, `PATCH /api/db/${activeSchema}/${activeTable}/rows/${rowId}`)
+    set({ activeRow: data, dirtyFields: new Set() })
   },
 
   createRow: async (values) => {
@@ -426,9 +374,10 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       values,
       headers
     )
+    const data = parseLoose(z.record(z.string(), z.any()), res.data, `POST /api/db/${activeSchema}/${activeTable}/rows`)
     // Refresh the rows list
     await get().loadRows()
-    return res.data
+    return data
   },
 
   deleteRow: async (id) => {
@@ -446,8 +395,9 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
   loadFieldHints: async () => {
     try {
       const res = await api.get('/api/db/field-hints')
+      const data = parseLoose(z.array(FieldHintSchema), res.data, 'GET /api/db/field-hints')
       const hints: Record<string, FieldHint> = {}
-      for (const h of res.data) {
+      for (const h of data) {
         hints[h.column_name] = h
       }
       set({ fieldHints: hints })
@@ -660,7 +610,8 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
 
     try {
       const res = await api.get(`/api/db/views/${activeSchema}/${activeTable}`)
-      set({ views: res.data })
+      const views = parseLoose(z.array(SavedViewSchema), res.data, `GET /api/db/views/${activeSchema}/${activeTable}`)
+      set({ views })
     } catch {
       set({ views: [] })
     }
@@ -702,7 +653,8 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       name,
       config,
     })
-    set(state => ({ views: [...state.views, res.data] }))
+    const view = parseLoose(SavedViewSchema, res.data, `POST /api/db/views/${activeSchema}/${activeTable}`)
+    set(state => ({ views: [...state.views, view] }))
   },
 
   renameView: async (viewId, name) => {
@@ -736,9 +688,10 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
     try {
       const res = await api.post('/api/db/undo', undefined, headers)
       if (res.data) {
+        const entry = parseLoose(UndoEntrySchema, res.data, 'POST /api/db/undo')
         set(state => ({
           undoStack: state.undoStack.slice(0, -1),
-          redoStack: [...state.redoStack, res.data],
+          redoStack: [...state.redoStack, entry],
         }))
       }
       await get().loadRows()
@@ -755,9 +708,10 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
     try {
       const res = await api.post('/api/db/redo', undefined, headers)
       if (res.data) {
+        const entry = parseLoose(UndoEntrySchema, res.data, 'POST /api/db/redo')
         set(state => ({
           redoStack: state.redoStack.slice(0, -1),
-          undoStack: [...state.undoStack, res.data],
+          undoStack: [...state.undoStack, entry],
         }))
       }
       await get().loadRows()
@@ -817,8 +771,9 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
     }
 
     const result: ImportResult = await res.json()
+    const data = parseLoose(ImportResultSchema, result, 'POST /api/db/.../import-csv')
     await get().loadRows()
-    return result
+    return data
   },
 
   // ---------- Relations -----------------------------------------------------
@@ -829,7 +784,8 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
 
     try {
       const res = await api.get(`/api/db/${activeSchema}/${activeTable}/${id}/relations`)
-      return res.data as RelationGroup[]
+      const data = parseLoose(z.array(RelationGroupSchema), res.data, `GET /api/db/.../${id}/relations`)
+      return data
     } catch {
       return []
     }
