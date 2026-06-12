@@ -40,7 +40,7 @@ async def check_budgets():
             SELECT 
                 b.id,
                 c.name as category,
-                b.amount as budget_amount,
+                b.limit_amount as budget_amount,
                 COALESCE(SUM(ABS(t.amount)), 0) as mtd_spend
             FROM finance.budgets b
             JOIN finance.categories c ON c.id = b.category_id
@@ -48,8 +48,9 @@ async def check_budgets():
                 AND t.posted_date >= date_trunc('month', CURRENT_DATE)
                 AND t.amount < 0
                 AND t.is_transfer = false
-            GROUP BY b.id, c.name, b.amount
-            HAVING b.amount > 0
+            WHERE b.month = date_trunc('month', CURRENT_DATE)::date
+            GROUP BY b.id, c.name, b.limit_amount
+            HAVING b.limit_amount > 0
         """)
 
     for row in rows:

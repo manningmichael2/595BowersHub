@@ -296,6 +296,7 @@ class BriefingService:
                         AND t.amount < 0
                         AND t.is_transfer = false
                     WHERE b.limit_amount > 0
+                      AND b.month = date_trunc('month', CURRENT_DATE)::date
                     GROUP BY c.name, b.limit_amount
                     ORDER BY (COALESCE(SUM(ABS(t.amount)), 0) / b.limit_amount) DESC
                     LIMIT 5

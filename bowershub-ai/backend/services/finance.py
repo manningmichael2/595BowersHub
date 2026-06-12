@@ -234,7 +234,7 @@ async def spending_summary(month: Optional[str] = None) -> dict:
         income_row = await conn.fetchrow("""
             SELECT COALESCE(SUM(amount), 0) as total
             FROM finance.transactions
-            WHERE date >= $1 AND date <= $2
+            WHERE posted_date >= $1 AND posted_date <= $2
               AND amount > 0
               AND is_transfer = false
         """, start, end)
