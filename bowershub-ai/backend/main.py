@@ -212,11 +212,17 @@ async def lifespan(app: FastAPI):
     from backend.services.skill_registry import discover_skills
     discover_skills()
 
+    # Start dashboard SSE publisher loop
+    from backend.services.dashboard_stream import start_dashboard_stream_loop, stop_dashboard_stream_loop
+    start_dashboard_stream_loop()
+
     logger.info("BowersHub AI started successfully")
 
     yield
 
     # Shutdown
+    stop_dashboard_stream_loop()
+
     if hasattr(app.state, 'scheduler'):
         app.state.scheduler.shutdown(wait=False)
     if hasattr(app.state, 'hook_engine'):

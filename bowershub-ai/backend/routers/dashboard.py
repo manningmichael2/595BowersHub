@@ -176,6 +176,39 @@ async def _generate_default_layouts(user_id: int) -> list[dict[str, Any]]:
 
 # ---- Routes -----------------------------------------------------------------
 
+from fastapi import Request
+from fastapi.responses import StreamingResponse
+
+@router.get("/stream")
+async def dashboard_stream(request: Request, user: dict = Depends(get_current_user)):
+    """SSE endpoint for real-time dashboard updates."""
+    from backend.services.dashboard_stream import DashboardStateCache
+    
+    async def event_generator():
+        cache = DashboardStateCache.get_instance()
+        
+        # 1. Yield initial hydration state
+        state = await cache.get_all()
+        yield f"data: {json.dumps({'type': 'hydration', 'state': state})}\n\n"
+        
+        # 2. Wait for updates and yield them
+        while True:
+            if await request.is_disconnected():
+                break
+                
+            async with cache.condition:
+                try:
+                    # Wait for changes with a 1-second timeout to check for disconnects
+                    await asyncio.wait_for(cache.condition.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                    
+                # A change occurred, push full state
+                state = await cache.get_all()
+                yield f"data: {json.dumps({'type': 'update', 'state': state})}\n\n"
+                
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 @router.get("/widgets")
 async def list_widgets(user: dict = Depends(get_current_user)) -> list[dict[str, Any]]:
