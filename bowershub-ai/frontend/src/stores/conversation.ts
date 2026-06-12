@@ -1,31 +1,17 @@
 import { create } from 'zustand'
+import { z } from 'zod'
 import { api } from '../services/api'
+import { parseLoose } from '../lib/validate'
+import {
+  ConversationSchema,
+  MessageSchema,
+  type Conversation,
+  type Message,
+} from '../schemas/conversation'
 
-export interface Message {
-  id: number
-  conversation_id: number
-  role: 'user' | 'assistant' | 'system' | 'tool_call' | 'tool_result'
-  content: string
-  attachments: any[]
-  model_used: string | null
-  routing_layer: string | null
-  input_tokens: number | null
-  output_tokens: number | null
-  cost_usd: number | null
-  metadata: Record<string, any>
-  created_at: string
-}
-
-export interface Conversation {
-  id: number
-  workspace_id: number
-  title: string | null
-  parent_id: number | null
-  is_archived: boolean
-  created_at: string
-  updated_at: string
-  message_count: number
-}
+// Re-exported so existing `import { Conversation, Message } from '.../conversation'`
+// call sites keep working; the definitions now live in ../schemas/conversation.
+export type { Conversation, Message }
 
 interface ConversationState {
   conversations: Conversation[]
@@ -63,7 +49,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     set({ isLoading: true })
     try {
       const res = await api.get(`/api/conversations?workspace_id=${workspaceId}`)
-      const conversations = res.data as Conversation[]
+      const conversations = parseLoose(
+        z.array(ConversationSchema),
+        res.data,
+        'GET /api/conversations',
+      )
       set({ conversations, isLoading: false })
 
       // Auto-resume the most recently updated conversation when entering a
@@ -89,7 +79,12 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     set({ activeConversation: conversation, isLoading: true })
     try {
       const res = await api.get(`/api/conversations/${conversation.id}`)
-      set({ messages: res.data.messages || [], isLoading: false })
+      const messages = parseLoose(
+        z.array(MessageSchema),
+        res.data?.messages || [],
+        'GET /api/conversations/:id',
+      )
+      set({ messages, isLoading: false })
     } catch (err) {
       // Don't trap the user on a broken conversation — fall back to "none active"
       // and let them pick a different one or start fresh.
@@ -100,7 +95,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
 
   createConversation: async (workspaceId) => {
     const res = await api.post('/api/conversations', { workspace_id: workspaceId })
-    const conv = res.data
+    const conv = parseLoose(ConversationSchema, res.data, 'POST /api/conversations')
     set(state => ({
       conversations: [conv, ...state.conversations],
       activeConversation: conv,
@@ -152,6 +147,11 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
     const conv = get().activeConversation
     if (!conv) return
     const res = await api.get(`/api/conversations/${conv.id}/messages?before=${beforeId}&limit=50`)
-    set(state => ({ messages: [...res.data, ...state.messages] }))
+    const older = parseLoose(
+      z.array(MessageSchema),
+      res.data,
+      'GET /api/conversations/:id/messages',
+    )
+    set(state => ({ messages: [...older, ...state.messages] }))
   },
 }))
