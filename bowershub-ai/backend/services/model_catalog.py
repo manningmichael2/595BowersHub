@@ -34,9 +34,10 @@ class ModelNotAvailableError(Exception):
 
 
 # Provisional pricing for brand-new models (R3.2) and the cost miss-path (R3.3).
-# Kept BYTE-IDENTICAL to the legacy model_provider._infer_pricing so Task 8's
-# cost-parity regression test (old == new on the miss-path) holds. Do not "fix"
-# the opus rate here — operator-curated prices live in bh_model_rates; this is the
+# This is the sole surviving copy of the pricing ladder — the legacy
+# model_provider._infer_pricing it was forked from (byte-identical, for Task 8's
+# cost-parity gate) has since been deleted as dead code. Do not "fix" the opus rate
+# here — operator-curated prices live in bh_model_rates; this is the
 # flagged-provisional default only.
 def _infer_pricing(model_id: str) -> tuple:
     lower = model_id.lower()

@@ -17,8 +17,12 @@ import uuid
 from typing import Any
 from unittest.mock import AsyncMock, patch, MagicMock
 
+import asyncpg
 import pytest
+import pytest_asyncio
 
+from backend.config import Config
+from backend.database import close_pool, init_pool
 from backend.routers.db_browser import (
     _find_link_table,
     get_row_images,
@@ -26,6 +30,70 @@ from backend.routers.db_browser import (
     set_primary_image,
     unlink_row_image,
 )
+
+
+# ---------------------------------------------------------------------------
+# Real-DB fixture for the image-link query
+#
+# get_row_images() discovers a `{table}_files` link table by its FK, then joins
+# it to files.assets. The old success-path test mocked every layer of that with
+# AsyncMocks, which drifted from the real SQL. Here we stand up the real schema
+# (files.assets + inventory.tools + inventory.tools_files) in an ephemeral DB so
+# the FK discovery and join are exercised for real. init_pool() populates the
+# module-level pool that db_browser.get_pool() reads.
+# ---------------------------------------------------------------------------
+
+
+async def _create_image_schema(pool: asyncpg.Pool) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute("CREATE SCHEMA IF NOT EXISTS files")
+        await conn.execute("CREATE SCHEMA IF NOT EXISTS inventory")
+        await conn.execute(
+            """
+            CREATE TABLE files.assets (
+                id            UUID PRIMARY KEY,
+                path          TEXT,
+                original_name TEXT,
+                mime          TEXT,
+                ai_summary    TEXT,
+                uploaded_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        await conn.execute(
+            "CREATE TABLE inventory.tools (id SERIAL PRIMARY KEY, name TEXT)"
+        )
+        await conn.execute(
+            """
+            CREATE TABLE inventory.tools_files (
+                id         SERIAL PRIMARY KEY,
+                tool_id    INT REFERENCES inventory.tools(id),
+                asset_id   UUID REFERENCES files.assets(id),
+                is_primary BOOLEAN DEFAULT false,
+                sort_order INT
+            )
+            """
+        )
+
+
+@pytest_asyncio.fixture
+async def images_pool(fresh_db, db_settings):
+    config = Config(
+        ANTHROPIC_API_KEY="test",
+        DB_HOST=str(db_settings["host"]),
+        DB_PORT=int(db_settings["port"]),
+        DB_NAME=fresh_db,
+        DB_USER=str(db_settings["user"]),
+        DB_PASSWORD=str(db_settings["password"]),
+        JWT_SECRET="test-secret-for-db-browser-image-tests",
+        N8N_BASE="http://localhost:5678",
+    )
+    pool = await init_pool(config)
+    try:
+        await _create_image_schema(pool)
+        yield pool
+    finally:
+        await close_pool()
 
 
 # ---------------------------------------------------------------------------
@@ -163,46 +231,45 @@ async def test_get_row_images_no_link_table():
     assert result == []
 
 
-@pytest.mark.xfail(reason="pre-existing mock/code drift (predates C2); replace with real-DB test — see context-log", strict=False)
 @pytest.mark.asyncio
-async def test_get_row_images_with_results():
-    """Should return linked images ordered correctly."""
+async def test_get_row_images_with_results(images_pool):
+    """Linked images are discovered via the FK and joined to files.assets.
+
+    Real-DB: exercises _find_link_table's FK discovery and the dynamic
+    SELECT/ORDER BY against a row that has both is_primary and sort_order set.
+    """
     asset_uuid = uuid.uuid4()
-
-    mock_conn = AsyncMock()
-
-    # _find_link_table calls
-    mock_conn.fetchval = AsyncMock(return_value=True)
-    mock_conn.fetchrow = AsyncMock(return_value=FakeRecord({"column_name": "tool_id"}))
-
-    # Main query returns image rows
-    mock_conn.fetch = AsyncMock(return_value=[
-        FakeRecord({
-            "asset_id": asset_uuid,
-            "path": "inventory/tools/abc.jpg",
-            "original_name": "photo.jpg",
-            "mime": "image/jpeg",
-            "ai_summary": "A power tool",
-            "is_primary": True,
-            "sort_order": 0,
-        }),
-    ])
-
-    mock_pool = MagicMock()
-    mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
-    mock_pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("backend.routers.db_browser.get_pool", return_value=mock_pool):
-        result = await get_row_images(
-            schema="inventory",
-            table="tools",
-            row_id="1",
-            user={"id": 1},
+    async with images_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO files.assets (id, path, original_name, mime, ai_summary)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            asset_uuid, "inventory/tools/abc.jpg", "photo.jpg",
+            "image/jpeg", "A power tool",
         )
+        tool_id = await conn.fetchval(
+            "INSERT INTO inventory.tools (name) VALUES ('Drill') RETURNING id"
+        )
+        await conn.execute(
+            """
+            INSERT INTO inventory.tools_files (tool_id, asset_id, is_primary, sort_order)
+            VALUES ($1, $2, true, 0)
+            """,
+            tool_id, asset_uuid,
+        )
+
+    result = await get_row_images(
+        schema="inventory",
+        table="tools",
+        row_id=str(tool_id),
+        user={"id": 1},
+    )
 
     assert len(result) == 1
     assert result[0]["asset_id"] == str(asset_uuid)
     assert result[0]["path"] == "inventory/tools/abc.jpg"
+    assert result[0]["original_name"] == "photo.jpg"
     assert result[0]["is_primary"] is True
     assert result[0]["sort_order"] == 0
 
