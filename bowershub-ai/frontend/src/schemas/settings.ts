@@ -31,6 +31,7 @@ export const UserSettingsSchema = z
     morning_card_workspace_id: z.number().nullable().optional(),
     morning_card_disabled: z.boolean().optional(),
     voice: VoiceSettingsSchema.optional(),
+    use_experimental_dashboard: z.boolean().optional(),
   })
   .passthrough()
 

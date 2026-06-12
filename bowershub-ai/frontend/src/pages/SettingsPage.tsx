@@ -17,6 +17,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth'
+import { useSettingsStore } from '../stores/settings'
 import AppearancePanel from '../components/AppearancePanel'
 import VoicePanel from '../components/VoicePanel'
 
@@ -28,6 +29,7 @@ type SectionId =
   | 'briefing'
   | 'context-capture'
   | 'scheduled-prompts'
+  | 'labs'
   | 'admin'
 
 interface SectionDef {
@@ -43,6 +45,7 @@ const BASE_SECTIONS: SectionDef[] = [
   { id: 'notifications', label: 'Notifications', icon: '🔔' },
   { id: 'briefing', label: 'Briefing', icon: '🌅' },
   { id: 'context-capture', label: 'Context Capture', icon: '📥' },
+  { id: 'labs', label: 'Labs', icon: '🧪' },
   { id: 'scheduled-prompts', label: 'Scheduled Prompts', icon: '⏰' },
 ]
 
@@ -144,6 +147,7 @@ export default function SettingsPage() {
               description="Background context-capture preferences. Coming soon."
             />
           )}
+          {activeSection === 'labs' && <LabsSection />}
         </main>
       </div>
     </div>
@@ -205,6 +209,46 @@ function PlaceholderSection({
         <p className="text-sm text-gray-400 mt-1">{description}</p>
       </div>
       <div className="text-sm text-gray-500 italic">Coming soon.</div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Labs section — experimental features
+// ---------------------------------------------------------------------------
+
+function LabsSection() {
+  const { settings, patch } = useSettingsStore()
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-medium text-gray-100 flex items-center gap-2">
+          Labs <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wider">Experimental</span>
+        </h2>
+        <p className="text-sm text-gray-400 mt-1">
+          Opt-in to experimental features currently in development. These may be unstable.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <label className="flex items-start gap-3 p-4 rounded-xl border border-gray-800 bg-gray-900/30 cursor-pointer hover:bg-gray-800/40 transition-colors">
+          <div className="flex items-center h-5">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500 focus:ring-indigo-500/50"
+              checked={!!settings.use_experimental_dashboard}
+              onChange={(e) => patch({ use_experimental_dashboard: e.target.checked })}
+            />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-200">Dashboard V2 (SSE Command Center)</div>
+            <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+              Replaces the polling-based dashboard with a real-time Server-Sent Events stream.
+            </div>
+          </div>
+        </label>
+      </div>
     </div>
   )
 }

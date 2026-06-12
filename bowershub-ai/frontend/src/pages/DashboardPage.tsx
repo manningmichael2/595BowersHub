@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useDashboardStore } from '../stores/dashboard'
+import { useSettingsStore } from '../stores/settings'
 import { WidgetGrid } from '../components/dashboard/WidgetGrid'
 import DashboardNav from '../components/dashboard/DashboardNav'
 import AddWidgetModal from '../components/dashboard/AddWidgetModal'
+import DashboardV2 from '../components/dashboard/DashboardV2'
 
 export default function DashboardPage() {
   const { loadDashboard, layouts, activePage, availableWidgets, isLoading, removeWidget } = useDashboardStore()
+  const useExperimental = useSettingsStore(s => s.settings.use_experimental_dashboard)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
 
@@ -15,6 +18,10 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading dashboard...</div>
+  }
+
+  if (useExperimental) {
+    return <DashboardV2 />
   }
 
   const activeLayout = layouts[activePage]
