@@ -290,3 +290,16 @@ Continued the C5 testing push from the prior entry — added the DB-backed half:
 - [Next] C5 essentially closed for the routing core (L1 deterministic + L2/L3 decisions + WS write-path + auth handshake). Remaining parallel-safe threads: C4 `db_browser.py` hardening (DDL DEFAULT injection sink + non-atomic mutation/undo + table allowlist), C6 frontend (zod boundary validation, toast system, split `AdminConsolePage`), and deleting the orphaned top-level `/migrations` dir. Then pgvector (§8.3) continues in the other session.
 
 ---
+
+## [2026-06-12] Session Notes — Claude Code (foundation backlog: 4 PRs merged; main green @ 534 tests)
+
+Cleared most of the remaining project-review.md backlog while the pgvector feature proceeded in a parallel session (its `.kiro/specs/semantic-memory/` spec untouched throughout). Four PRs authored, CI-green, and **merged to main**; full backend suite **494→534, 0 failed** on the integrated result.
+
+- [PR #6 — C5] First tests for the routing core. `test_router_engine.py` (14, mocked provider): force_model→L3 bypass, high-confidence L2 dispatch, low/null/malformed-JSON escalation, the DB-driven `is_read_only` 0.65-vs-0.75 threshold split, L2.5 refinement, skill error handling. `test_router_l1.py` (6, real DB) + `test_websocket_chat.py` (8, scripted fake socket): L1 slash/pattern dispatch + `$args` templating, and the WS auth handshake + message write-path. Also fixed ci.yml's stale "no-database suite" header comment.
+- [PR #7 — C4] DDL `DEFAULT`-clause injection sink closed: `_build_column_sql` interpolated the default raw (comment lied about sanitizing). New `_safe_default_literal()` allow-lists keywords/numerics and quotes everything else into an inert literal. +8 tests.
+- [PR #8 — C4] **Found the undo log was silently DEAD** — `str(user_id)` into `user_id integer NOT NULL` threw `DataError` on every write, swallowed by try/except, so no undo row was ever recorded via update/delete/bulk. Fixed with `_undo_actor()` (validates uuid/int) + wrapped each mutation+undo in one transaction (per-row for bulk). New DB-backed `test_db_browser_undo_atomicity.py` proves undo now records, a failed undo rolls the data change back, bad sessions skip safely. **Behavior change**: a tracked edit now fails+rolls back if undo can't be written.
+- [PR #9 — C2] Deleted the orphaned top-level `/migrations` dir (001-008) — dead since the squash to `0001_baseline.sql` (baseline holds all 5 domain schemas + 27 tables; grep-confirmed nothing references the old path).
+- [DECISION — C4 table allowlist DECLINED] Owner wants full db_browser access to all tables (sole admin, trusted superuser). No fence built. Only genuine footguns flagged: `bh_migrations` (can brick boot) and `bh_users` (self-lockout) — if ever wanted, a non-blocking confirm beats an allowlist. Recorded in auto-memory.
+- [Next] Last substantial review item open: **C6 frontend** (zod boundary validation, toast/notification system, split the 1643-line `AdminConsolePage`). Independent of the backend lane. Then pgvector (§8.3) lands from the parallel session.
+
+---
