@@ -935,6 +935,40 @@ async def create_row(
     return _record_to_dict(row)
 
 
+# ---- Undo logging --------------------------------------------------------
+
+
+def _undo_actor(request: Request, user: dict) -> tuple[uuid.UUID, int] | None:
+    """
+    Resolve the (session_id, user_id) needed to record an undo-log entry, or
+    None when undo logging should be skipped.
+
+    The session id comes from the ``X-DB-Session-Id`` header and must be a valid
+    UUID (``bh_db_browser_undo_log.session_id`` is ``uuid NOT NULL``); the user
+    id comes from the authenticated admin and must be an int (``user_id`` is
+    ``integer NOT NULL``). Returning None — rather than attempting an insert the
+    database rejects — is how callers skip undo without aborting the mutation.
+
+    This replaces the previous code that passed ``str(user_id)`` into the integer
+    column, so every undo write raised a DataError that was silently swallowed —
+    the undo log was effectively dead (project-review.md C4).
+    """
+    raw_session = request.headers.get("x-db-session-id")
+    if not raw_session:
+        return None
+    try:
+        session_uuid = uuid.UUID(str(raw_session))
+    except (ValueError, AttributeError, TypeError):
+        logger.warning("Ignoring invalid X-DB-Session-Id header for undo logging")
+        return None
+    raw_uid = user.get("id") or user.get("user_id")
+    try:
+        user_id = int(raw_uid)
+    except (ValueError, TypeError):
+        return None
+    return session_uuid, user_id
+
+
 # ---- Update Row --------------------------------------------------------------
 
 
@@ -1004,11 +1038,11 @@ async def update_row(
         except ValueError:
             pk_value = row_id
 
-        # 2. Check for undo log header — if present, fetch current row before update
-        session_id = request.headers.get("x-db-session-id")
+        # 2. Resolve undo actor — if present, fetch current row before update
+        undo = _undo_actor(request, user)
         old_row_dict: dict[str, Any] | None = None
 
-        if session_id:
+        if undo is not None:
             old_row = await conn.fetchrow(
                 f"SELECT * FROM {_quote_ident(schema)}.{_quote_ident(table)} "
                 f"WHERE {_quote_ident(pk_column)} = $1",
@@ -1035,9 +1069,38 @@ async def update_row(
             f"RETURNING *"
         )
 
-        # 4. Execute the update
+        # 4 + 5. Execute the update and record the undo entry atomically: both
+        # commit together or neither does, so a failed undo write can never leave
+        # an unrecoverable data change (project-review.md C4).
         try:
-            row = await conn.fetchrow(sql, *values, pk_value)
+            async with conn.transaction():
+                row = await conn.fetchrow(sql, *values, pk_value)
+
+                if row is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Row with {pk_column}={row_id} not found in {schema}.{table}",
+                    )
+
+                if undo is not None and old_row_dict is not None:
+                    session_uuid, user_id = undo
+                    new_values_dict = {k: _serialize_value(body[k]) for k in body}
+                    await conn.execute(
+                        """
+                        INSERT INTO bh_db_browser_undo_log
+                            (session_id, user_id, schema_name, table_name, row_id,
+                             operation_type, previous_values, new_values)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
+                        """,
+                        session_uuid,
+                        user_id,
+                        schema,
+                        table,
+                        row_id,
+                        "update",
+                        json.dumps(old_row_dict, default=str),
+                        json.dumps(new_values_dict, default=str),
+                    )
         except asyncpg.UniqueViolationError as e:
             detail = str(e.detail) if e.detail else "A record with these values already exists."
             raise HTTPException(
@@ -1062,36 +1125,6 @@ async def update_row(
                 status_code=400,
                 detail=f"Check constraint '{constraint}' violated.",
             )
-
-        if row is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Row with {pk_column}={row_id} not found in {schema}.{table}",
-            )
-
-        # 5. Write undo log entry if session header was present
-        if session_id and old_row_dict is not None:
-            try:
-                user_id = user.get("id") or user.get("user_id")
-                new_values_dict = {k: _serialize_value(body[k]) for k in body}
-                await conn.execute(
-                    """
-                    INSERT INTO bh_db_browser_undo_log
-                        (session_id, user_id, schema_name, table_name, row_id,
-                         operation_type, previous_values, new_values)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb)
-                    """,
-                    session_id,
-                    str(user_id) if user_id else None,
-                    schema,
-                    table,
-                    row_id,
-                    "update",
-                    json.dumps(old_row_dict, default=str),
-                    json.dumps(new_values_dict, default=str),
-                )
-            except Exception as e:
-                logger.warning(f"Failed to write undo log for update: {e}")
 
         return _record_to_dict(row)
 
@@ -1152,11 +1185,11 @@ async def delete_row(
         except ValueError:
             pk_value = row_id
 
-        # 2. If session header present, fetch the full row state BEFORE deleting
-        session_id = request.headers.get("x-db-session-id")
+        # 2. If undo is active, fetch the full row state BEFORE deleting
+        undo = _undo_actor(request, user)
         previous_row: dict[str, Any] | None = None
 
-        if session_id:
+        if undo is not None:
             row = await conn.fetchrow(
                 f"SELECT * FROM {_quote_ident(schema)}.{_quote_ident(table)} "
                 f"WHERE {_quote_ident(pk_column)} = $1",
@@ -1165,26 +1198,25 @@ async def delete_row(
             if row is not None:
                 previous_row = _record_to_dict(row)
 
-        # 3. Execute the DELETE
+        # 3 + 4. Delete the row and record the undo entry atomically.
         delete_query = (
             f"DELETE FROM {_quote_ident(schema)}.{_quote_ident(table)} "
             f"WHERE {_quote_ident(pk_column)} = $1"
         )
-        result = await conn.execute(delete_query, pk_value)
+        async with conn.transaction():
+            result = await conn.execute(delete_query, pk_value)
 
-        # asyncpg returns "DELETE N" where N is the number of rows deleted
-        rows_deleted = int(result.split()[-1])
+            # asyncpg returns "DELETE N" where N is the number of rows deleted
+            rows_deleted = int(result.split()[-1])
 
-        if rows_deleted == 0:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Row with {pk_column}={row_id} not found in {schema}.{table}",
-            )
+            if rows_deleted == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Row with {pk_column}={row_id} not found in {schema}.{table}",
+                )
 
-        # 4. Write undo log entry if session header was present
-        if session_id and previous_row is not None:
-            try:
-                user_id = user.get("id") or user.get("user_id")
+            if undo is not None and previous_row is not None:
+                session_uuid, user_id = undo
                 await conn.execute(
                     """
                     INSERT INTO bh_db_browser_undo_log
@@ -1192,15 +1224,13 @@ async def delete_row(
                          operation_type, previous_values, new_values)
                     VALUES ($1, $2, $3, $4, $5, 'delete', $6::jsonb, NULL)
                     """,
-                    session_id,
-                    str(user_id) if user_id else None,
+                    session_uuid,
+                    user_id,
                     schema,
                     table,
                     row_id,
                     json.dumps(previous_row, default=str),
                 )
-            except Exception as e:
-                logger.warning(f"Failed to write undo log for delete: {e}")
 
         # 5. Return success
         return {"ok": True, "deleted_id": row_id}
@@ -1236,7 +1266,7 @@ async def bulk_delete(
         raise HTTPException(status_code=400, detail="Body must contain 'ids' as a non-empty array.")
 
     pool = get_pool()
-    session_id = request.headers.get("x-db-session-id")
+    undo = _undo_actor(request, user)
 
     async with pool.acquire() as conn:
         # 1. Determine the primary key column
@@ -1264,10 +1294,12 @@ async def bulk_delete(
             )
 
         pk_column = pk_rows[0]["column_name"]
-        user_id = user.get("id") or user.get("user_id")
         deleted_count = 0
 
-        # 2. Process each ID individually to capture undo state
+        # 2. Process each ID individually to capture undo state. Each row's
+        # delete + undo write is atomic (its own transaction) so the batch can
+        # still skip non-existent rows while never leaving a deleted row with no
+        # undo record (project-review.md C4).
         for raw_id in ids:
             # Cast ID
             try:
@@ -1287,36 +1319,33 @@ async def bulk_delete(
 
             previous_row = _record_to_dict(row)
 
-            # Delete the row
-            result = await conn.execute(
-                f"DELETE FROM {_quote_ident(schema)}.{_quote_ident(table)} "
-                f"WHERE {_quote_ident(pk_column)} = $1",
-                pk_value,
-            )
+            async with conn.transaction():
+                result = await conn.execute(
+                    f"DELETE FROM {_quote_ident(schema)}.{_quote_ident(table)} "
+                    f"WHERE {_quote_ident(pk_column)} = $1",
+                    pk_value,
+                )
 
-            rows_affected = int(result.split()[-1])
+                rows_affected = int(result.split()[-1])
+                if rows_affected > 0 and undo is not None:
+                    session_uuid, user_id = undo
+                    await conn.execute(
+                        """
+                        INSERT INTO bh_db_browser_undo_log
+                            (session_id, user_id, schema_name, table_name, row_id,
+                             operation_type, previous_values, new_values)
+                        VALUES ($1, $2, $3, $4, $5, 'delete', $6::jsonb, NULL)
+                        """,
+                        session_uuid,
+                        user_id,
+                        schema,
+                        table,
+                        str(raw_id),
+                        json.dumps(previous_row, default=str),
+                    )
+
             if rows_affected > 0:
                 deleted_count += 1
-
-                # Write undo log entry
-                if session_id:
-                    try:
-                        await conn.execute(
-                            """
-                            INSERT INTO bh_db_browser_undo_log
-                                (session_id, user_id, schema_name, table_name, row_id,
-                                 operation_type, previous_values, new_values)
-                            VALUES ($1, $2, $3, $4, $5, 'delete', $6::jsonb, NULL)
-                            """,
-                            session_id,
-                            str(user_id) if user_id else None,
-                            schema,
-                            table,
-                            str(raw_id),
-                            json.dumps(previous_row, default=str),
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to write undo log for bulk delete (id={raw_id}): {e}")
 
         return {"ok": True, "deleted_count": deleted_count}
 
@@ -1353,7 +1382,7 @@ async def bulk_edit(
     # value can be None (setting to null), so we only validate column and ids
 
     pool = get_pool()
-    session_id = request.headers.get("x-db-session-id")
+    undo = _undo_actor(request, user)
 
     async with pool.acquire() as conn:
         # 1. Determine the primary key column
@@ -1381,10 +1410,11 @@ async def bulk_edit(
             )
 
         pk_column = pk_rows[0]["column_name"]
-        user_id = user.get("id") or user.get("user_id")
         updated_count = 0
 
-        # 2. Process each ID individually to capture old value for undo
+        # 2. Process each ID individually to capture old value for undo. Each
+        # row's update + undo write is atomic; constraint failures skip just that
+        # row (project-review.md C4).
         for raw_id in ids:
             # Cast ID
             try:
@@ -1404,15 +1434,35 @@ async def bulk_edit(
 
             old_value = _serialize_value(old_row[column])
 
-            # Update the single column
+            # Update the single column and record undo atomically.
             try:
-                result = await conn.execute(
-                    f"UPDATE {_quote_ident(schema)}.{_quote_ident(table)} "
-                    f"SET {_quote_ident(column)} = $1 "
-                    f"WHERE {_quote_ident(pk_column)} = $2",
-                    value,
-                    pk_value,
-                )
+                async with conn.transaction():
+                    result = await conn.execute(
+                        f"UPDATE {_quote_ident(schema)}.{_quote_ident(table)} "
+                        f"SET {_quote_ident(column)} = $1 "
+                        f"WHERE {_quote_ident(pk_column)} = $2",
+                        value,
+                        pk_value,
+                    )
+
+                    rows_affected = int(result.split()[-1])
+                    if rows_affected > 0 and undo is not None:
+                        session_uuid, user_id = undo
+                        await conn.execute(
+                            """
+                            INSERT INTO bh_db_browser_undo_log
+                                (session_id, user_id, schema_name, table_name, row_id,
+                                 operation_type, previous_values, new_values)
+                            VALUES ($1, $2, $3, $4, $5, 'bulk_update', $6::jsonb, $7::jsonb)
+                            """,
+                            session_uuid,
+                            user_id,
+                            schema,
+                            table,
+                            str(raw_id),
+                            json.dumps({column: old_value}, default=str),
+                            json.dumps({column: _serialize_value(value)}, default=str),
+                        )
             except (
                 asyncpg.UniqueViolationError,
                 asyncpg.ForeignKeyViolationError,
@@ -1422,30 +1472,8 @@ async def bulk_edit(
                 logger.warning(f"Constraint violation during bulk edit (id={raw_id}): {e}")
                 continue  # Skip rows that fail constraint checks
 
-            rows_affected = int(result.split()[-1])
             if rows_affected > 0:
                 updated_count += 1
-
-                # Write undo log entry
-                if session_id:
-                    try:
-                        await conn.execute(
-                            """
-                            INSERT INTO bh_db_browser_undo_log
-                                (session_id, user_id, schema_name, table_name, row_id,
-                                 operation_type, previous_values, new_values)
-                            VALUES ($1, $2, $3, $4, $5, 'bulk_update', $6::jsonb, $7::jsonb)
-                            """,
-                            session_id,
-                            str(user_id) if user_id else None,
-                            schema,
-                            table,
-                            str(raw_id),
-                            json.dumps({column: old_value}, default=str),
-                            json.dumps({column: _serialize_value(value)}, default=str),
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to write undo log for bulk edit (id={raw_id}): {e}")
 
         return {"ok": True, "updated_count": updated_count}
 
