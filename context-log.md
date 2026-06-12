@@ -421,3 +421,17 @@ Finished the pgvector/semantic-memory feature (quarantined earlier) and merged i
 - [Next] Deploy `bowershub-ai` (backup first). On boot, migrations 0010-0012 apply against the live pgvector DB and the embedding worker backfills existing messages/entities over time (eventual consistency).
 
 ---
+
+## [2026-06-12] Session Notes — Claude Code (finance column-name bugfixes + deploy)
+
+User reported errors on "what have been my top spend categories for june?" (L1/slash commands fine). Traced through router → classifier → `spending-summary` skill. Container logs showed two live `asyncpg.UndefinedColumnError` crashes; both were column-name drift, confirmed against the live `finance` DB and fixed.
+
+- [Bug 1] `finance.py` `spending_summary()` — the income query used `WHERE date >= $1` but the transactions column is `posted_date` (the other two queries already used it). Every spending-summary call threw. Fixed: `date` → `posted_date`.
+- [Bug 2] `alerts.py` `check_budgets()` (hourly job) — selected/grouped on `b.amount`, but `finance.budgets` column is `limit_amount` (matches `briefing.py`). Fixed all three references.
+- [Hardening] Both `alerts.py` and `briefing.py` joined `finance.budgets` with **no `b.month` filter**, so they'd compare every historical month's budget row against current-month spend. Added `b.month = date_trunc('month', CURRENT_DATE)::date` to both. (No budget rows defined yet, so no user-visible misfire had occurred.)
+- [Verified] All four fixed queries run clean against the live DB (June income = $4,569.54; budget queries parse, empty as expected).
+- [Deploy] `./scripts/deploy.sh bowershub-ai`. First build failed in the **frontend** stage — uncommitted dashboard-redesign WIP (`SettingsPage.tsx` `patchSettings`/`SettingsState`) doesn't typecheck. These backend fixes are unrelated, so per user direction I `git stash -u`'d only the 4 frontend WIP files, rebuilt+deployed, then `stash pop`'d. Container healthy (`status:ok, database:true`); confirmed the running image has all fixes. WIP restored intact.
+- [Commit] `4c0a56b` — the 3 backend files only (finance.py, alerts.py, briefing.py). Frontend dashboard-redesign WIP left uncommitted.
+- [Next] Frontend dashboard-redesign is mid-flight (WIP won't typecheck — `patchSettings` not yet on the settings store); a full rebuild is blocked until that's finished. Not yet pushed to origin.
+
+---
