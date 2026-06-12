@@ -21,6 +21,7 @@ import logging
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 from ..database import get_pool
 
@@ -164,25 +165,25 @@ async def run_categorizer() -> dict:
 async def _call_ollama(prompt: str) -> Optional[str]:
     """Call the local Ollama model. Returns the response text or None on failure."""
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={
-                    "model": resolve_role("local"),
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You classify bank transactions. Return ONLY the JSON array requested, nothing else.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    "stream": False,
-                    "options": {"temperature": 0, "num_predict": 2048},
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("message", {}).get("content", "")
+        client = get_http_client()
+        resp = await client.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": resolve_role("local"),
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You classify bank transactions. Return ONLY the JSON array requested, nothing else.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+                "options": {"temperature": 0, "num_predict": 2048},
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("message", {}).get("content", "")
     except Exception as e:
         logger.error(f"Categorizer: Ollama call failed: {e}")
         return None

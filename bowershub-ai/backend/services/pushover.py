@@ -9,6 +9,7 @@ import os
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +56,11 @@ async def send_notification(
         payload["url_title"] = url_title
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(PUSHOVER_API_URL, data=payload)
-            resp.raise_for_status()
-            logger.info(f"Pushover notification sent: {title}")
-            return True
+        client = get_http_client()
+        resp = await client.post(PUSHOVER_API_URL, data=payload, timeout=10.0)
+        resp.raise_for_status()
+        logger.info(f"Pushover notification sent: {title}")
+        return True
     except Exception as e:
         logger.error(f"Pushover notification failed: {e}")
         return False

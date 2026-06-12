@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 

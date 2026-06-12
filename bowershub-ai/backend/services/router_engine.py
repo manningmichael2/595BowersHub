@@ -380,7 +380,7 @@ Present this data in a clear, conversational way. Use markdown formatting (table
             return await self._handle_schedule_command(args)
 
         elif command == "/weather":
-            return await self._handle_weather_command(args)
+            return await self._handle_weather_command(args, context)
 
         elif command == "/recall":
             return await self._handle_recall_command(args)
@@ -770,7 +770,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         display = result.get("_display", str(result))
         return RoutingResult(layer="L1", content=display)
 
-    async def _handle_weather_command(self, args: str) -> RoutingResult:
+    async def _handle_weather_command(self, args: str, context: RoutingContext) -> RoutingResult:
         """Handle /weather — get weather forecast.
 
         Usage:
@@ -789,7 +789,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         if cleaned and cleaned not in ("tomorrow", "tmrw", "week", "5day", "forecast"):
             location = cleaned
 
-        result = await get_weather(location=location)
+        result = await get_weather(location=location, user_id=context.user_id)
         display = result.get("_display", str(result))
         return RoutingResult(layer="L1", content=display)
 

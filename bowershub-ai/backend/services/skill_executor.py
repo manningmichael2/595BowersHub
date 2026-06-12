@@ -7,6 +7,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 from backend.config import Config
 from backend.database import get_pool
@@ -131,7 +132,7 @@ class SkillExecutor:
                 raise SkillPermissionError(f"Skill '{skill_name}' not available in this workspace")
 
         # Check for native (in-process Python) skill handler first
-        native_result = await self._try_native_skill(skill_name, params)
+        native_result = await self._try_native_skill(skill_name, params, user_id)
         if native_result is not None:
             return native_result
 
@@ -145,11 +146,11 @@ class SkillExecutor:
         logger.info(f"Executing skill '{skill_name}': {method} {url}")
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, read=30.0)) as client:
-                if method == "GET":
-                    response = await client.get(url)
-                else:
-                    response = await client.post(url, json=params)
+            client = get_http_client()
+            if method == "GET":
+                response = await client.get(url, timeout=httpx.Timeout(5.0, read=30.0))
+            else:
+                response = await client.post(url, json=params, timeout=httpx.Timeout(5.0, read=30.0))
 
             if response.status_code >= 400:
                 raise SkillExecutionError(
@@ -187,7 +188,7 @@ class SkillExecutor:
             raise SkillExecutionError(skill_name, detail="Connection refused")
 
     async def _try_native_skill(
-        self, skill_name: str, params: Dict[str, Any]
+        self, skill_name: str, params: Dict[str, Any], user_id: Optional[int] = None
     ) -> Optional[SkillResult]:
         """
         Check if a skill has a registered native (in-process Python) handler.
@@ -205,7 +206,9 @@ class SkillExecutor:
         if handler is None:
             return None  # Not a native skill — fall through to webhook
 
-        result = await handler(params)
+        # Pass the acting user id under a reserved key so handlers that need it
+        # (e.g. weather → per-user default location) can read it; others ignore it.
+        result = await handler({**params, "_user_id": user_id})
         return SkillResult(skill_name=skill_name, raw_data=result)
 
     def format_response(self, result: SkillResult) -> str:

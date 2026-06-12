@@ -8,4 +8,5 @@ async def handle_weather(params: dict) -> dict:
     from backend.services.weather import get_weather
 
     location = params.get("location") or params.get("city") or params.get("query")
-    return await get_weather(location=location)
+    # Fall back to the user's saved settings_json["location"] when none is given.
+    return await get_weather(location=location, user_id=params.get("_user_id"))

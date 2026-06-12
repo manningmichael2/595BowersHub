@@ -7,16 +7,20 @@ Replaces the n8n Knowledge Memory workflow (9fTh1G0THWgI6XB3).
 - recall: searches /knowledge/ via filewriter's /search endpoint
 """
 import logging
+import os
 from backend.services.model_catalog import resolve_role
 import re
 from datetime import date
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
-FILEWRITER_URL = "http://100.106.180.101:5001"
+# Env-overridable (see Config.FILEWRITER_URL); default keeps the current
+# Tailscale address working until the deploy sets FILEWRITER_URL (C7).
+FILEWRITER_URL = os.environ.get("FILEWRITER_URL", "http://100.106.180.101:5001")
 OLLAMA_URL = "http://ollama:11434"
 KNOWLEDGE_ROOT = "/knowledge"
 
@@ -34,13 +38,13 @@ async def recall(query: str) -> dict:
     query = query.strip()
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{FILEWRITER_URL}/search",
-                json={"root": KNOWLEDGE_ROOT, "query": query, "mode": "smart"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_http_client()
+        resp = await client.post(
+            f"{FILEWRITER_URL}/search",
+            json={"root": KNOWLEDGE_ROOT, "query": query, "mode": "smart"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
     except Exception as e:
         return {"error": f"Knowledge search failed: {e}"}
 
@@ -76,20 +80,20 @@ async def recall(query: str) -> dict:
         non_header_lines = [l for l in lines_so_far if not l.startswith("# ") and not l.startswith("> ")]
         if len(non_header_lines) <= 1:
             try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.post(
-                        f"{FILEWRITER_URL}/read-text",
-                        json={"path": file_path},
-                    )
-                    if resp.status_code == 200:
-                        file_data = resp.json()
-                        content = file_data.get("content", "")
-                        if content:
-                            # Replace with full file lines (skip empty lines)
-                            by_file[file_path] = [
-                                l for l in content.split("\n")
-                                if l.strip() and not l.startswith("# ")
-                            ]
+                client = get_http_client()
+                resp = await client.post(
+                    f"{FILEWRITER_URL}/read-text",
+                    json={"path": file_path},
+                )
+                if resp.status_code == 200:
+                    file_data = resp.json()
+                    content = file_data.get("content", "")
+                    if content:
+                        # Replace with full file lines (skip empty lines)
+                        by_file[file_path] = [
+                            l for l in content.split("\n")
+                            if l.strip() and not l.startswith("# ")
+                        ]
             except Exception:
                 pass  # Keep whatever we had
 
@@ -165,15 +169,15 @@ async def remember(topic: str, fact: str) -> dict:
     existing_content = ""
     file_exists = False
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                f"{FILEWRITER_URL}/read-text",
-                json={"path": path},
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                file_exists = data.get("exists", False)
-                existing_content = data.get("content", "").strip()
+        client = get_http_client()
+        resp = await client.post(
+            f"{FILEWRITER_URL}/read-text",
+            json={"path": path},
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            file_exists = data.get("exists", False)
+            existing_content = data.get("content", "").strip()
     except Exception:
         pass  # If read fails, treat as new file
 
@@ -201,12 +205,12 @@ async def remember(topic: str, fact: str) -> dict:
     content = header + line
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                f"{FILEWRITER_URL}/append",
-                json={"path": path, "content": content},
-            )
-            resp.raise_for_status()
+        client = get_http_client()
+        resp = await client.post(
+            f"{FILEWRITER_URL}/append",
+            json={"path": path, "content": content},
+        )
+        resp.raise_for_status()
     except Exception as e:
         return {"error": f"Failed to save: {e}"}
 
@@ -232,30 +236,30 @@ async def _check_dedup(topic: str, existing: str, new_fact: str) -> dict:
     )
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={
-                    "model": resolve_role("local"),
-                    "messages": [
-                        {"role": "system", "content": "You are a deduplication classifier. Return ONLY the JSON object requested."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "stream": False,
-                    "options": {"temperature": 0, "num_predict": 100},
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            content = data.get("message", {}).get("content", "")
+        client = get_http_client()
+        resp = await client.post(
+            f"{OLLAMA_URL}/api/chat",
+            json={
+                "model": resolve_role("local"),
+                "messages": [
+                    {"role": "system", "content": "You are a deduplication classifier. Return ONLY the JSON object requested."},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+                "options": {"temperature": 0, "num_predict": 100},
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        content = data.get("message", {}).get("content", "")
 
-            # Parse JSON from response
-            content = content.strip()
-            if content.startswith("```"):
-                content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        # Parse JSON from response
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
             
-            import json
-            return json.loads(content)
+        import json
+        return json.loads(content)
 
     except Exception as e:
         # On failure, default to NOT covered (safer to save a possible dup than lose a fact)

@@ -24,6 +24,9 @@ class Config:
     N8N_BASE: str = ""
     FILES_ROOT: str = "/files"
     KNOWLEDGE_ROOT: str = "/knowledge"
+    # Filewriter service base URL. Env-overridable so the host isn't hardcoded
+    # (project-review.md C7); default keeps the current Tailscale address working.
+    FILEWRITER_URL: str = "http://100.106.180.101:5001"
 
     # Optional — providers enabled only if credentials present
     AWS_ACCESS_KEY_ID: Optional[str] = None
@@ -133,6 +136,7 @@ def load_config() -> Config:
         N8N_BASE=os.environ["N8N_BASE"],
         FILES_ROOT=os.environ.get("FILES_ROOT", "/files"),
         KNOWLEDGE_ROOT=os.environ.get("KNOWLEDGE_ROOT", "/knowledge"),
+        FILEWRITER_URL=os.environ.get("FILEWRITER_URL", "http://100.106.180.101:5001"),
         AWS_ACCESS_KEY_ID=os.environ.get("AWS_ACCESS_KEY_ID"),
         AWS_SECRET_ACCESS_KEY=os.environ.get("AWS_SECRET_ACCESS_KEY"),
         AWS_REGION=os.environ.get("AWS_REGION"),

@@ -14,6 +14,7 @@ from typing import Optional
 from xml.etree import ElementTree
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,9 @@ async def get_news(category: Optional[str] = None, limit: int = 10) -> dict:
     feed_info = FEEDS[cat]
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(feed_info["url"], headers={"User-Agent": "BowersHub-AI/1.0"})
-            resp.raise_for_status()
+        client = get_http_client()
+        resp = await client.get(feed_info["url"], headers={"User-Agent": "BowersHub-AI/1.0"}, timeout=10.0)
+        resp.raise_for_status()
     except Exception as e:
         return {
             "error": f"Failed to fetch {feed_info['name']}: {e}",

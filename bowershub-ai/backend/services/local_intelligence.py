@@ -17,6 +17,7 @@ import os
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -26,19 +27,19 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434")
 async def _call_ollama(prompt: str, max_tokens: int = 150, temperature: float = 0.1) -> Optional[str]:
     """Make a raw call to Ollama. Returns the response text or None on failure."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={
-                    "model": resolve_role("local"),
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": temperature, "num_predict": max_tokens},
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("response", "").strip()
+        client = get_http_client()
+        resp = await client.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": resolve_role("local"),
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": temperature, "num_predict": max_tokens},
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("response", "").strip()
     except Exception as e:
         logger.debug(f"Ollama call failed (non-critical): {e}")
         return None
@@ -219,12 +220,12 @@ Answer (yes/no):"""
 async def is_available() -> bool:
     """Check if Ollama is reachable and has the model loaded."""
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{OLLAMA_URL}/api/tags")
-            if resp.status_code == 200:
-                data = resp.json()
-                models = [m.get("name", "") for m in data.get("models", [])]
-                return any(resolve_role("local").split(":")[0] in m for m in models)
+        client = get_http_client()
+        resp = await client.get(f"{OLLAMA_URL}/api/tags", timeout=3.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            models = [m.get("name", "") for m in data.get("models", [])]
+            return any(resolve_role("local").split(":")[0] in m for m in models)
     except Exception:
         pass
     return False

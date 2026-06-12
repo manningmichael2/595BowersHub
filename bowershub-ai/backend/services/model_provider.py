@@ -274,6 +274,7 @@ class OllamaProvider(BaseProvider):
 
     async def complete(self, model, messages, max_tokens, tools=None, system=None):
         import httpx
+        from backend.http_client import get_http_client
 
         ollama_messages = []
         if system:
@@ -303,10 +304,10 @@ class OllamaProvider(BaseProvider):
                 for t in tools
             ]
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{self.base_url}/api/chat", json=body)
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_http_client()
+        resp = await client.post(f"{self.base_url}/api/chat", json=body, timeout=15.0)
+        resp.raise_for_status()
+        data = resp.json()
 
         content = data.get("message", {}).get("content", "")
         tool_calls = []
@@ -328,6 +329,7 @@ class OllamaProvider(BaseProvider):
 
     async def stream(self, model, messages, max_tokens, tools=None, system=None):
         import httpx
+        from backend.http_client import get_http_client
 
         ollama_messages = []
         if system:
@@ -348,22 +350,22 @@ class OllamaProvider(BaseProvider):
             "options": {"num_predict": max_tokens},
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream("POST", f"{self.base_url}/api/chat", json=body) as resp:
-                async for line in resp.aiter_lines():
-                    if not line:
-                        continue
-                    data = json.loads(line)
-                    if data.get("done"):
-                        yield StreamChunk(type="usage", data={
-                            "input_tokens": data.get("prompt_eval_count", 0),
-                            "output_tokens": data.get("eval_count", 0),
-                        })
-                        yield StreamChunk(type="message_stop", data=None)
-                    elif "message" in data:
-                        token = data["message"].get("content", "")
-                        if token:
-                            yield StreamChunk(type="text_delta", data=token)
+        client = get_http_client()
+        async with client.stream("POST", f"{self.base_url}/api/chat", json=body) as resp:
+            async for line in resp.aiter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                if data.get("done"):
+                    yield StreamChunk(type="usage", data={
+                        "input_tokens": data.get("prompt_eval_count", 0),
+                        "output_tokens": data.get("eval_count", 0),
+                    })
+                    yield StreamChunk(type="message_stop", data=None)
+                elif "message" in data:
+                    token = data["message"].get("content", "")
+                    if token:
+                        yield StreamChunk(type="text_delta", data=token)
 
 
 class ModelProvider:

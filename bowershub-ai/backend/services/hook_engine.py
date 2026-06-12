@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
+from backend.http_client import get_http_client
 from apscheduler.triggers.base import BaseTrigger
 from croniter import croniter
 
@@ -394,11 +395,11 @@ class HookEngine:
         # Resolve template variables
         body = json.loads(json.dumps(body_template))  # Deep copy
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            if method == "GET":
-                resp = await client.get(url)
-            else:
-                resp = await client.post(url, json=body)
+        client = get_http_client()
+        if method == "GET":
+            resp = await client.get(url, timeout=30.0)
+        else:
+            resp = await client.post(url, json=body, timeout=30.0)
 
         return {"status_code": resp.status_code, "body": resp.text[:500]}
 
@@ -618,13 +619,13 @@ class HookEngine:
         message = config.get("message_template", "Hook triggered")
 
         if self.config.pushover_enabled:
-            async with httpx.AsyncClient() as client:
-                await client.post("https://api.pushover.net/1/messages.json", data={
-                    "token": self.config.PUSHOVER_API_TOKEN,
-                    "user": self.config.PUSHOVER_USER_KEY,
-                    "title": title,
-                    "message": message,
-                })
+            client = get_http_client()
+            await client.post("https://api.pushover.net/1/messages.json", data={
+                "token": self.config.PUSHOVER_API_TOKEN,
+                "user": self.config.PUSHOVER_USER_KEY,
+                "title": title,
+                "message": message,
+            })
             return {"sent": True, "method": "pushover"}
         return {"sent": False, "reason": "Pushover not configured"}
 

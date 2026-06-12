@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 
 from backend.config import load_config, Config
 from backend.database import init_pool, close_pool, run_migrations
+from backend.http_client import init_http_client, close_http_client
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +43,10 @@ async def lifespan(app: FastAPI):
     config = load_config()
     app.state.config = config
     logger.info("Configuration loaded")
+
+    # Initialize global HTTP client
+    init_http_client()
+    logger.info("Global HTTP client initialized")
 
     # Initialize database pool
     retries = 5
@@ -113,6 +118,7 @@ async def lifespan(app: FastAPI):
         name="Transaction Categorizer (local model)",
         replace_existing=True,
     )
+
     # Budget alerts — check every hour
     scheduler.add_job(
         check_budgets,
@@ -207,6 +213,7 @@ async def lifespan(app: FastAPI):
     if hasattr(app.state, 'hook_engine'):
         await app.state.hook_engine.shutdown()
     await close_pool()
+    await close_http_client()
     logger.info("BowersHub AI shut down")
 
 

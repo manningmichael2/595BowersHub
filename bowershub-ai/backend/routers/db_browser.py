@@ -35,6 +35,8 @@ from fastapi.responses import FileResponse
 
 from backend.database import get_pool
 from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.audit import AuditLogger
+from backend.http_client import get_http_session
 
 logger = logging.getLogger(__name__)
 
@@ -932,6 +934,13 @@ async def create_row(
     if row is None:
         raise HTTPException(status_code=500, detail="Insert succeeded but no row was returned.")
 
+    await AuditLogger.log(
+        user_id=user['id'],
+        action=f'db_browser_create_row',
+        target_type='database',
+        target_id=None,
+        details={"schema": schema, "table": table}
+    )
     return _record_to_dict(row)
 
 
@@ -1126,6 +1135,13 @@ async def update_row(
                 detail=f"Check constraint '{constraint}' violated.",
             )
 
+        await AuditLogger.log(
+            user_id=user['id'],
+            action=f'db_browser_update_row',
+            target_type='database',
+            target_id=None,
+            details={"schema": schema, "table": table, "row_id": row_id}
+        )
         return _record_to_dict(row)
 
 
@@ -1233,6 +1249,13 @@ async def delete_row(
                 )
 
         # 5. Return success
+        await AuditLogger.log(
+            user_id=user['id'],
+            action=f'db_browser_delete_row',
+            target_type='database',
+            target_id=None,
+            details={"schema": schema, "table": table, "row_id": row_id}
+        )
         return {"ok": True, "deleted_id": row_id}
 
 
@@ -1347,6 +1370,13 @@ async def bulk_delete(
             if rows_affected > 0:
                 deleted_count += 1
 
+        await AuditLogger.log(
+            user_id=user['id'],
+            action=f'db_browser_bulk_delete',
+            target_type='database',
+            target_id=None,
+            details={"schema": schema, "table": table}
+        )
         return {"ok": True, "deleted_count": deleted_count}
 
 
@@ -1475,6 +1505,13 @@ async def bulk_edit(
             if rows_affected > 0:
                 updated_count += 1
 
+        await AuditLogger.log(
+            user_id=user['id'],
+            action=f'db_browser_bulk_edit',
+            target_type='database',
+            target_id=None,
+            details={"schema": schema, "table": table}
+        )
         return {"ok": True, "updated_count": updated_count}
 
 
@@ -2760,6 +2797,13 @@ async def create_schema(
                 detail=f"Failed to create schema: {e}",
             )
 
+    await AuditLogger.log(
+        user_id=user['id'],
+        action=f'db_browser_create_schema',
+        target_type='database',
+        target_id=None,
+        details={"schema": name}
+    )
     return {"ok": True, "schema": name, "sql": sql}
 
 
@@ -2852,6 +2896,13 @@ async def create_table(
                 detail=f"Failed to create table: {e}",
             )
 
+    await AuditLogger.log(
+        user_id=user['id'],
+        action=f'db_browser_create_table',
+        target_type='database',
+        target_id=None,
+        details={"schema": schema, "table": table}
+    )
     return {"ok": True, "schema": schema, "table": table, "sql": sql}
 
 
@@ -3091,6 +3142,13 @@ async def alter_table(
                 logger.error(f"Failed to drop column '{column_name}': {e}")
                 raise HTTPException(status_code=500, detail=f"Failed to drop column: {e}")
 
+            await AuditLogger.log(
+                user_id=user['id'],
+                action=f'db_browser_alter_table',
+                target_type='database',
+                target_id=None,
+                details={"schema": schema, "table": table, "action": action}
+            )
             return {"ok": True, "action": "drop_column", "column": column_name, "sql": sql}
 
         else:
@@ -3260,6 +3318,13 @@ async def undo_operation(
         )
 
         # Return the undone entry
+        await AuditLogger.log(
+            user_id=user['id'],
+            action=f'db_browser_undo_operation',
+            target_type='database',
+            target_id=None,
+            details={"session_id": session_id}
+        )
         return _record_to_dict(entry)
 
 
@@ -3421,6 +3486,13 @@ async def redo_operation(
         )
 
         # Return the redone entry
+        await AuditLogger.log(
+            user_id=user['id'],
+            action=f'db_browser_redo_operation',
+            target_type='database',
+            target_id=None,
+            details={"session_id": session_id}
+        )
         return _record_to_dict(entry)
 
 
@@ -3835,6 +3907,13 @@ async def import_csv(
                     "error": str(e),
                 })
 
+    await AuditLogger.log(
+        user_id=user['id'],
+        action=f'db_browser_import_csv',
+        target_type='database',
+        target_id=None,
+        details={"schema": schema, "table": table}
+    )
     return {
         "total_rows": total_rows,
         "imported_rows": imported_rows,
@@ -3854,8 +3933,12 @@ _INBOX_DIR = Path("/files/inbox")
 _FILES_DIR = Path("/files")
 _KNOWLEDGE_DIR = Path("/knowledge")
 
-# Smart Capture webhook URL
-_SMART_CAPTURE_URL = "http://100.106.180.101:5678/webhook/smart-capture/extract"
+
+def _get_smart_capture_url(request: Request) -> str:
+    """Resolve the Smart Capture extract URL from app configuration."""
+    config = request.app.state.config
+    base = config.N8N_BASE.rstrip("/")
+    return f"{base}/webhook/smart-capture/extract"
 
 
 @router.get("/inbox/files")
@@ -4167,9 +4250,10 @@ async def inbox_ai_extract(
         )
 
     # Proxy to Smart Capture extract webhook
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with get_http_session() as client:
         try:
-            resp = await client.post(_SMART_CAPTURE_URL, json=body)
+            url = _get_smart_capture_url(request)
+            resp = await client.post(url, json=body, timeout=60.0)
             resp.raise_for_status()
             return resp.json()
         except httpx.TimeoutException:
@@ -4220,9 +4304,10 @@ async def inbox_url_extract(
     if columns:
         extract_payload["text"] += f"\nTarget columns: {', '.join(columns)}"
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with get_http_session() as client:
         try:
-            resp = await client.post(_SMART_CAPTURE_URL, json=extract_payload)
+            url_target = _get_smart_capture_url(request)
+            resp = await client.post(url_target, json=extract_payload, timeout=60.0)
             resp.raise_for_status()
             return resp.json()
         except httpx.TimeoutException:

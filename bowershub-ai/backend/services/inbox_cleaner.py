@@ -20,6 +20,7 @@ import os
 from typing import Any, Dict, List
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -67,18 +68,18 @@ async def classify_email(sender: str, subject: str, preview: str) -> str:
     )
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={
-                    "model": resolve_role("local"),
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.1, "num_predict": 10},
-                },
-            )
-            resp.raise_for_status()
-            result = resp.json().get("response", "").strip().lower()
+        client = get_http_client()
+        resp = await client.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model": resolve_role("local"),
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 10},
+            },
+        )
+        resp.raise_for_status()
+        result = resp.json().get("response", "").strip().lower()
 
         # Normalize — take first word only
         category = result.split()[0].rstrip(".,;:") if result else "keep"
@@ -94,35 +95,35 @@ async def classify_email(sender: str, subject: str, preview: str) -> str:
 async def fetch_recent_emails(count: int = 30, unseen_only: bool = True) -> List[Dict[str, Any]]:
     """Fetch recent emails from inbox via filewriter IMAP (POST endpoint)."""
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.post(
-                f"{FILEWRITER_URL}/imap/fetch-recent",
-                json={
-                    "folder": "INBOX",
-                    "since_minutes": 1440,  # Last 24 hours
-                    "limit": count,
-                    "include_body": True,
-                    "body_max_chars": 500,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if not data.get("ok"):
-                logger.error(f"IMAP fetch failed: {data.get('error', 'unknown')}")
-                return []
-            # Normalize field names to what our classifier expects
-            emails = []
-            for em in data.get("emails", []):
-                emails.append({
-                    "uid": em.get("uid", ""),
-                    "from": f"{em.get('from_name', '')} <{em.get('from_address', '')}>".strip(),
-                    "from_name": em.get("from_name", ""),
-                    "from_address": em.get("from_address", ""),
-                    "subject": em.get("subject", ""),
-                    "preview": em.get("body_text", "")[:300],
-                    "date": em.get("date", ""),
-                })
-            return emails
+        client = get_http_client()
+        resp = await client.post(
+            f"{FILEWRITER_URL}/imap/fetch-recent",
+            json={
+                "folder": "INBOX",
+                "since_minutes": 1440,  # Last 24 hours
+                "limit": count,
+                "include_body": True,
+                "body_max_chars": 500,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not data.get("ok"):
+            logger.error(f"IMAP fetch failed: {data.get('error', 'unknown')}")
+            return []
+        # Normalize field names to what our classifier expects
+        emails = []
+        for em in data.get("emails", []):
+            emails.append({
+                "uid": em.get("uid", ""),
+                "from": f"{em.get('from_name', '')} <{em.get('from_address', '')}>".strip(),
+                "from_name": em.get("from_name", ""),
+                "from_address": em.get("from_address", ""),
+                "subject": em.get("subject", ""),
+                "preview": em.get("body_text", "")[:300],
+                "date": em.get("date", ""),
+            })
+        return emails
     except Exception as e:
         logger.error(f"Failed to fetch emails: {e}")
         return []
@@ -131,12 +132,12 @@ async def fetch_recent_emails(count: int = 30, unseen_only: bool = True) -> List
 async def apply_label(uid: str, label: str) -> bool:
     """Apply a Gmail label to an email via filewriter."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{FILEWRITER_URL}/imap/add-label",
-                json={"uid": uid, "label": label},
-            )
-            return resp.status_code == 200
+        client = get_http_client()
+        resp = await client.post(
+            f"{FILEWRITER_URL}/imap/add-label",
+            json={"uid": uid, "label": label},
+        )
+        return resp.status_code == 200
     except Exception:
         return False
 
@@ -144,12 +145,12 @@ async def apply_label(uid: str, label: str) -> bool:
 async def archive_email(uid: str) -> bool:
     """Archive an email (remove from INBOX) via filewriter."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{FILEWRITER_URL}/imap/mark-read",
-                json={"uid": uid, "archive": True},
-            )
-            return resp.status_code == 200
+        client = get_http_client()
+        resp = await client.post(
+            f"{FILEWRITER_URL}/imap/mark-read",
+            json={"uid": uid, "archive": True},
+        )
+        return resp.status_code == 200
     except Exception:
         return False
 

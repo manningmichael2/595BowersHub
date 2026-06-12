@@ -49,7 +49,7 @@ class BriefingService:
         data_sections = []
 
         # Gather data from various sources (fail gracefully)
-        weather = await self._get_weather()
+        weather = await self._get_weather(user_id)
         if weather:
             data_sections.append(f"**☀️ Weather**\n\n{weather}")
         else:
@@ -88,7 +88,7 @@ class BriefingService:
         """Generate a short briefing — just weather + important emails."""
         sections = []
 
-        weather = await self._get_weather()
+        weather = await self._get_weather(user_id)
         sections.append(f"**☀️ Weather**\n\n{weather or '_Weather data unavailable._'}")
 
         emails = await self._get_recent_emails()
@@ -101,11 +101,11 @@ class BriefingService:
         header = f"**Quick update — {date_str}**\n\n---\n"
         return header + "\n\n---\n\n".join(sections)
 
-    async def _get_weather(self) -> Optional[str]:
+    async def _get_weather(self, user_id: Optional[int] = None) -> Optional[str]:
         """Get weather data via the native weather skill."""
         try:
             from backend.services.weather import get_weather
-            result = await get_weather(location=None)  # Uses DEFAULT_LOCATION (Detroit,MI)
+            result = await get_weather(location=None, user_id=user_id)
             if isinstance(result, dict) and "_display" in result:
                 return result["_display"]
             if isinstance(result, dict) and "error" in result:
@@ -119,23 +119,24 @@ class BriefingService:
         """Fetch unread emails from Gmail INBOX via filewriter's IMAP endpoint."""
         try:
             import httpx
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(
-                    "http://filewriter:5001/imap/fetch-recent",
-                    json={"folder": "INBOX", "since_minutes": 720, "limit": 10},
-                )
-                if resp.status_code != 200:
-                    return None
-                data = resp.json()
-                if not data.get("ok") or not data.get("emails"):
-                    return None
-                emails = data["emails"]
-                lines = []
-                for em in emails[:8]:  # Cap at 8 most recent
-                    sender = em.get("from_name") or em.get("from_address") or "Unknown"
-                    subject = em.get("subject", "(no subject)")
-                    lines.append(f"- **{sender}**: {subject}")
-                return "\n".join(lines)
+            from backend.http_client import get_http_client
+            client = get_http_client()
+            resp = await client.post(
+                "http://filewriter:5001/imap/fetch-recent",
+                json={"folder": "INBOX", "since_minutes": 720, "limit": 10},
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if not data.get("ok") or not data.get("emails"):
+                return None
+            emails = data["emails"]
+            lines = []
+            for em in emails[:8]:  # Cap at 8 most recent
+                sender = em.get("from_name") or em.get("from_address") or "Unknown"
+                subject = em.get("subject", "(no subject)")
+                lines.append(f"- **{sender}**: {subject}")
+            return "\n".join(lines)
         except Exception as e:
             logger.warning(f"Briefing email fetch failed: {e}")
         return None
@@ -344,6 +345,7 @@ class BriefingService:
         """
         from datetime import date as date_cls, timedelta
         import httpx
+        from backend.http_client import get_http_client
         
         # Tracked teams: (display name, ESPN sport, ESPN league, team search string)
         tracked = [
@@ -361,106 +363,106 @@ class BriefingService:
         today = date_cls.today()
         yesterday = today - timedelta(days=1)
         
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            for display_name, sport, league, search in tracked:
-                try:
-                    # Check today and yesterday
-                    for try_date in [today, yesterday]:
-                        date_str = try_date.strftime("%Y%m%d")
-                        url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard?dates={date_str}"
-                        resp = await client.get(url)
-                        if resp.status_code != 200:
-                            continue
-                        data = resp.json()
-                        events = data.get("events", [])
+        client = get_http_client()
+        for display_name, sport, league, search in tracked:
+            try:
+                # Check today and yesterday
+                for try_date in [today, yesterday]:
+                    date_str = try_date.strftime("%Y%m%d")
+                    url = f"https://site.api.espn.com/apis/site/v2/sports/{sport}/{league}/scoreboard?dates={date_str}"
+                    resp = await client.get(url, timeout=8.0)
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+                    events = data.get("events", [])
                         
-                        # Find a game involving this team
-                        match = None
-                        for event in events:
-                            competitors = event.get("competitions", [{}])[0].get("competitors", [])
-                            for c in competitors:
-                                team = c.get("team", {})
-                                names = [
-                                    team.get("displayName", "").lower(),
-                                    team.get("name", "").lower(),
-                                    team.get("shortDisplayName", "").lower(),
-                                ]
-                                if any(search in n for n in names):
-                                    match = event
-                                    break
-                            if match:
+                    # Find a game involving this team
+                    match = None
+                    for event in events:
+                        competitors = event.get("competitions", [{}])[0].get("competitors", [])
+                        for c in competitors:
+                            team = c.get("team", {})
+                            names = [
+                                team.get("displayName", "").lower(),
+                                team.get("name", "").lower(),
+                                team.get("shortDisplayName", "").lower(),
+                            ]
+                            if any(search in n for n in names):
+                                match = event
                                 break
+                        if match:
+                            break
                         
-                        if not match:
-                            continue
+                    if not match:
+                        continue
                         
-                        # Extract game details
-                        comp = match.get("competitions", [{}])[0]
-                        competitors = comp.get("competitors", [])
-                        if len(competitors) < 2:
-                            continue
+                    # Extract game details
+                    comp = match.get("competitions", [{}])[0]
+                    competitors = comp.get("competitors", [])
+                    if len(competitors) < 2:
+                        continue
                         
-                        # ESPN puts home team first usually; sort by homeAway
-                        home = next((c for c in competitors if c.get("homeAway") == "home"), competitors[0])
-                        away = next((c for c in competitors if c.get("homeAway") == "away"), competitors[1])
+                    # ESPN puts home team first usually; sort by homeAway
+                    home = next((c for c in competitors if c.get("homeAway") == "home"), competitors[0])
+                    away = next((c for c in competitors if c.get("homeAway") == "away"), competitors[1])
                         
-                        home_name = home.get("team", {}).get("shortDisplayName") or home.get("team", {}).get("name", "?")
-                        away_name = away.get("team", {}).get("shortDisplayName") or away.get("team", {}).get("name", "?")
-                        home_score = home.get("score", "0")
-                        away_score = away.get("score", "0")
+                    home_name = home.get("team", {}).get("shortDisplayName") or home.get("team", {}).get("name", "?")
+                    away_name = away.get("team", {}).get("shortDisplayName") or away.get("team", {}).get("name", "?")
+                    home_score = home.get("score", "0")
+                    away_score = away.get("score", "0")
                         
-                        status = match.get("status", {}).get("type", {})
-                        state = status.get("state", "")  # "pre", "in", "post"
-                        detail = status.get("detail", "")
-                        completed = status.get("completed", False)
+                    status = match.get("status", {}).get("type", {})
+                    state = status.get("state", "")  # "pre", "in", "post"
+                    detail = status.get("detail", "")
+                    completed = status.get("completed", False)
                         
-                        # Venue
-                        venue = comp.get("venue", {}).get("fullName", "")
+                    # Venue
+                    venue = comp.get("venue", {}).get("fullName", "")
                         
-                        # Time/date
-                        date_iso = match.get("date", "")
+                    # Time/date
+                    date_iso = match.get("date", "")
                         
-                        if state == "post" or completed:
-                            # Final score
-                            home_s = int(home_score) if str(home_score).isdigit() else home_score
-                            away_s = int(away_score) if str(away_score).isdigit() else away_score
-                            # Bold the winner
-                            if isinstance(home_s, int) and isinstance(away_s, int):
-                                if home_s > away_s:
-                                    line = f"- **{display_name}**: {away_name} {away_s} @ **{home_name} {home_s}** _(Final)_"
-                                else:
-                                    line = f"- **{display_name}**: **{away_name} {away_s}** @ {home_name} {home_s} _(Final)_"
+                    if state == "post" or completed:
+                        # Final score
+                        home_s = int(home_score) if str(home_score).isdigit() else home_score
+                        away_s = int(away_score) if str(away_score).isdigit() else away_score
+                        # Bold the winner
+                        if isinstance(home_s, int) and isinstance(away_s, int):
+                            if home_s > away_s:
+                                line = f"- **{display_name}**: {away_name} {away_s} @ **{home_name} {home_s}** _(Final)_"
                             else:
-                                line = f"- **{display_name}**: {away_name} {away_score} @ {home_name} {home_score} _(Final)_"
-                            finished.append(line)
-                            break  # Got a result, move to next team
-                        elif state == "in":
-                            # Live game
-                            line = f"- 🔴 **{display_name}**: {away_name} {away_score} @ {home_name} {home_score} _({detail})_"
-                            live.append(line)
-                            break
+                                line = f"- **{display_name}**: **{away_name} {away_s}** @ {home_name} {home_s} _(Final)_"
                         else:
-                            # Scheduled
-                            time_str = ""
-                            if date_iso:
-                                try:
-                                    # Parse ISO and convert to local time (assume Detroit/EST)
-                                    from datetime import datetime as dt
-                                    game_dt = dt.fromisoformat(date_iso.replace("Z", "+00:00"))
-                                    # Convert to Detroit time (EDT = UTC-4 in summer)
-                                    local_dt = game_dt - timedelta(hours=4)
-                                    time_str = local_dt.strftime("%I:%M %p ET").lstrip("0")
-                                except Exception:
-                                    time_str = detail or "TBD"
+                            line = f"- **{display_name}**: {away_name} {away_score} @ {home_name} {home_score} _(Final)_"
+                        finished.append(line)
+                        break  # Got a result, move to next team
+                    elif state == "in":
+                        # Live game
+                        line = f"- 🔴 **{display_name}**: {away_name} {away_score} @ {home_name} {home_score} _({detail})_"
+                        live.append(line)
+                        break
+                    else:
+                        # Scheduled
+                        time_str = ""
+                        if date_iso:
+                            try:
+                                # Parse ISO and convert to local time (assume Detroit/EST)
+                                from datetime import datetime as dt
+                                game_dt = dt.fromisoformat(date_iso.replace("Z", "+00:00"))
+                                # Convert to Detroit time (EDT = UTC-4 in summer)
+                                local_dt = game_dt - timedelta(hours=4)
+                                time_str = local_dt.strftime("%I:%M %p ET").lstrip("0")
+                            except Exception:
+                                time_str = detail or "TBD"
                             
-                            venue_str = f" at {venue}" if venue else ""
-                            line = f"- **{display_name}**: {away_name} @ {home_name} — {time_str}{venue_str}"
-                            upcoming.append(line)
-                            break
+                        venue_str = f" at {venue}" if venue else ""
+                        line = f"- **{display_name}**: {away_name} @ {home_name} — {time_str}{venue_str}"
+                        upcoming.append(line)
+                        break
                             
-                except Exception as e:
-                    logger.debug(f"Sports fetch failed for {display_name}: {e}")
-                    continue
+            except Exception as e:
+                logger.debug(f"Sports fetch failed for {display_name}: {e}")
+                continue
         
         parts = []
         if live:

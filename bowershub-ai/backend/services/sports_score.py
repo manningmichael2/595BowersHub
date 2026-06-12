@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 logger = logging.getLogger(__name__)
 
@@ -321,16 +322,16 @@ async def get_sports_score(team: Optional[str] = None, sport: Optional[str] = No
         url = f"{ESPN_BASE}/{sport_path}/{league_path}/scoreboard?dates={date_str}"
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url)
-                if resp.status_code >= 400:
-                    # ESPN doesn't support this endpoint — not our fault, give a friendly message
-                    league_display = league_path.upper().replace(".", " ").replace("-", " ")
-                    return _friendly_error(
-                        f"ESPN doesn't have scoreboard data available for {league_display} right now. "
-                        f"This league may be in the off-season or not tracked by ESPN's public API."
-                    )
-                data = resp.json()
+            client = get_http_client()
+            resp = await client.get(url, timeout=10.0)
+            if resp.status_code >= 400:
+                # ESPN doesn't support this endpoint — not our fault, give a friendly message
+                league_display = league_path.upper().replace(".", " ").replace("-", " ")
+                return _friendly_error(
+                    f"ESPN doesn't have scoreboard data available for {league_display} right now. "
+                    f"This league may be in the off-season or not tracked by ESPN's public API."
+                )
+            data = resp.json()
         except Exception as e:
             return _friendly_error(f"Couldn't reach ESPN right now. Try again in a moment.")
 
@@ -442,11 +443,11 @@ async def get_box_score(team: Optional[str] = None, sport: Optional[str] = None)
         date_str = try_date.strftime("%Y%m%d")
         url = f"{ESPN_BASE}/{sport_path}/{league_path}/scoreboard?dates={date_str}"
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url)
-                if resp.status_code >= 400:
-                    continue
-                data = resp.json()
+            client = get_http_client()
+            resp = await client.get(url, timeout=10.0)
+            if resp.status_code >= 400:
+                continue
+            data = resp.json()
         except Exception:
             continue
 
@@ -478,11 +479,11 @@ async def get_box_score(team: Optional[str] = None, sport: Optional[str] = None)
     # Fetch the game summary (has full box score)
     summary_url = f"{ESPN_BASE}/{sport_path}/{league_path}/summary?event={game_id}"
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(summary_url)
-            if resp.status_code >= 400:
-                return _friendly_error("ESPN box score data isn't available for this game.")
-            summary = resp.json()
+        client = get_http_client()
+        resp = await client.get(summary_url, timeout=10.0)
+        if resp.status_code >= 400:
+            return _friendly_error("ESPN box score data isn't available for this game.")
+        summary = resp.json()
     except Exception:
         return _friendly_error("Couldn't fetch box score data from ESPN.")
 
@@ -954,11 +955,11 @@ async def get_sports_schedule(team: Optional[str] = None, sport: Optional[str] =
         url = f"{ESPN_BASE}/{sport_path}/{league_path}/scoreboard?dates={date_str}"
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url)
-                if resp.status_code >= 400:
-                    continue
-                data = resp.json()
+            client = get_http_client()
+            resp = await client.get(url, timeout=10.0)
+            if resp.status_code >= 400:
+                continue
+            data = resp.json()
         except Exception:
             continue
 

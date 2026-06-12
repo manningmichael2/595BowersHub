@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import httpx
+from backend.http_client import get_http_client
 
 from backend.database import get_pool
 from backend.services.sql_guard import validate_select
@@ -392,23 +393,23 @@ async def ask_db(question: str) -> dict:
     
     # Call Haiku to generate SQL
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": resolve_role("fast"),
-                    "max_tokens": 1024,
-                    "system": schema_prompt,
-                    "messages": [{"role": "user", "content": question}],
-                },
-            )
-            resp.raise_for_status()
-            api_data = resp.json()
+        client = get_http_client()
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": resolve_role("fast"),
+                "max_tokens": 1024,
+                "system": schema_prompt,
+                "messages": [{"role": "user", "content": question}],
+            },
+        )
+        resp.raise_for_status()
+        api_data = resp.json()
     except httpx.HTTPStatusError as e:
         return {"error": f"Anthropic API error: {e.response.status_code} {e.response.text[:200]}"}
     except Exception as e:

@@ -26,6 +26,7 @@ from typing import Any, Optional
 from urllib.parse import urlencode, urljoin
 
 import httpx
+from backend.http_client import get_http_client
 
 from backend.database import get_pool
 
@@ -154,13 +155,13 @@ async def execute_api_call(
         if headers:
             req_headers.update(headers)
 
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
-            if method.upper() == "GET":
-                resp = await client.get(url, params=params, headers=req_headers)
-            elif method.upper() == "POST":
-                resp = await client.post(url, json=body, params=params, headers=req_headers)
-            else:
-                resp = await client.request(method.upper(), url, json=body, params=params, headers=req_headers)
+        client = get_http_client()
+        if method.upper() == "GET":
+            resp = await client.get(url, params=params, headers=req_headers, timeout=REQUEST_TIMEOUT)
+        elif method.upper() == "POST":
+            resp = await client.post(url, json=body, params=params, headers=req_headers, timeout=REQUEST_TIMEOUT)
+        else:
+            resp = await client.request(method.upper(), url, json=body, params=params, headers=req_headers, timeout=REQUEST_TIMEOUT)
 
         duration_ms = int((time.time() - start) * 1000)
 
