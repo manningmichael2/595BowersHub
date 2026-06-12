@@ -1,12 +1,8 @@
 import { create } from 'zustand'
+import { parseLoose } from '../lib/validate'
+import { UserSchema, AuthResponseSchema, RefreshResponseSchema, type User } from '../schemas/auth'
 
-interface User {
-  id: number
-  email: string
-  display_name: string
-  role: string
-  is_active: boolean
-}
+export type { User }
 
 interface AuthState {
   user: User | null
@@ -52,7 +48,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         method: 'POST',
         body: JSON.stringify({ email, password }),
       })
-      const { access_token, refresh_token, user } = data
+      const { access_token, refresh_token, user } = parseLoose(
+        AuthResponseSchema,
+        data,
+        'POST /api/auth/login'
+      )
       set({ user, accessToken: access_token, refreshToken: refresh_token, isLoading: false })
       localStorage.setItem('refreshToken', refresh_token)
       localStorage.setItem('user', JSON.stringify(user))
@@ -113,12 +113,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         method: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
       })
+      const { access_token, refresh_token: new_refresh_token } = parseLoose(
+        RefreshResponseSchema,
+        data,
+        'POST /api/auth/refresh'
+      )
       set({
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
+        accessToken: access_token,
+        refreshToken: new_refresh_token,
         isRefreshing: false,
       })
-      localStorage.setItem('refreshToken', data.refresh_token)
+      localStorage.setItem('refreshToken', new_refresh_token)
       return true
     } catch {
       // Clean logout on refresh failure. Send the user to the login page

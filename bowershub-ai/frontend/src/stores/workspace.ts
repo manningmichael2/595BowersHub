@@ -1,18 +1,10 @@
 import { create } from 'zustand'
+import { z } from 'zod'
 import { api } from '../services/api'
+import { parseLoose } from '../lib/validate'
+import { WorkspaceSchema, type Workspace } from '../schemas/workspace'
 
-export interface Workspace {
-  id: number
-  name: string
-  description: string | null
-  icon: string | null
-  color: string | null
-  system_prompt: string
-  default_model: string
-  auto_capture: boolean
-  user_count: number
-  skill_count: number
-}
+export type { Workspace }
 
 interface WorkspaceState {
   workspaces: Workspace[]
@@ -33,7 +25,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ isLoading: true })
     try {
       const res = await api.get('/api/workspaces')
-      const workspaces = res.data
+      const workspaces = parseLoose(
+        z.array(WorkspaceSchema),
+        res.data,
+        'GET /api/workspaces'
+      )
       set({ workspaces, isLoading: false })
 
       // Restore last active workspace or default to first

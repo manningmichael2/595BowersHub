@@ -1,11 +1,9 @@
 import { create } from 'zustand'
 import { api } from '../services/api'
+import { parseLoose } from '../lib/validate'
+import { BrandingResponseSchema, type BrandingUrls } from '../schemas/branding'
 
-export interface BrandingUrls {
-  icon_192: string
-  icon_512: string
-  icon_maskable_512: string
-}
+export type { BrandingUrls }
 
 interface BrandingState {
   version: string | null
@@ -26,7 +24,11 @@ export const useBrandingStore = create<BrandingState>((set) => ({
     set({ isLoading: true })
     try {
       const res = await api.get('/api/branding/icon')
-      const { version, urls, has_rollback } = res.data
+      const { version, urls, has_rollback } = parseLoose(
+        BrandingResponseSchema,
+        res.data,
+        'GET /api/branding/icon'
+      )
       set({
         version,
         urls,

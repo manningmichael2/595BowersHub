@@ -529,6 +529,8 @@ async def finance_recent_transactions(
 # ---- Additional Data Endpoints -----------------------------------------------
 
 
+from backend.http_client import get_http_session
+
 @router.get("/weather")
 async def weather(user: dict = Depends(get_current_user)) -> dict[str, Any]:
     """
@@ -542,8 +544,8 @@ async def weather(user: dict = Depends(get_current_user)) -> dict[str, Any]:
     """
     try:
         url = "https://wttr.in/Clawson,MI?format=j1"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"User-Agent": "curl/8.0"})
+        async with get_http_session() as client:
+            resp = await client.get(url, headers={"User-Agent": "curl/8.0"}, timeout=10.0)
             resp.raise_for_status()
             data = resp.json()
 
@@ -591,9 +593,9 @@ async def news(user: dict = Depends(get_current_user)) -> dict[str, Any]:
         # Fallback: AP Top Headlines RSS
         ap_url = "https://feedx.net/rss/ap.xml"
 
-        async with httpx.AsyncClient(timeout=8.0) as client:
+        async with get_http_session() as client:
             # Try AP News RSS (XML) and parse manually
-            resp = await client.get("https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml")
+            resp = await client.get("https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", timeout=8.0)
             resp.raise_for_status()
             content = resp.text
 

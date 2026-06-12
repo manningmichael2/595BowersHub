@@ -11,55 +11,18 @@
 
 import { create } from 'zustand'
 import { api } from '../services/api'
+import { parseLoose } from '../lib/validate'
+import {
+  SettingsResponseSchema,
+  type ThemeTokens,
+  type EffectiveTheme,
+  type TextSize,
+  type VoiceSettings,
+  type UserSettings,
+} from '../schemas/settings'
 
-// ---- Types ----------------------------------------------------------------
-
-export interface ThemeTokens {
-  background: string
-  surface: string
-  primary: string
-  accent: string
-  text: string
-  text_muted: string
-  border: string
-  danger: string
-  success: string
-  // tolerate forward-compat extras
-  [k: string]: string
-}
-
-export interface EffectiveTheme {
-  id: number | null
-  name: string
-  slug: string
-  tokens_json: ThemeTokens
-  is_default: boolean
-}
-
-export type TextSize = 'small' | 'medium' | 'large' | 'extra_large'
-
-export interface VoiceSettings {
-  // TTS output (assistant reads replies aloud)
-  output_enabled?: boolean
-  // Preferred SpeechSynthesisVoice.name. Empty string / null = browser default.
-  voice_name?: string | null
-  // SpeechSynthesisUtterance.rate, valid range 0.5..2.0
-  speech_rate?: number
-  // Pause threshold (in ms) before STT auto-finalizes + submits
-  auto_submit_pause_ms?: number
-  // If true, never auto-submit on pause — user must press send manually
-  manual_send?: boolean
-}
-
-export interface UserSettings {
-  theme_id?: number | null
-  text_size?: TextSize
-  morning_card_workspace_id?: number | null
-  morning_card_disabled?: boolean
-  voice?: VoiceSettings
-  // tolerate any other keys the backend stores
-  [k: string]: any
-}
+// Re-exported so existing call sites keep working
+export type { ThemeTokens, EffectiveTheme, TextSize, VoiceSettings, UserSettings }
 
 interface SettingsState {
   settings: UserSettings
@@ -153,8 +116,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const res = await api.get('/api/settings')
-      const data = res.data || {}
-      const settings: UserSettings = data.settings ?? data ?? {}
+      const data = parseLoose(SettingsResponseSchema, res.data || {}, 'GET /api/settings')
+      const settings: UserSettings = data.settings ?? {}
       const effectiveTheme: EffectiveTheme = data.effective_theme ?? get().effectiveTheme
       const effectiveTextSize: TextSize = data.effective_text_size ?? get().effectiveTextSize
 
@@ -197,8 +160,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
     try {
       const res = await api.patch('/api/settings', delta)
-      const data = res.data || {}
-      const settings: UserSettings = data.settings ?? data ?? optimisticSettings
+      const data = parseLoose(SettingsResponseSchema, res.data || {}, 'PATCH /api/settings')
+      const settings: UserSettings = data.settings ?? optimisticSettings
       const effectiveTheme: EffectiveTheme = data.effective_theme ?? get().effectiveTheme
       const effectiveTextSize: TextSize = data.effective_text_size ?? optimisticTextSize
 
@@ -233,7 +196,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
     try {
       const res = await api.post('/api/settings/reset-theme')
-      const data = res.data || {}
+      const data = parseLoose(SettingsResponseSchema, res.data || {}, 'POST /api/settings/reset-theme')
       const settings: UserSettings = data.settings ?? { ...prevSettings, theme_id: null }
       const effectiveTheme: EffectiveTheme = data.effective_theme ?? prevTheme
       const effectiveTextSize: TextSize = data.effective_text_size ?? get().effectiveTextSize

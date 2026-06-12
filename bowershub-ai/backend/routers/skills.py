@@ -144,6 +144,9 @@ async def delete_skill(skill_id: int, user: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+from backend.http_client import get_http_session
+
+
 @router.post("/{skill_id}/test")
 async def test_skill(skill_id: int, body: SkillTestRequest, request=None, user: dict = Depends(require_admin)):
     """Test a skill with sample input (admin only)."""
@@ -164,11 +167,11 @@ async def test_skill(skill_id: int, body: SkillTestRequest, request=None, user: 
         if url.startswith("/"):
             url = f"{executor.n8n_base}{url}"
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, read=30.0)) as client:
+        async with get_http_session() as client:
             if skill["http_method"].upper() == "GET":
-                response = await client.get(url, params=body.params)
+                response = await client.get(url, params=body.params, timeout=httpx.Timeout(5.0, read=30.0))
             else:
-                response = await client.post(url, json=body.params)
+                response = await client.post(url, json=body.params, timeout=httpx.Timeout(5.0, read=30.0))
 
         return {
             "status_code": response.status_code,
