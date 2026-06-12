@@ -2506,6 +2506,60 @@ def _validate_identifier(name: str, label: str = "name") -> None:
         )
 
 
+# Bare SQL defaults we explicitly allow (matched case-insensitively). Anything
+# not in this set is emitted as a validated numeric literal or a single-quoted
+# string literal, so a crafted "default" can never break out of the DEFAULT
+# clause into arbitrary SQL.
+_ALLOWED_DEFAULT_KEYWORDS: dict[str, str] = {
+    "NULL": "NULL",
+    "TRUE": "TRUE",
+    "FALSE": "FALSE",
+    "NOW()": "NOW()",
+    "CURRENT_TIMESTAMP": "CURRENT_TIMESTAMP",
+    "CURRENT_DATE": "CURRENT_DATE",
+    "CURRENT_TIME": "CURRENT_TIME",
+    "GEN_RANDOM_UUID()": "gen_random_uuid()",
+}
+
+
+def _safe_default_literal(default: Any) -> str:
+    """
+    Render a user-supplied column DEFAULT as a SQL fragment that cannot inject.
+
+    The value is matched against a small allow-list of bare SQL keywords /
+    functions, then a numeric-literal pattern, then a well-formed single-quoted
+    string literal; anything else is emitted as a single-quoted string literal
+    with interior quotes doubled. A crafted value like ``0); DROP TABLE x; --``
+    therefore becomes the harmless literal ``'0); DROP TABLE x; --'`` rather than
+    executable SQL.
+
+    This closes the raw-interpolation sink at the DEFAULT clause that previously
+    appended ``DEFAULT {default_str}`` verbatim (project-review.md C4).
+    """
+    raw = str(default).strip()
+
+    canonical = _ALLOWED_DEFAULT_KEYWORDS.get(raw.upper())
+    if canonical is not None:
+        return canonical
+
+    # Plain numeric literal (int or decimal) — safe to emit verbatim.
+    if re.fullmatch(r"-?\d+(\.\d+)?", raw):
+        return raw
+
+    # A well-formed single-quoted literal (only doubled interior quotes) is fine
+    # as-is; this preserves callers that already pass quoted string defaults.
+    if (
+        len(raw) >= 2
+        and raw[0] == "'"
+        and raw[-1] == "'"
+        and "'" not in raw[1:-1].replace("''", "")
+    ):
+        return raw
+
+    # Fallback: treat the whole value as a string literal.
+    return "'" + raw.replace("'", "''") + "'"
+
+
 def _build_column_sql(col: dict[str, Any]) -> str:
     """
     Build a single column definition for CREATE TABLE or ADD COLUMN.
@@ -2538,9 +2592,8 @@ def _build_column_sql(col: dict[str, Any]) -> str:
         parts.append("NOT NULL")
 
     if default is not None and str(default).strip():
-        # Sanitize default: only allow simple literals
-        default_str = str(default).strip()
-        parts.append(f"DEFAULT {default_str}")
+        # Render the default as a safe, validated SQL fragment (no raw interpolation).
+        parts.append(f"DEFAULT {_safe_default_literal(default)}")
 
     return " ".join(parts)
 
