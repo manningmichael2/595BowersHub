@@ -15,8 +15,12 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import asyncpg
 import pytest
+import pytest_asyncio
 
+from backend.config import Config
+from backend.database import close_pool, init_pool
 from backend.routers.dashboard import (
     _finance_error_response,
     _validate_finance_columns,
@@ -24,6 +28,82 @@ from backend.routers.dashboard import (
     finance_balances,
     finance_recent_transactions,
 )
+
+
+# ---------------------------------------------------------------------------
+# Real-DB fixture
+#
+# The success-path tests below run against a fresh ephemeral Postgres DB
+# (see conftest.py::fresh_db) with the `finance` schema created to match
+# what the endpoints actually query — they previously used hand-built
+# AsyncMocks that drifted out of sync with the real SQL (the accounts query
+# now selects org_name/account_name/last_balance, not name/type/current_balance).
+# init_pool() populates the module-level pool that dashboard.get_pool() reads,
+# so no patching of get_pool is needed.
+# ---------------------------------------------------------------------------
+
+
+async def _create_finance_schema(pool: asyncpg.Pool) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute("CREATE SCHEMA IF NOT EXISTS finance")
+        await conn.execute(
+            """
+            CREATE TABLE finance.categories (
+                id   SERIAL PRIMARY KEY,
+                name TEXT NOT NULL
+            )
+            """
+        )
+        await conn.execute(
+            """
+            CREATE TABLE finance.transactions (
+                id            SERIAL PRIMARY KEY,
+                account_id    INT,
+                amount        NUMERIC NOT NULL,
+                description   TEXT,
+                category_id   INT REFERENCES finance.categories(id),
+                posted_date   DATE,
+                is_transfer   BOOLEAN NOT NULL DEFAULT false,
+                is_investment BOOLEAN NOT NULL DEFAULT false,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+            """
+        )
+        await conn.execute(
+            """
+            CREATE TABLE finance.accounts (
+                id           SERIAL PRIMARY KEY,
+                org_name     TEXT,
+                account_name TEXT,
+                last_balance NUMERIC
+            )
+            """
+        )
+
+
+@pytest_asyncio.fixture
+async def finance_pool(fresh_db, db_settings):
+    """Ephemeral DB with the `finance` schema; yields the live asyncpg pool.
+
+    init_pool() sets the module-level pool consumed by dashboard.get_pool(),
+    so the endpoints hit this DB without any monkeypatching.
+    """
+    config = Config(
+        ANTHROPIC_API_KEY="test",
+        DB_HOST=str(db_settings["host"]),
+        DB_PORT=int(db_settings["port"]),
+        DB_NAME=fresh_db,
+        DB_USER=str(db_settings["user"]),
+        DB_PASSWORD=str(db_settings["password"]),
+        JWT_SECRET="test-secret-for-finance-endpoint-tests",
+        N8N_BASE="http://localhost:5678",
+    )
+    pool = await init_pool(config)
+    try:
+        await _create_finance_schema(pool)
+        yield pool
+    finally:
+        await close_pool()
 
 
 # ---------------------------------------------------------------------------
@@ -59,44 +139,65 @@ def test_finance_error_response_with_various_exceptions():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="pre-existing mock/code drift (predates C2); replace with real-DB test — see context-log", strict=False)
 @pytest.mark.asyncio
-async def test_finance_summary_success():
-    """Summary returns MTD spending, top categories, prev month, and net change."""
-    # Mock the pool and connection
-    mock_conn = AsyncMock()
+async def test_finance_summary_success(finance_pool):
+    """Summary returns MTD spending/income, top categories, prev month, net change.
 
-    # MTD spending
-    mock_conn.fetchrow.side_effect = [
-        {"mtd_spending": Decimal("1500.00")},
-        {"prev_month_spending": Decimal("2000.00")},
-    ]
+    Real-DB: seeds this-month and last-month transactions (using CURRENT_DATE so
+    the test is calendar-independent) plus a transfer and an investment that must
+    be excluded from the spending/income totals.
+    """
+    async with finance_pool.acquire() as conn:
+        cats = {}
+        for name in ("Food", "Gas", "Entertainment"):
+            cats[name] = await conn.fetchval(
+                "INSERT INTO finance.categories (name) VALUES ($1) RETURNING id", name
+            )
 
-    # Top categories
-    mock_conn.fetch.return_value = [
-        {"category": "Food_Groceries", "total": Decimal("400.00")},
-        {"category": "Trans_Gas", "total": Decimal("200.00")},
-        {"category": "Entertainment", "total": Decimal("150.00")},
-        {"category": "Shopping", "total": Decimal("100.00")},
-        {"category": "Subscriptions", "total": Decimal("80.00")},
-    ]
+        # This month: spending across 3 categories (-750 total), income +3500,
+        # plus an excluded transfer and an excluded investment (no category, so
+        # they also stay out of the category INNER JOIN).
+        this_month = "date_trunc('month', CURRENT_DATE)::date"
+        await conn.execute(
+            f"""
+            INSERT INTO finance.transactions
+                (amount, description, category_id, posted_date, is_transfer, is_investment)
+            VALUES
+                (-400, 'groceries',  $1, {this_month}, false, false),
+                (-200, 'fuel',       $2, {this_month}, false, false),
+                (-150, 'movie',      $3, {this_month}, false, false),
+                ( 3500,'paycheck', NULL, {this_month}, false, false),
+                (-1000,'xfer',     NULL, {this_month}, true,  false),
+                (-500, 'brokerage',NULL, {this_month}, false, true)
+            """,
+            cats["Food"], cats["Gas"], cats["Entertainment"],
+        )
 
-    mock_pool = MagicMock()
-    mock_acquire = AsyncMock()
-    mock_acquire.__aenter__ = AsyncMock(return_value=mock_conn)
-    mock_acquire.__aexit__ = AsyncMock(return_value=None)
-    mock_pool.acquire.return_value = mock_acquire
+        # Previous month: spending -2000, income +3000.
+        prev_month = "(date_trunc('month', CURRENT_DATE) - INTERVAL '1 month')::date"
+        await conn.execute(
+            f"""
+            INSERT INTO finance.transactions
+                (amount, description, category_id, posted_date, is_transfer, is_investment)
+            VALUES
+                (-2000, 'rent',  NULL, {prev_month}, false, false),
+                ( 3000, 'wages', NULL, {prev_month}, false, false)
+            """
+        )
 
-    with patch("backend.routers.dashboard.get_pool", return_value=mock_pool):
-        with patch("backend.routers.dashboard._validate_finance_columns", new_callable=AsyncMock):
-            result = await finance_summary(user={"id": 1})
+    with patch("backend.routers.dashboard._validate_finance_columns", new_callable=AsyncMock):
+        result = await finance_summary(user={"id": 1})
 
     assert result["error"] is False
-    assert result["data"]["mtd_spending"] == 1500.00
-    assert result["data"]["prev_month_spending"] == 2000.00
-    assert result["data"]["net_change"] == -500.00  # spending decreased
-    assert len(result["data"]["top_categories"]) == 5
-    assert result["data"]["top_categories"][0]["category"] == "Food_Groceries"
+    data = result["data"]
+    assert data["mtd_spending"] == 750.00            # transfer + investment excluded
+    assert data["mtd_income"] == 3500.00
+    assert data["prev_month_spending"] == 2000.00
+    assert data["prev_month_income"] == 3000.00
+    assert data["net_change"] == -1250.00            # 750 - 2000
+    cats_out = data["top_categories"]
+    assert [c["category"] for c in cats_out] == ["Food", "Gas", "Entertainment"]
+    assert cats_out[0]["total"] == 400.00
 
 
 @pytest.mark.asyncio
@@ -150,43 +251,46 @@ async def test_finance_summary_table_not_found():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="pre-existing mock/code drift (predates C2); replace with real-DB test — see context-log", strict=False)
 @pytest.mark.asyncio
-async def test_finance_balances_success():
-    """Balances returns accounts grouped by type with net worth."""
-    mock_conn = AsyncMock()
-    mock_conn.fetch.return_value = [
-        {"name": "Chase Checking", "type": "checking", "current_balance": Decimal("5000.00")},
-        {"name": "Ally Savings", "type": "savings", "current_balance": Decimal("15000.00")},
-        {"name": "Chase Credit", "type": "credit", "current_balance": Decimal("-2000.00")},
-        {"name": "Vanguard 401k", "type": "investment", "current_balance": Decimal("50000.00")},
-    ]
+async def test_finance_balances_success(finance_pool):
+    """Balances groups accounts by org_name with a net-worth total.
 
-    mock_pool = MagicMock()
-    mock_acquire = AsyncMock()
-    mock_acquire.__aenter__ = AsyncMock(return_value=mock_conn)
-    mock_acquire.__aexit__ = AsyncMock(return_value=None)
-    mock_pool.acquire.return_value = mock_acquire
+    Real-DB: the live query groups by org_name (there is no 'type' column),
+    excludes a hard-coded set of bookkeeping orgs ('Email Receipts', …), and
+    orders by org_name, account_name.
+    """
+    async with finance_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO finance.accounts (org_name, account_name, last_balance)
+            VALUES
+                ('Chase',          'Checking', 5000),
+                ('Chase',          'Credit',  -2000),
+                ('Ally',           'Savings', 15000),
+                ('Vanguard',       '401k',    50000),
+                ('Email Receipts', 'noise',     999)
+            """
+        )
 
-    with patch("backend.routers.dashboard.get_pool", return_value=mock_pool):
-        with patch("backend.routers.dashboard._validate_finance_columns", new_callable=AsyncMock):
-            result = await finance_balances(user={"id": 1})
+    with patch("backend.routers.dashboard._validate_finance_columns", new_callable=AsyncMock):
+        result = await finance_balances(user={"id": 1})
 
     assert result["error"] is False
     data = result["data"]
+    grouped = data["accounts_by_type"]
 
-    # Accounts grouped correctly
-    assert "checking" in data["accounts_by_type"]
-    assert "savings" in data["accounts_by_type"]
-    assert "credit" in data["accounts_by_type"]
-    assert "investment" in data["accounts_by_type"]
+    # Grouped by org_name; the bookkeeping org is filtered out.
+    assert set(grouped) == {"Chase", "Ally", "Vanguard"}
+    assert "Email Receipts" not in grouped
 
-    # Net worth: 5000 + 15000 + (-2000) + 50000 = 68000
+    # Net worth: 5000 + (-2000) + 15000 + 50000 = 68000 (Email Receipts excluded)
     assert data["net_worth"] == 68000.00
 
-    # Individual balances correct
-    assert data["accounts_by_type"]["checking"][0]["balance"] == 5000.00
-    assert data["accounts_by_type"]["credit"][0]["balance"] == -2000.00
+    # Chase accounts ordered by account_name: Checking then Credit.
+    chase = grouped["Chase"]
+    assert [a["name"] for a in chase] == ["Checking", "Credit"]
+    assert chase[0]["balance"] == 5000.00
+    assert chase[1]["balance"] == -2000.00
 
 
 @pytest.mark.asyncio
@@ -210,28 +314,32 @@ async def test_finance_balances_empty():
     assert result["data"]["net_worth"] == 0.0
 
 
-@pytest.mark.xfail(reason="pre-existing mock/code drift (predates C2); replace with real-DB test — see context-log", strict=False)
 @pytest.mark.asyncio
-async def test_finance_balances_null_balance():
-    """Null balance is treated as 0."""
-    mock_conn = AsyncMock()
-    mock_conn.fetch.return_value = [
-        {"name": "Unknown Account", "type": "checking", "current_balance": None},
-    ]
+async def test_finance_balances_null_balance(finance_pool):
+    """Accounts with a NULL last_balance are excluded entirely.
 
-    mock_pool = MagicMock()
-    mock_acquire = AsyncMock()
-    mock_acquire.__aenter__ = AsyncMock(return_value=mock_conn)
-    mock_acquire.__aexit__ = AsyncMock(return_value=None)
-    mock_pool.acquire.return_value = mock_acquire
+    Real-DB: the live query has `WHERE last_balance IS NOT NULL`, so a
+    null-balance account never reaches the response (the old mock asserted it
+    was coerced to 0 — that behavior no longer exists).
+    """
+    async with finance_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO finance.accounts (org_name, account_name, last_balance)
+            VALUES
+                ('Chase', 'Checking', NULL),
+                ('Ally',  'Savings',  100)
+            """
+        )
 
-    with patch("backend.routers.dashboard.get_pool", return_value=mock_pool):
-        with patch("backend.routers.dashboard._validate_finance_columns", new_callable=AsyncMock):
-            result = await finance_balances(user={"id": 1})
+    with patch("backend.routers.dashboard._validate_finance_columns", new_callable=AsyncMock):
+        result = await finance_balances(user={"id": 1})
 
     assert result["error"] is False
-    assert result["data"]["accounts_by_type"]["checking"][0]["balance"] == 0.0
-    assert result["data"]["net_worth"] == 0.0
+    grouped = result["data"]["accounts_by_type"]
+    assert "Chase" not in grouped          # null-balance account filtered out
+    assert grouped["Ally"][0]["balance"] == 100.0
+    assert result["data"]["net_worth"] == 100.0
 
 
 @pytest.mark.asyncio
