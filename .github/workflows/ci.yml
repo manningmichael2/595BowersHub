@@ -2,15 +2,15 @@ name: CI
 
 # Runs on every push to main and on all pull requests. Three independent jobs:
 #   - frontend:  vitest unit tests, strict typecheck, production build
-#   - backend:   the pure (no-database) test suite
+#   - backend:   the full pytest suite against a Postgres service
 #   - secrets:   gitleaks scan of committed history
 #
-# NOTE (project-review.md C2): the backend's DB-backed integration tests are
-# intentionally NOT run here yet. Their fixtures build the schema via
-# run_migrations(), which currently cannot build a fresh database (duplicate /
-# crashing migrations). Once C2 lands (reproducible-from-zero schema), add a
-# Postgres service to the backend job, run the full `pytest` suite, and add a
-# from-empty-schema migration test. See the TODO in the backend job below.
+# NOTE (project-review.md C2): C2 has landed — the migration chain was squashed
+# to a single reproducible 0001_baseline.sql (+ 0002.. forward-only), so the
+# `fresh_db` fixtures build the schema from empty via run_migrations(). The
+# backend job therefore runs the FULL DB-backed suite, which doubles as the
+# "schema builds from empty" gate. (The orphaned top-level /migrations dir is
+# now dead and slated for removal — see project-review.md C2.)
 
 on:
   push:
