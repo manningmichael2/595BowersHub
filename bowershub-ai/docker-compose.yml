@@ -18,7 +18,10 @@ services:
     networks:
       - ai-network
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5003/api/health"]
+      # curl isn't in the python:3.12-slim image; use the bundled interpreter.
+      # /api/health always returns 200 (liveness) — urlopen raises on non-2xx.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5003/api/health').read()"]
+      start_period: 20s
       interval: 30s
       timeout: 5s
       retries: 3
