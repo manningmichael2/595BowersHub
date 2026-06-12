@@ -265,3 +265,16 @@ Two pieces of work while a parallel session was pruning n8n. On branch `chore/st
 - [Next] (a) deploy: merge → restart applies 0009; confirm aliases show chat/fast/deep/local and chat-routing works; (b) standing follow-ups now narrowed to: n8n SQLite retention (other session), bare `opus-4-5` ages out, `needs_price_confirmation` flag-clear UI exists (done earlier). Then pgvector (§8.3). Note: both this rename and the chore batch are on `chore/standing-followups` — split into two PRs if separate review is wanted.
 
 ---
+
+## [2026-06-11] Session Notes — Claude Code (n8n SQLite prune + retention config)
+
+The n8n-pruning session referenced above. Completes the last standing follow-up. On branch `chore/standing-followups`.
+
+- [Diagnosed] n8n `database.sqlite` had grown to **60.8 GB** with only **10,017 executions, all <2 weeks old** (~6 MB/run) — the weight is large `execution_data` payloads, and **no `EXECUTIONS_DATA_*` pruning was configured** (unbounded growth). freelist≈0 so the space was live data, not slack; 599 GB disk free, so an in-place VACUUM was feasible. n8n 2.19.5, SQLite, stack is Portainer-managed (`/data/compose/1`, project `ai-services`), config via `env_file: /home/michael/n8n/.env`.
+- [Owner decisions] Keep **7 days** of history; **`SAVE_ON_SUCCESS=none`** going forward (errors still saved).
+- [Done — disk reclaim] Stopped n8n; via a throwaway `alpine+sqlite` container on the `ai-services_n8n_data` volume ran `PRAGMA foreign_keys=ON; DELETE FROM execution_entity WHERE startedAt < datetime('now','-7 days'); VACUUM;`. The 3 heavy child tables (`execution_data`/`_metadata`/`_annotations`) are `ON DELETE CASCADE`; `chat_hub_messages` is `ON DELETE SET NULL` (chat preserved). Deleted 2,782 rows (kept 7,240). The DELETE was slow (~10 min — `secure_delete` writing freed pages to a 30 GB WAL); VACUUM ~11 min. **Result: 60.8 GB → 31.8 GB.** n8n auto-restarted; verified `PRAGMA integrity_check=ok`, `/healthz=ok`, execution_entity==execution_data==7,241 (no orphans), 21 workflows intact, range 2026-06-05→now. Run log left at `/home/michael/n8n_prune.log`.
+- [Done — recurrence config] Added an `environment:` block to the n8n service in `infrastructure/docker-compose.yml` (this commit) AND appended the same 5 vars to the live `/home/michael/n8n/.env` (`EXECUTIONS_DATA_PRUNE=true`, `MAX_AGE=168`h, `PRUNE_MAX_COUNT=10000`, `SAVE_ON_SUCCESS=none`, `SAVE_ON_ERROR=all`).
+- [PENDING — owner action] The retention vars are **staged but not yet live**: the running container still has its old env (I only restarted it). **Redeploy the n8n stack in Portainer** (or recreate the container) to load the new `.env`. If the vars don't appear after redeploy (i.e. Portainer injects env inline rather than via `env_file`), add them in Portainer's stack env editor instead. Until then the DB can slowly regrow, though nowhere near the prior rate.
+- [Note] Tasks 1–3 of this batch (healthcheck, dead `model_provider` code, xfail→real-DB) were committed by the parallel session as `eeac7eb`; full suite was 494 passed against a local throwaway Postgres before that commit.
+
+---

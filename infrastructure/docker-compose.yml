@@ -35,6 +35,15 @@ services:
       - /home/michael/finance:/home/node/finance
       - /home/michael/files:/home/node/files
     env_file: /home/michael/n8n/.env
+    environment:
+      # Execution-history retention. Without these the SQLite DB grew unbounded
+      # to 60GB (10k runs, ~6MB each). Prune to 7 days and stop persisting full
+      # payloads for successful runs (errors are still saved for debugging).
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168            # hours = 7 days
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=10000  # hard cap on retained rows
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=none   # don't store data for successful runs
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all      # keep failures for debugging
     networks:
       - ai-network
     depends_on:
