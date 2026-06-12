@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 def _get_haiku_model() -> str:
     """Get the Haiku model ID. Reads from env or uses default."""
     import os
-    return resolve_role("haiku")
+    return resolve_role("fast")
 
 logger = logging.getLogger(__name__)
 
