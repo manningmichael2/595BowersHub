@@ -34,9 +34,10 @@ class ModelNotAvailableError(Exception):
 
 
 # Provisional pricing for brand-new models (R3.2) and the cost miss-path (R3.3).
-# Kept BYTE-IDENTICAL to the legacy model_provider._infer_pricing so Task 8's
-# cost-parity regression test (old == new on the miss-path) holds. Do not "fix"
-# the opus rate here — operator-curated prices live in bh_model_rates; this is the
+# This is the sole surviving copy of the pricing ladder — the legacy
+# model_provider._infer_pricing it was forked from (byte-identical, for Task 8's
+# cost-parity gate) has since been deleted as dead code. Do not "fix" the opus rate
+# here — operator-curated prices live in bh_model_rates; this is the
 # flagged-provisional default only.
 def _infer_pricing(model_id: str) -> tuple:
     lower = model_id.lower()
@@ -467,7 +468,10 @@ class Resolver:
     default_chat_model) — all off the cache, so the router hot path takes NO per-call
     DB round-trip (perf NFR). Rebuilt by `reload()` on refresh/admin-edit."""
 
-    _TIER_KEYWORDS = {"haiku": "haiku", "sonnet": "sonnet", "opus": "opus", "local": ""}
+    # role -> model-id substring used to find a same-tier active model on fail-closed.
+    # Keys are intent-based role names (0009); values stay vendor-tier substrings that
+    # match concrete model_ids — do NOT rename the values.
+    _TIER_KEYWORDS = {"chat": "sonnet", "fast": "haiku", "deep": "opus", "local": ""}
 
     def __init__(self, pool):
         self._pool = pool
@@ -531,7 +535,7 @@ class Resolver:
 
     # --- role resolution ---------------------------------------------------
     def resolve_role(self, role: str) -> str:
-        """Resolve a logical role ('haiku'/'sonnet'/'opus'/'local') to a concrete,
+        """Resolve a logical role ('chat'/'fast'/'deep'/'local') to a concrete,
         active model_id. Fail-closed (R3.4): if the alias is missing/inactive, fall
         back to a known-good active model in the same tier and alert."""
         mid = self._aliases.get(role)
@@ -548,7 +552,7 @@ class Resolver:
         return fallback
 
     def default_chat_model(self) -> str:
-        return self.resolve_role("sonnet")
+        return self.resolve_role("chat")
 
     def _fallback_for_tier(self, role: str) -> Optional[str]:
         keyword = self._TIER_KEYWORDS.get(role, role)
@@ -591,9 +595,9 @@ def get_resolver() -> "Resolver":
 # StaticDiscoverySource — model_catalog.py is the single documented home for these
 # residual literals (R2.4); every other service resolves roles, never literals.
 _FALLBACK_ROLE_MODEL = {
-    "haiku": "claude-haiku-4-5-20251001",
-    "sonnet": "claude-sonnet-4-6",
-    "opus": "claude-opus-4-5-20251101",
+    "fast": "claude-haiku-4-5-20251001",
+    "chat": "claude-sonnet-4-6",
+    "deep": "claude-opus-4-5-20251101",
     "local": "llama3.2:3b",
 }
 
@@ -608,12 +612,12 @@ def resolve_role(role: str) -> str:
             return _resolver.resolve_role(role)
         except ModelNotAvailableError:
             pass
-    return _FALLBACK_ROLE_MODEL.get(role, _FALLBACK_ROLE_MODEL["sonnet"])
+    return _FALLBACK_ROLE_MODEL.get(role, _FALLBACK_ROLE_MODEL["chat"])
 
 
 def default_chat_model() -> str:
     """Default chat model, resolved from the DB (R4.4)."""
-    return resolve_role("sonnet")
+    return resolve_role("chat")
 
 
 # ---------------------------------------------------------------------------

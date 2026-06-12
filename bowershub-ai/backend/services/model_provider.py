@@ -6,10 +6,10 @@ Discovers available models from each provider dynamically at startup.
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List
 
 from backend.config import Config
-from backend.models.message import CompletionResult, ModelInfo, StreamChunk, ToolCall
+from backend.models.message import CompletionResult, StreamChunk, ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -19,27 +19,11 @@ class ModelNotAvailableError(Exception):
     pass
 
 
-# Pricing lookup for known model families. Anthropic publishes their pricing; we map it
-# heuristically by name so new model versions automatically pick up reasonable defaults.
-def _infer_pricing(model_id: str) -> tuple:
-    """Returns (input_cost_per_mtok, output_cost_per_mtok) based on model name."""
-    lower = model_id.lower()
-    if "haiku" in lower:
-        return (0.80, 4.00)
-    if "opus" in lower:
-        return (15.00, 75.00)
-    if "sonnet" in lower:
-        return (3.00, 15.00)
-    return (3.00, 15.00)  # Default to Sonnet pricing
-
-
 class BaseProvider(ABC):
     @abstractmethod
     async def complete(self, model, messages, max_tokens, tools=None, system=None) -> CompletionResult: ...
     @abstractmethod
     async def stream(self, model, messages, max_tokens, tools=None, system=None) -> AsyncIterator[StreamChunk]: ...
-    @abstractmethod
-    async def list_models(self) -> List[ModelInfo]: ...
 
 
 class AnthropicProvider(BaseProvider):
@@ -124,45 +108,6 @@ class AnthropicProvider(BaseProvider):
                       "output_tokens": final_message.usage.output_tokens}
             )
 
-    async def list_models(self) -> List[ModelInfo]:
-        """Query Anthropic's models endpoint to get the actual current model list."""
-        import httpx
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    "https://api.anthropic.com/v1/models",
-                    headers={
-                        "x-api-key": self.api_key,
-                        "anthropic-version": "2023-06-01",
-                    },
-                )
-                if resp.status_code != 200:
-                    logger.warning(f"Anthropic /v1/models returned {resp.status_code}")
-                    return []
-
-                data = resp.json()
-                models = []
-                for m in data.get("data", []):
-                    model_id = m.get("id", "")
-                    if not model_id:
-                        continue
-                    input_cost, output_cost = _infer_pricing(model_id)
-                    is_haiku = "haiku" in model_id.lower()
-                    is_opus = "opus" in model_id.lower()
-                    models.append(ModelInfo(
-                        id=model_id,
-                        provider="anthropic",
-                        display_name=m.get("display_name", model_id),
-                        supports_vision=True,
-                        supports_tools=True,
-                        max_output_tokens=4096 if is_opus else 8192,
-                        input_cost_per_mtok=input_cost,
-                        output_cost_per_mtok=output_cost,
-                    ))
-                return models
-        except Exception as e:
-            logger.warning(f"Failed to fetch Anthropic models: {e}")
-            return []
 
 class BedrockProvider(BaseProvider):
     """AWS Bedrock provider using boto3."""
@@ -171,12 +116,6 @@ class BedrockProvider(BaseProvider):
         import boto3
         self.runtime = boto3.client(
             "bedrock-runtime",
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name=region,
-        )
-        self.bedrock = boto3.client(
-            "bedrock",
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=region,
@@ -326,42 +265,6 @@ class BedrockProvider(BaseProvider):
                     "output_tokens": usage.get("outputTokens", 0),
                 })
 
-    async def list_models(self) -> List[ModelInfo]:
-        """Query Bedrock for available foundation models."""
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, lambda: self.bedrock.list_inference_profiles()
-            )
-
-            models = []
-            for profile in response.get("inferenceProfileSummaries", []):
-                profile_id = profile.get("inferenceProfileId", "")
-                profile_arn = profile.get("inferenceProfileArn", "")
-                if not profile_id:
-                    continue
-
-                # Filter to text-generation Claude models
-                if "anthropic.claude" not in profile_id.lower() and "claude" not in profile_id.lower():
-                    continue
-
-                input_cost, output_cost = _infer_pricing(profile_id)
-                models.append(ModelInfo(
-                    id=profile_id,
-                    provider="bedrock",
-                    display_name=profile.get("inferenceProfileName", profile_id) + " (Bedrock)",
-                    supports_vision=True,
-                    supports_tools=True,
-                    max_output_tokens=8192,
-                    input_cost_per_mtok=input_cost,
-                    output_cost_per_mtok=output_cost,
-                ))
-            return models
-        except Exception as e:
-            logger.warning(f"Failed to fetch Bedrock models: {e}")
-            return []
-
 
 class OllamaProvider(BaseProvider):
     """Ollama local model provider via HTTP API."""
@@ -462,30 +365,6 @@ class OllamaProvider(BaseProvider):
                         if token:
                             yield StreamChunk(type="text_delta", data=token)
 
-    async def list_models(self) -> List[ModelInfo]:
-        import httpx
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{self.base_url}/api/tags")
-                resp.raise_for_status()
-                data = resp.json()
-
-            models = []
-            for m in data.get("models", []):
-                models.append(ModelInfo(
-                    id=m["name"],
-                    provider="ollama",
-                    display_name=m["name"].replace(":", " ").title(),
-                    supports_vision=False,
-                    supports_tools="hermes" in m["name"].lower() or "qwen" in m["name"].lower(),
-                    max_output_tokens=4096,
-                    input_cost_per_mtok=0.0,
-                    output_cost_per_mtok=0.0,
-                ))
-            return models
-        except Exception:
-            return []
-
 
 class ModelProvider:
     """
@@ -496,7 +375,6 @@ class ModelProvider:
     def __init__(self, config: Config):
         self.config = config
         self.providers: Dict[str, BaseProvider] = {}
-        self._models_cache: Optional[List[ModelInfo]] = None
 
         if config.ANTHROPIC_API_KEY:
             self.providers["anthropic"] = AnthropicProvider(config.ANTHROPIC_API_KEY)
@@ -540,23 +418,6 @@ class ModelProvider:
         provider = self._resolve_provider(model)
         async for chunk in provider.stream(model, messages, max_tokens, tools, system):
             yield chunk
-
-    async def list_models(self, force_refresh: bool = False) -> List[ModelInfo]:
-        """Discover available models from all configured providers."""
-        if self._models_cache is not None and not force_refresh:
-            return self._models_cache
-
-        models = []
-        for name, provider in self.providers.items():
-            try:
-                provider_models = await provider.list_models()
-                models.extend(provider_models)
-                logger.info(f"  Discovered {len(provider_models)} models from {name}")
-            except Exception as e:
-                logger.warning(f"Failed to list models from {name}: {e}")
-
-        self._models_cache = models
-        return models
 
     def get_default_chat_model(self) -> str:
         """Return the default chat model, resolved from the DB-backed catalog (R4.4)."""
