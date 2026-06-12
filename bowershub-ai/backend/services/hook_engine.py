@@ -421,7 +421,7 @@ class HookEngine:
         retry (R11.12).
         """
         prompt = config.get("prompt", "")
-        model = config.get("model") or resolve_role("haiku")
+        model = config.get("model") or resolve_role("fast")
 
         result = await self.model_provider.complete(
             model=model,

@@ -234,11 +234,11 @@ Present this data in a clear, conversational way. Use markdown formatting (table
                 return RoutingResult(
                     layer="L2",
                     content=tool_result["content"],
-                    model_used=tool_result.get("model_used", resolve_role("haiku")),
+                    model_used=tool_result.get("model_used", resolve_role("fast")),
                     input_tokens=tool_result.get("input_tokens", 0),
                     output_tokens=tool_result.get("output_tokens", 0),
                     cost_usd=self._calculate_cost(
-                        resolve_role("haiku"),
+                        resolve_role("fast"),
                         tool_result.get("input_tokens", 0),
                         tool_result.get("output_tokens", 0),
                     ),
@@ -1075,7 +1075,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         try:
             result = await asyncio.wait_for(
                 self.model_provider.complete(
-                    model=resolve_role("haiku"),
+                    model=resolve_role("fast"),
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=256,
                 ),
@@ -1164,7 +1164,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
                 else:
                     # Complex data — Haiku formatting pass for clean mobile rendering
                     formatting_result = await self.model_provider.complete(
-                        model=resolve_role("haiku"),
+                        model=resolve_role("fast"),
                         messages=[{"role": "user", "content": (
                             f"You are formatting data for a mobile chat app. The user asked: \"{original_message}\"\n\n"
                             f"Raw response:\n{display_content[:5000]}\n\n"
@@ -1184,7 +1184,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             else:
                 # Wrap in conversational language via a short Haiku call
                 formatting_result = await self.model_provider.complete(
-                    model=resolve_role("haiku"),
+                    model=resolve_role("fast"),
                     messages=[{"role": "user", "content": self.FORMATTING_PROMPT.format(
                         question=original_message,
                         raw_data=raw_formatted[:3000],  # Cap context size
@@ -1198,10 +1198,10 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             return RoutingResult(
                 layer="L2",
                 content=content,
-                model_used=resolve_role("haiku"),
+                model_used=resolve_role("fast"),
                 input_tokens=total_input,
                 output_tokens=total_output,
-                cost_usd=self._calculate_cost(resolve_role("haiku"), total_input, total_output),
+                cost_usd=self._calculate_cost(resolve_role("fast"), total_input, total_output),
                 skill_name=skill_name,
             )
 
@@ -1212,7 +1212,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             return RoutingResult(
                 layer="L2",
                 content=f"I tried to look that up but the {e.skill_name} skill had an issue. {e.detail or 'Try again?'}",
-                model_used=resolve_role("haiku"),
+                model_used=resolve_role("fast"),
                 skill_name=skill_name,
             )
 
