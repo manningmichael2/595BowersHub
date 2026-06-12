@@ -19,6 +19,7 @@ import ApiRegistrySection from './admin/ApiRegistrySection'
 import ModelsSection from './admin/ModelsSection'
 import CostSection from './admin/CostSection'
 import AuditSection from './admin/AuditSection'
+import SemanticMemorySection from './admin/SemanticMemorySection'
 import ThemeManagementSection from './admin/ThemeManagementSection'
 import IconManagementSection from './admin/IconManagementSection'
 
@@ -39,6 +40,7 @@ const SECTIONS: SectionDef[] = [
   { slug: 'api-registry', label: 'API Registry', icon: '🔌' },
   { slug: 'models', label: 'Models', icon: '🤖' },
   { slug: 'cost', label: 'Cost', icon: '💰' },
+  { slug: 'semantic-memory', label: 'Semantic Memory', icon: '🧠' },
   { slug: 'audit', label: 'Audit Log', icon: '📋' },
   { slug: 'themes', label: 'Theme Management', icon: '🎨' },
   { slug: 'icon', label: 'Icon Management', icon: '🖼️' },
@@ -143,6 +145,7 @@ export default function AdminConsolePage() {
               <Route path="api-registry" element={<ApiRegistrySection />} />
               <Route path="models" element={<ModelsSection />} />
               <Route path="cost" element={<CostSection />} />
+              <Route path="semantic-memory" element={<SemanticMemorySection />} />
               <Route path="audit" element={<AuditSection />} />
               <Route path="themes" element={<ThemeManagementSection />} />
               <Route path="icon" element={<IconManagementSection />} />
