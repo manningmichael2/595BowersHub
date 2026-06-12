@@ -73,7 +73,7 @@ async def test_get_models_includes_roles(env):
     async with _client(app) as c:
         rows = (await c.get("/api/admin/models")).json()
     sonnet = next(r for r in rows if r["model_id"] == "claude-sonnet-4-6")
-    assert "sonnet" in sonnet["roles"]
+    assert "chat" in sonnet["roles"]
     bedrock = next(r for r in rows if r["model_id"] == "us.anthropic.claude-sonnet-4-5-v1:0")
     assert bedrock["roles"] == []           # not an alias target
 
@@ -82,15 +82,15 @@ async def test_repoint_alias_valid_inactive_and_missing(env):
     config, pool = env
     app = _app(config)
     async with _client(app) as c:
-        # valid repoint: sonnet -> haiku model
-        ok = await c.put("/api/admin/models/aliases/sonnet", json={"model_id": "claude-haiku-4-5-20251001"})
+        # valid repoint: chat -> haiku model
+        ok = await c.put("/api/admin/models/aliases/chat", json={"model_id": "claude-haiku-4-5-20251001"})
         assert ok.status_code == 200 and ok.json()["model_id"] == "claude-haiku-4-5-20251001"
-        assert await pool.fetchval("SELECT model_id FROM public.bh_model_aliases WHERE role='sonnet'") == "claude-haiku-4-5-20251001"
+        assert await pool.fetchval("SELECT model_id FROM public.bh_model_aliases WHERE role='chat'") == "claude-haiku-4-5-20251001"
         # missing model -> 404
-        assert (await c.put("/api/admin/models/aliases/opus", json={"model_id": "nope-9"})).status_code == 404
+        assert (await c.put("/api/admin/models/aliases/deep", json={"model_id": "nope-9"})).status_code == 404
         # inactive model -> 400
         await pool.execute("UPDATE public.bh_model_rates SET is_active=false WHERE model_id='claude-opus-4-5'")
-        bad = await c.put("/api/admin/models/aliases/opus", json={"model_id": "claude-opus-4-5"})
+        bad = await c.put("/api/admin/models/aliases/deep", json={"model_id": "claude-opus-4-5"})
         assert bad.status_code == 400
 
 
@@ -99,4 +99,4 @@ async def test_admin_endpoints_require_admin(env):
     app = _app(config, as_admin=False)      # no override → real require_admin
     async with _client(app) as c:
         assert (await c.get("/api/admin/models")).status_code in (401, 403)
-        assert (await c.put("/api/admin/models/aliases/sonnet", json={"model_id": "x"})).status_code in (401, 403)
+        assert (await c.put("/api/admin/models/aliases/chat", json={"model_id": "x"})).status_code in (401, 403)

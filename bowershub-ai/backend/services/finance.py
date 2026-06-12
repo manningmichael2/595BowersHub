@@ -401,7 +401,7 @@ async def ask_db(question: str) -> dict:
                     "content-type": "application/json",
                 },
                 json={
-                    "model": resolve_role("haiku"),
+                    "model": resolve_role("fast"),
                     "max_tokens": 1024,
                     "system": schema_prompt,
                     "messages": [{"role": "user", "content": question}],

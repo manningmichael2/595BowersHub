@@ -349,7 +349,7 @@ async def create(user: dict, payload: dict) -> dict:
 
     action_config = {
         "prompt": prompt_template,
-        "model": resolve_role("haiku"),
+        "model": resolve_role("fast"),
         "delivery_method": delivery_method,
         "workspace_id": workspace_id,
     }
@@ -438,7 +438,7 @@ async def update(user: dict, hook_id: int, partial: dict) -> dict:
             config_changed = True
 
         if config_changed:
-            new_cfg.setdefault("model", resolve_role("haiku"))
+            new_cfg.setdefault("model", resolve_role("fast"))
             new_cfg.setdefault("workspace_id", hook["workspace_id"])
             updates.append(f"action_config = ${idx}::jsonb")
             params.append(json.dumps(new_cfg))

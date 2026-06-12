@@ -48,11 +48,11 @@ async def test_all_roles_resolve_to_active_rows_and_default(fresh_db, db_setting
     try:
         r = Resolver(pool)
         await r.reload()
-        assert r.resolve_role("haiku") == "claude-haiku-4-5-20251001"
-        assert r.resolve_role("sonnet") == "claude-sonnet-4-6"
-        assert r.resolve_role("opus") == "claude-opus-4-5-20251101"
+        assert r.resolve_role("fast") == "claude-haiku-4-5-20251001"
+        assert r.resolve_role("chat") == "claude-sonnet-4-6"
+        assert r.resolve_role("deep") == "claude-opus-4-5-20251101"
         assert r.resolve_role("local") == "llama3.2:3b"
-        for role in ("haiku", "sonnet", "opus", "local"):
+        for role in ("fast", "chat", "deep", "local"):
             assert r.get(r.resolve_role(role))["is_active"] is True   # R4.1
         assert r.default_chat_model() == "claude-sonnet-4-6"          # R4.4
     finally:
@@ -64,13 +64,13 @@ async def test_resolution_is_cached_no_per_call_db_hit(fresh_db, db_settings):
     try:
         r = Resolver(pool)
         await r.reload()
-        assert r.resolve_role("sonnet") == "claude-sonnet-4-6"
+        assert r.resolve_role("chat") == "claude-sonnet-4-6"
         # mutate the DB WITHOUT reloading — a per-call DB lookup would see the change
         async with pool.acquire() as c:
-            await c.execute("UPDATE public.bh_model_aliases SET model_id='claude-haiku-4-5-20251001' WHERE role='sonnet'")
-        assert r.resolve_role("sonnet") == "claude-sonnet-4-6"        # still cached → proves no DB round-trip
+            await c.execute("UPDATE public.bh_model_aliases SET model_id='claude-haiku-4-5-20251001' WHERE role='chat'")
+        assert r.resolve_role("chat") == "claude-sonnet-4-6"         # still cached → proves no DB round-trip
         await r.reload()
-        assert r.resolve_role("sonnet") == "claude-haiku-4-5-20251001"  # picks up the change only on reload
+        assert r.resolve_role("chat") == "claude-haiku-4-5-20251001"  # picks up the change only on reload
     finally:
         await pool.close()
 
@@ -82,7 +82,7 @@ async def test_dangling_or_inactive_alias_fails_closed(fresh_db, db_settings):
         async with pool.acquire() as c:
             await c.execute("UPDATE public.bh_model_rates SET is_active=false WHERE model_id='claude-sonnet-4-6'")
         await r.reload()
-        got = r.resolve_role("sonnet")
+        got = r.resolve_role("chat")
         assert got != "claude-sonnet-4-6"            # never returns the inactive alias target
         assert r.get(got)["is_active"] is True        # fail-closed to an ACTIVE model
         assert "sonnet" in got                        # ...in the same tier (e.g. claude-sonnet-4-5)
