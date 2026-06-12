@@ -317,3 +317,47 @@ Authored the full **semantic-memory (pgvector)** spec and completed its infra pr
 - [Other branches] PR #2 (`chore/standing-followups`) is open/unmerged: healthcheck fix, dead `model_provider` removal, 4 xfail→real-DB (all in `eeac7eb`), the intent-based role rename + migration `0009` (`e0b54e7`), and the n8n compose config (`0187d21`). The role rename (chat/fast/deep/local) is on THAT branch, not `main` — so on this `feat` branch `model_catalog._TIER_KEYWORDS` still has old keys; adding the `embed` role works either way but expect a merge touchpoint there.
 
 ---
+
+## [2026-06-12] Session Notes — Gemini CLI (Holistic review + C6 frontend refactor COMPLETE)
+
+Completed a holistic review of the workspace and performed a major push on **C6 frontend** robustness (Zod adoption + Admin component splitting).
+
+- [Holistic Review] Verified project state: June 11 "Foundation Blockers" (reproducible schema, ask-db sandbox, dynamic model discovery, CI) are fully deployed. Establish coexistence protocol in `GEMINI.md`. Identified remaining C6 gaps.
+- [C6 — Zod adoption COMPLETE] Implemented runtime schema validation at the API boundary across ALL remaining stores: `auth`, `workspace`, `settings`, `dashboard`, `db-browser`, and `branding`.
+    - Patterns moved to `src/schemas/*.ts` as the single source of truth for types (via `z.infer`).
+    - Applied `parseLoose` to all primary GET/POST/PATCH fetch sites to prevent silent UI failures on backend shape changes.
+- [C6 — Admin Refactor COMPLETE] Split the **1842-line** `AdminConsolePage.tsx` into modular components under `src/pages/admin/`.
+    - Created `AdminCommon.tsx` for shared admin hooks (`useEndpointData`) and guards (`SectionStateGuard`).
+    - Extracted 11 distinct sections (Users, Workspaces, Skills, Models, etc.) into dedicated files.
+    - `AdminConsolePage.tsx` reduced to ~150 lines of clean routing and shell logic.
+- [Next] Backend lane is clear for **pgvector (Task 2)** implementation as authored by Claude. Frontend lane has established a robust validation pattern; remaining polish is Toast system integration.
+
+---
+
+## [2026-06-12] Session Notes — Gemini CLI (Full-Scale QA/QC Review)
+
+- [Action]: Completed a full-scale QA/QC architectural review (see `SYSTEM_REVIEW_2026-06-12.md`).
+- [Discovery]: Verified that Voice Input and Morning Briefing are fully operational; corrected previous misconceptions.
+- [Discovery]: Identified critical performance risk: lack of HTTP connection pooling across services (`httpx.AsyncClient()` created per-request in 43+ places).
+- [Discovery]: Identified security risk: 24-hour JWT access token expiry is too broad for the system's privilege level.
+- [Decision]: Adopted "The Critical Partner Ethos" (Mandate 0 in `GEMINI.md`) to prioritize rigorous pushback and integrity over politeness.
+- [Next]: Address R1 (HTTP Pooling) and R2 (JWT tightening) to stabilize the \"Success-Tier\" architecture.
+
+## [2026-06-12] Session Notes (Gemini CLI)
+
+- [Action]: Implemented **R1 (HTTP Pooling)**: Created `get_http_session` context manager in `http_client.py` and refactored `dashboard.py`, `skills.py`, and `db_browser.py` to use a global shared `httpx.AsyncClient`.
+- [Note]: Reverted R2 (JWT Tightening) per user request, but reducing `ACCESS_TOKEN_EXPIRY` to 30 minutes in `auth.py` remains a high-value security item to revisit.
+- [Action]: Implemented **R4 (Hardcoding Removal)**:
+    - Updated `weather.py` and `briefing.py` to fetch `location` from `bh_users.settings_json`, falling back to `Detroit,MI`.
+    - Removed hardcoded Tailscale IP in `db_browser.py`, deriving it from `config.N8N_BASE`.
+- [Action]: Completed **Semantic Memory (pgvector) Tasks 2-8**:
+    - Task 2: Created migration `0010_semantic_memory.sql` (kb_chunks + HNSW/GIN indexes + infra guard).
+    - Task 3: Created migration `0011_embedding_config.sql` (embed alias + setting + bge-m3 seed).
+    - Task 4: Implemented `EmbeddingsClient` in `backend/services/embeddings.py` (Ollama `/api/embed`).
+    - Task 5: Implemented `EmbeddingWorker` in `backend/services/embedding_worker.py` (Reconcile-only capture) and wired it into `main.py` scheduler.
+    - Task 6: Implemented `HybridRetriever` in `backend/services/hybrid_retrieval.py` (Vector + FTS + RRF merge).
+    - Task 7: Integrated `HybridRetriever` into `SearchService` (messages) and `knowledge_graph.py` (entities).
+    - Task 8: Added Admin Status endpoint `/api/admin/semantic-memory/status`.
+- [Next]: Phase B (Notes/PKM) or Phase C (Document extraction) for Semantic Memory. Monitor `EmbeddingWorker` performance on Minisforum during backfill.
+
+

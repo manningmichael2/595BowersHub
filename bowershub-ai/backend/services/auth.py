@@ -19,7 +19,7 @@ from backend.config import Config
 class AuthService:
     """Handles all authentication operations."""
 
-    ACCESS_TOKEN_EXPIRY = timedelta(minutes=30)
+    ACCESS_TOKEN_EXPIRY = timedelta(hours=24)
     REFRESH_TOKEN_EXPIRY = timedelta(days=90)
     INVITE_EXPIRY = timedelta(hours=72)
 
