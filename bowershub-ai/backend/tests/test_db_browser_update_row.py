@@ -83,6 +83,18 @@ class MockConnection:
         """Captures undo log INSERT."""
         self.executed_statements.append((sql, args))
 
+    def transaction(self):
+        """Minimal async-context-manager stand-in for conn.transaction()."""
+        return _MockTxn()
+
+
+class _MockTxn:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *args):
+        return False  # never suppress exceptions
+
 
 class MockPoolCtx:
     def __init__(self, conn):
@@ -363,9 +375,10 @@ async def test_update_row_undo_log_written_when_session_header_present():
     conn = MockConnection(old_row=old_row, update_row=updated_row)
     pool = MockPool(conn)
 
+    session_uuid = "11111111-2222-3333-4444-555555555555"
     request = MockRequest(
         body={"name": "New Name"},
-        headers={"x-db-session-id": "session-abc-123"},
+        headers={"x-db-session-id": session_uuid},
     )
 
     with patch("backend.routers.db_browser.get_pool", return_value=pool):
@@ -386,8 +399,10 @@ async def test_update_row_undo_log_written_when_session_header_present():
     assert len(undo_stmts) == 1
     undo_sql, undo_args = undo_stmts[0]
     assert "INSERT INTO bh_db_browser_undo_log" in undo_sql
-    assert undo_args[0] == "session-abc-123"  # session_id
-    assert undo_args[1] == "1"  # user_id
+    # session_id is now a uuid.UUID (column is uuid NOT NULL); user_id is an int
+    # (integer NOT NULL) — previously str() was passed and every insert threw.
+    assert undo_args[0] == uuid.UUID(session_uuid)  # session_id
+    assert undo_args[1] == 1  # user_id
     assert undo_args[2] == "inventory"  # schema_name
     assert undo_args[3] == "tools"  # table_name
     assert undo_args[4] == "5"  # row_id
