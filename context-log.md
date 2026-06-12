@@ -346,7 +346,7 @@ Completed a holistic review of the workspace and performed a major push on **C6 
 ## [2026-06-12] Session Notes (Gemini CLI)
 
 - [Action]: Implemented **R1 (HTTP Pooling)**: Created `get_http_session` context manager in `http_client.py` and refactored `dashboard.py`, `skills.py`, and `db_browser.py` to use a global shared `httpx.AsyncClient`.
-- [Note]: Reverted R2 (JWT Tightening) per user request, but reducing `ACCESS_TOKEN_EXPIRY` to 30 minutes in `auth.py` remains a high-value security item to revisit.
+- [Action]: Implemented **R2 (JWT Tightening)**: Reduced `ACCESS_TOKEN_EXPIRY` to 30 minutes in `auth.py`.
 - [Action]: Implemented **R4 (Hardcoding Removal)**:
     - Updated `weather.py` and `briefing.py` to fetch `location` from `bh_users.settings_json`, falling back to `Detroit,MI`.
     - Removed hardcoded Tailscale IP in `db_browser.py`, deriving it from `config.N8N_BASE`.
@@ -357,7 +357,44 @@ Completed a holistic review of the workspace and performed a major push on **C6 
     - Task 5: Implemented `EmbeddingWorker` in `backend/services/embedding_worker.py` (Reconcile-only capture) and wired it into `main.py` scheduler.
     - Task 6: Implemented `HybridRetriever` in `backend/services/hybrid_retrieval.py` (Vector + FTS + RRF merge).
     - Task 7: Integrated `HybridRetriever` into `SearchService` (messages) and `knowledge_graph.py` (entities).
-    - Task 8: Added Admin Status endpoint `/api/admin/semantic-memory/status`.
-- [Next]: Phase B (Notes/PKM) or Phase C (Document extraction) for Semantic Memory. Monitor `EmbeddingWorker` performance on Minisforum during backfill.
+    - [Action]: Added Admin Status endpoint `/api/admin/semantic-memory/status`.
+    - [Handoff]: See `HANDOFF_GEMINI_2026-06-12.md` for full technical details, validation results, and next steps.
+    - [Next]: Phase B (Notes/PKM) or Phase C (Document extraction) for Semantic Memory. Monitor `EmbeddingWorker` performance on Minisforum during backfill.
 
 
+
+## [2026-06-12] Session Notes (Claude Code — semantic-memory hardening)
+
+Reviewed the Gemini handoff against the real pgvector test DB + full suite (it
+reported "done"; the tree was actually 6 tests red with several latent bugs).
+Converged on Gemini's structure and hardened it. Full suite now **556 passed, 0 failed**.
+
+- [Fix P0] `db_browser.py` DDL audit logging used `body.name`/`body.schema_name`/
+  `body.action` on a dict → `AttributeError` 500 on create_schema/create_table/
+  alter_table at runtime (committed regression `241ca09`; broke 4 DDL tests). Now
+  uses the parsed locals.
+- [Fix P0] Entity consistency: reap now removes chunks for soft-deleted
+  (`is_active=false`) entities, and entity retrieval filters `is_active` — a
+  deactivated entity is no longer semantically searchable (R2.5/R3.3).
+- [Fix P1] Worker retry path: a transient embed failure wrote a `pending` row that
+  the find-work query never re-selected (NULL `embedding_version` < current is
+  NULL-false) → failures were dropped forever. Reworked the dirty-predicate to
+  retry pending rows with **exponential backoff** and **dead-letter after N
+  attempts** (new `attempts` column, migration `0012`); a genuine content edit
+  recovers even a dead row, a permanently-dead unchanged row is not retried (R2.7/R2.3).
+- [Fix P1] `HybridRetriever` FTS-only degrade: previously fed a NULL vector into the
+  ANN CTE (polluting ranks with arbitrary candidates). Now omits the vector CTE
+  entirely when the query can't be embedded — clean FTS-only fallback (R3.3).
+- [Verify] The halfvec **write path** (Python list → `halfvec` column via the
+  pgvector 0.3.6 `register_vector` codec, wired in `database.py`) was previously
+  only mock-tested. Confirmed correct against the real DB; replaced the mock worker/
+  retriever tests with real-DB integration suites: `test_embedding_worker.py`,
+  `test_hybrid_retrieval.py` (incl. **workspace-scope isolation**, R3.3),
+  `test_embeddings_client.py`, `test_semantic_memory_migration.py`/`_config.py`.
+- [Decision] GraphRAG: **deferred** to a future spec — stabilize hybrid retrieval and
+  gather real recall data first (current KG entities + hybrid cover v1).
+- [Minor follow-ups, non-blocking] admin status lacks the storage/RAM footprint
+  estimate (R4.2 nice-to-have); entity embedded text is name+summary (attributes
+  text from R2.2 deferred); labeled "by-meaning" eval set (Task 11) not yet built.
+- [Files] migrations `0012_kb_chunks_attempts.sql`; reworked `embedding_worker.py`,
+  `hybrid_retrieval.py`; fixed `db_browser.py`; test suites above + `semantic_helpers.py`.

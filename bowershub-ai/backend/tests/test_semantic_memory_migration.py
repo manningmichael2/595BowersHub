@@ -95,11 +95,11 @@ async def test_0010_applies_with_extension_present(fresh_db, db_settings):
                     "SELECT indexname FROM pg_indexes WHERE tablename = 'kb_chunks'"
                 )
             }
-            assert "kb_chunks_embedding_hnsw" in idx
-            assert "kb_chunks_fts_gin" in idx
-            assert "kb_chunks_source_idx" in idx
-            assert "kb_chunks_pending_idx" in idx
-            assert "kb_chunks_source_uniq" in idx  # the UNIQUE constraint's index
+            assert "kb_chunks_embedding_idx" in idx       # partial HNSW (R3.1)
+            assert "kb_chunks_fts_idx" in idx             # GIN (R3.2)
+            assert "kb_chunks_source_lookup_idx" in idx   # joins / reap
+            assert "kb_chunks_pending_idx" in idx         # worker drain
+            assert "kb_chunks_source_unique" in idx       # UNIQUE constraint's index
 
             # --- DB-driven config seeded (R1.2) ---------------------------
             alias = await conn.fetchval(
@@ -132,7 +132,7 @@ async def test_0010_guard_fires_without_extension(fresh_db, db_settings):
             await run_migrations(pool)
         msg = str(exc.value)
         assert "0010_semantic_memory.sql" in msg
-        assert "pgvector missing" in msg
+        assert "pgvector extension is missing" in msg
         assert "semantic-memory-cutover.md" in msg
 
         # no half-apply: kb_chunks must not exist

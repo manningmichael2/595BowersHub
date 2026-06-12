@@ -2802,7 +2802,7 @@ async def create_schema(
         action=f'db_browser_create_schema',
         target_type='database',
         target_id=None,
-        details={"schema": body.name}
+        details={"schema": name}
     )
     return {"ok": True, "schema": name, "sql": sql}
 
@@ -2901,7 +2901,7 @@ async def create_table(
         action=f'db_browser_create_table',
         target_type='database',
         target_id=None,
-        details={"schema": body.schema_name, "table": body.table_name}
+        details={"schema": schema, "table": table}
     )
     return {"ok": True, "schema": schema, "table": table, "sql": sql}
 
@@ -3147,7 +3147,7 @@ async def alter_table(
                 action=f'db_browser_alter_table',
                 target_type='database',
                 target_id=None,
-                details={"schema": schema, "table": table, "action": body.action}
+                details={"schema": schema, "table": table, "action": action}
             )
             return {"ok": True, "action": "drop_column", "column": column_name, "sql": sql}
 
