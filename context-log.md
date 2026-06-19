@@ -651,3 +651,15 @@ Owner thought the off-site backup used rsync; it's actually **rclone → Google 
 
 - [Note] Today's 03:00 `globals.sql` predates `bowershub_migrator` (created 12:59 today), so the migrator role isn't in today's backup — tonight's run captures it. Deploys now depend on this role; if doing DR before tonight, recreate it per `docs/c7-db-roles-cutover.md`.
 - [Remaining C2 nice-to-haves, not blocking] (1) no remote retention policy — Drive accumulates every dated folder forever (local prunes at 7d); (2) restore test is manual/ad-hoc — could be a periodic automated verify.
+
+---
+
+## [2026-06-19] Off-site backup retention (GFS) — C2/C7 — Claude Code
+
+Closed the remote-side gap in the off-site backup (which is real: rclone→Google Drive, restore-tested). Each nightly run synced to a *new* dated remote folder and **nothing ever pruned it** — local had a 7-day cleanup but the remote grew unbounded. (Lands alongside PR #14's failure-alerting + runbook fix, which touched the same `backup.sh`; integrated, not clobbered.)
+
+- **`scripts/gfs-prune.sh`** (new) — pure, side-effect-free GFS retention selector. Reads candidate dir names on stdin, prints `KEEP`/`DELETE` per line. Union of restic/borg-style tiers: 7 daily + 4 weekly (newest per ISO-week) + 6 monthly (newest per calendar month). Unparseable names are **always kept**. Factored out so the delete-decision is unit-testable.
+- **`scripts/test_gfs_prune.sh`** (new) — 6 tests (below-limit, 30-day prune, same-day pairs, unparseable-safety, monthly-only, empty input). All pass.
+- **`scripts/backup.sh`** — added off-site retention config + **step 8**: after a *successful* rclone sync, list remote → plan via `gfs-prune.sh` → `rclone purge` only the `DELETE` set. Guards: skips if remote can't be listed, planning fails, or the plan would keep 0. On sync failure, PR #14's `notify_failure` fires and the prune is skipped.
+
+**Verification:** `bash -n` clean; `test_gfs_prune.sh` all-pass; stubbed-rclone integration (15 daily dirs → keep 8, purge 7 oldest).

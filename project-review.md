@@ -134,7 +134,7 @@ For a "lasts a lifetime" system, **inability to reproduce the schema is the deep
 - **Rate limiting is fully implemented but never called anywhere** (`middleware/rate_limit.py`) — `/api/auth/login` has unlimited password-guessing.
 - **Hardcoded Tailscale IP `100.106.180.101`** across n8n scripts, dashboard, db-admin, and even backend source (`knowledge.py:18`, `db_browser.py:3777`) — a single re-IP breaks dozens of references, contradicting "lasts a lifetime."
 - **`:latest` image tags** for n8n and Ollama (`infrastructure/docker-compose.yml`); filewriter `pip install`s unpinned deps on every container start instead of using its own Dockerfile.
-- **Backups**: the steering doc says nightly `pg_dump` + tar is done locally but **off-site/remote is "ready to enable," not enabled.** One SSD failure still loses everything. (Verify this is actually running and actually off-site.)
+- **Backups**: ✅ RESOLVED (2026-06-19). Nightly `pg_dump` + tar locally (7-day), and off-site **is** enabled — rsynced to Google Drive via rclone, restore-tested 2026-06-09. Off-site now has GFS retention (7 daily/4 weekly/6 monthly) so the remote no longer grows unbounded. An SSD failure is survivable.
 
 ---
 
@@ -149,7 +149,7 @@ For a "lasts a lifetime" system, **inability to reproduce the schema is the deep
 5. **Add a top-level React error boundary** in `main.tsx` and a minimal toast system wired to the WS/API error paths. (C6)
 6. **Renumber the seven duplicate migrations** so apply-order is unambiguous. Mechanical. (C2)
 7. **Add a `.github/workflows/ci.yml`** that spins up Postgres and runs `pytest` + `vitest`. Even with today's coverage this catches regressions. (C5)
-8. **Confirm off-site backups are actually running** and restore-tested — not "ready to enable." (C7)
+8. ~~**Confirm off-site backups are actually running** and restore-tested — not "ready to enable."~~ ✅ DONE (2026-06-19). Off-site is live: `backup.sh` rsyncs nightly to Google Drive via rclone, restore-tested 2026-06-09. Added GFS off-site retention (7 daily/4 weekly/6 monthly, `scripts/gfs-prune.sh` + unit tests) — previously the remote grew unbounded. (C7)
 9. **Pin `:latest` images** to digests/fixed tags; switch filewriter compose to `build: .`. (C7)
 10. **Move the hardcoded `100.106.180.101`** to config/env and use Docker service DNS for container-to-container calls. (C7)
 
