@@ -56,7 +56,11 @@ jobs:
     # suite is also the "schema builds from empty" gate (project-review.md C2).
     services:
       postgres:
-        image: postgres:16-alpine
+        # Must be pgvector-capable: conftest.py pre-creates the `vector` extension
+        # (semantic memory, migration 0010). Plain postgres:16-alpine lacks it and
+        # turns the whole backend job red — which is how CI sat broken since
+        # 2026-06-12 while real failures (incl. a non-compiling frontend) shipped.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: michael
           POSTGRES_PASSWORD: postgres
