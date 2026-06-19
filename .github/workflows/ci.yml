@@ -54,6 +54,12 @@ jobs:
     # The DB-backed tests create ephemeral databases on this service and build
     # the schema from the squashed baseline via run_migrations() — so the full
     # suite is also the "schema builds from empty" gate (project-review.md C2).
+    #
+    # It also includes test_migrate_as_app_role.py, which reproduces the PROD
+    # deploy topology (scoped non-superuser runtime role + elevated migrator) and
+    # would have caught the 2026-06-19 ownership crash-loop. The rest of the suite
+    # runs migrations as the superuser DB_USER below, so without that test the
+    # scoped deploy path would NOT be exercised by CI (project-review.md C1/C7).
     services:
       postgres:
         # Must be pgvector-capable: conftest.py pre-creates the `vector` extension

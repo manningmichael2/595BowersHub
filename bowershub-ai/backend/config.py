@@ -20,6 +20,17 @@ class Config:
     DB_NAME: str = ""
     DB_USER: str = ""
     DB_PASSWORD: str = ""
+    # Optional — elevated credentials used ONLY for the short-lived startup
+    # migration connection (project-review.md C1/C7). Schema DDL (ALTER/DROP on
+    # legacy postgres-owned objects, CREATE EXTENSION, triggers) needs privilege
+    # the least-privilege runtime role (DB_USER=bowershub_app) lacks; the
+    # 2026-06-19 deploy crash-looped because migrations ran as the non-owner app
+    # role. When set, run_migrations() opens a dedicated connection as this role,
+    # applies migrations, and closes it — request-handling code never holds these
+    # creds. Defaults to DB_USER/DB_PASSWORD when unset (no behaviour change, e.g.
+    # local/test where DB_USER is already superuser). See docs/c7-db-roles-cutover.md.
+    MIGRATION_DB_USER: str = ""
+    MIGRATION_DB_PASSWORD: str = ""
     JWT_SECRET: str = ""
     N8N_BASE: str = ""
     FILES_ROOT: str = "/files"
@@ -65,6 +76,28 @@ class Config:
     @property
     def database_url(self) -> str:
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
+    @property
+    def migration_db_user(self) -> str:
+        """The role migrations run as. Falls back to the runtime role when no
+        dedicated migration role is configured (local/test, where DB_USER is
+        already privileged)."""
+        return self.MIGRATION_DB_USER or self.DB_USER
+
+    @property
+    def migration_db_password(self) -> str:
+        """Password for migration_db_user. Falls back only when no dedicated
+        migration *user* is set — a custom migration user with a blank password
+        is honoured rather than silently borrowing the runtime password."""
+        if self.MIGRATION_DB_USER:
+            return self.MIGRATION_DB_PASSWORD
+        return self.DB_PASSWORD
+
+    @property
+    def uses_dedicated_migration_role(self) -> bool:
+        """True when migrations should open their own elevated connection
+        instead of reusing the runtime pool."""
+        return bool(self.MIGRATION_DB_USER) and self.MIGRATION_DB_USER != self.DB_USER
 
     @property
     def aws_enabled(self) -> bool:
@@ -132,6 +165,8 @@ def load_config() -> Config:
         DB_NAME=os.environ["DB_NAME"],
         DB_USER=os.environ["DB_USER"],
         DB_PASSWORD=os.environ["DB_PASSWORD"],
+        MIGRATION_DB_USER=os.environ.get("MIGRATION_DB_USER", ""),
+        MIGRATION_DB_PASSWORD=os.environ.get("MIGRATION_DB_PASSWORD", ""),
         JWT_SECRET=os.environ["JWT_SECRET"],
         N8N_BASE=os.environ["N8N_BASE"],
         FILES_ROOT=os.environ.get("FILES_ROOT", "/files"),

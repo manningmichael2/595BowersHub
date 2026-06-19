@@ -104,12 +104,23 @@ def _checksum(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-async def run_migrations(pool: asyncpg.Pool):
+async def run_migrations(pool: asyncpg.Pool, config: Optional[Config] = None):
     """
     Apply pending SQL migrations from backend/migrations/ in filename order.
 
     Tracks applied migrations (with content checksums) in public.bh_migrations.
     Files in subdirectories (e.g. migrations/_archive/) are ignored.
+
+    Connection privilege (project-review.md C1/C7): schema DDL needs more
+    privilege than the least-privilege runtime role the pool connects as
+    (DB_USER=bowershub_app, which doesn't own legacy postgres-owned objects and
+    can't CREATE EXTENSION). When `config` configures a dedicated migration role
+    (MIGRATION_DB_USER != DB_USER), we open a short-lived elevated connection,
+    apply migrations, and close it — request-handling code never holds those
+    creds. Otherwise (no config, or migration creds == runtime creds, e.g.
+    local/test where DB_USER is already superuser) we reuse the pool, preserving
+    the original behaviour. The 2026-06-19 deploy crash-looped because migrations
+    ran as the non-owner app role; this is the fix. See docs/c7-db-roles-cutover.md.
 
     Baseline reconciliation: a database that predates the squashed baseline was
     built by the old granular chain and already has the full schema, so the
@@ -118,86 +129,109 @@ async def run_migrations(pool: asyncpg.Pool):
     created (public.bh_users). A genuinely empty database has no bh_users, so
     the baseline runs normally and builds everything.
     """
+    if config is not None and config.uses_dedicated_migration_role:
+        logger.info(
+            "Applying migrations via dedicated migration role '%s' (runtime role: '%s')",
+            config.migration_db_user, config.DB_USER,
+        )
+        conn = await asyncpg.connect(
+            host=config.DB_HOST,
+            port=config.DB_PORT,
+            database=config.DB_NAME,
+            user=config.migration_db_user,
+            password=config.migration_db_password,
+        )
+        try:
+            await _apply_migrations(conn)
+        finally:
+            await conn.close()
+    else:
+        async with pool.acquire() as conn:
+            await _apply_migrations(conn)
+
+
+async def _apply_migrations(conn: asyncpg.Connection):
+    """Apply pending migrations on an already-open connection. The caller owns
+    the connection's lifecycle (pool-acquired or dedicated migration conn)."""
     migrations_dir = Path(__file__).parent / "migrations"
 
-    async with pool.acquire() as conn:
-        # Ensure tracking table exists, and add the checksum column on upgrade.
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS public.bh_migrations (
-                id          SERIAL PRIMARY KEY,
-                filename    TEXT NOT NULL UNIQUE,
-                checksum    TEXT,
-                applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    # Ensure tracking table exists, and add the checksum column on upgrade.
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS public.bh_migrations (
+            id          SERIAL PRIMARY KEY,
+            filename    TEXT NOT NULL UNIQUE,
+            checksum    TEXT,
+            applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """)
+    await conn.execute(
+        "ALTER TABLE public.bh_migrations ADD COLUMN IF NOT EXISTS checksum TEXT"
+    )
+
+    # filename -> checksum (checksum may be NULL for pre-checksum rows)
+    rows = await conn.fetch("SELECT filename, checksum FROM public.bh_migrations")
+    applied = {row["filename"]: row["checksum"] for row in rows}
+
+    # Discover top-level migration files only (ignore _archive/ subdir).
+    migration_files = sorted(
+        f for f in migrations_dir.iterdir()
+        if f.is_file() and f.suffix == ".sql" and f.name != ".gitkeep"
+    )
+
+    # --- Baseline reconciliation -------------------------------------
+    baseline = migrations_dir / BASELINE_FILENAME
+    if baseline.exists() and BASELINE_FILENAME not in applied:
+        already_built = await conn.fetchval("SELECT to_regclass('public.bh_users')")
+        if already_built is not None:
+            checksum = _checksum(baseline.read_text())
+            await conn.execute(
+                "INSERT INTO public.bh_migrations (filename, checksum) VALUES ($1, $2)",
+                BASELINE_FILENAME, checksum,
             )
-        """)
-        await conn.execute(
-            "ALTER TABLE public.bh_migrations ADD COLUMN IF NOT EXISTS checksum TEXT"
-        )
+            applied[BASELINE_FILENAME] = checksum
+            logger.info(
+                f"  ↺ adopted existing schema as baseline ({BASELINE_FILENAME}); not re-run"
+            )
 
-        # filename -> checksum (checksum may be NULL for pre-checksum rows)
-        rows = await conn.fetch("SELECT filename, checksum FROM public.bh_migrations")
-        applied = {row["filename"]: row["checksum"] for row in rows}
+    # --- Drift detection on already-applied migrations ---------------
+    for f in migration_files:
+        recorded = applied.get(f.name)
+        if recorded and _checksum(f.read_text()) != recorded:
+            logger.warning(
+                f"  ⚠ migration {f.name} changed since it was applied "
+                "(checksum drift — applied migrations are immutable)"
+            )
 
-        # Discover top-level migration files only (ignore _archive/ subdir).
-        migration_files = sorted(
-            f for f in migrations_dir.iterdir()
-            if f.is_file() and f.suffix == ".sql" and f.name != ".gitkeep"
-        )
+    # --- Apply pending migrations ------------------------------------
+    pending = [f for f in migration_files if f.name not in applied]
+    if not pending:
+        logger.info("No pending migrations")
+        return
 
-        # --- Baseline reconciliation -------------------------------------
-        baseline = migrations_dir / BASELINE_FILENAME
-        if baseline.exists() and BASELINE_FILENAME not in applied:
-            already_built = await conn.fetchval("SELECT to_regclass('public.bh_users')")
-            if already_built is not None:
-                checksum = _checksum(baseline.read_text())
+    for migration_file in pending:
+        logger.info(f"Applying migration: {migration_file.name}")
+        sql = migration_file.read_text()
+        try:
+            # Execute migration in a transaction
+            async with conn.transaction():
+                # The squashed baseline (a pg_dump) runs
+                # `set_config('search_path', '', false)`, which persists on this
+                # shared connection for the *rest* of the session. That makes any
+                # later migration referencing an unqualified relation (e.g.
+                # `bh_skills` instead of `public.bh_skills`) fail on a from-scratch
+                # rebuild — even though it resolves fine on an existing prod DB
+                # (where the baseline is adopted, not executed). Pin a sane
+                # search_path per migration (transaction-scoped) so rebuilds and
+                # prod behave identically. See project-review.md C2.
+                await conn.execute("SET LOCAL search_path = public, finance")
+                await conn.execute(sql)
                 await conn.execute(
                     "INSERT INTO public.bh_migrations (filename, checksum) VALUES ($1, $2)",
-                    BASELINE_FILENAME, checksum,
+                    migration_file.name, _checksum(sql),
                 )
-                applied[BASELINE_FILENAME] = checksum
-                logger.info(
-                    f"  ↺ adopted existing schema as baseline ({BASELINE_FILENAME}); not re-run"
-                )
+            logger.info(f"  ✓ {migration_file.name} applied")
+        except Exception as e:
+            logger.error(f"  ✗ Migration {migration_file.name} failed: {e}")
+            raise SystemExit(f"Migration failed: {migration_file.name} — {e}")
 
-        # --- Drift detection on already-applied migrations ---------------
-        for f in migration_files:
-            recorded = applied.get(f.name)
-            if recorded and _checksum(f.read_text()) != recorded:
-                logger.warning(
-                    f"  ⚠ migration {f.name} changed since it was applied "
-                    "(checksum drift — applied migrations are immutable)"
-                )
-
-        # --- Apply pending migrations ------------------------------------
-        pending = [f for f in migration_files if f.name not in applied]
-        if not pending:
-            logger.info("No pending migrations")
-            return
-
-        for migration_file in pending:
-            logger.info(f"Applying migration: {migration_file.name}")
-            sql = migration_file.read_text()
-            try:
-                # Execute migration in a transaction
-                async with conn.transaction():
-                    # The squashed baseline (a pg_dump) runs
-                    # `set_config('search_path', '', false)`, which persists on this
-                    # shared connection for the *rest* of the session. That makes any
-                    # later migration referencing an unqualified relation (e.g.
-                    # `bh_skills` instead of `public.bh_skills`) fail on a from-scratch
-                    # rebuild — even though it resolves fine on an existing prod DB
-                    # (where the baseline is adopted, not executed). Pin a sane
-                    # search_path per migration (transaction-scoped) so rebuilds and
-                    # prod behave identically. See project-review.md C2.
-                    await conn.execute("SET LOCAL search_path = public, finance")
-                    await conn.execute(sql)
-                    await conn.execute(
-                        "INSERT INTO public.bh_migrations (filename, checksum) VALUES ($1, $2)",
-                        migration_file.name, _checksum(sql),
-                    )
-                logger.info(f"  ✓ {migration_file.name} applied")
-            except Exception as e:
-                logger.error(f"  ✗ Migration {migration_file.name} failed: {e}")
-                raise SystemExit(f"Migration failed: {migration_file.name} — {e}")
-
-        logger.info(f"Applied {len(pending)} migration(s)")
+    logger.info(f"Applied {len(pending)} migration(s)")

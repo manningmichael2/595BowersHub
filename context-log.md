@@ -568,3 +568,60 @@ Deploying the categorization work (`./scripts/deploy.sh bowershub-ai`) put the a
 - **No off-site backup (C2)** — ran DDL + a `DELETE` on prod with no net.
 
 - [Next] Merge `fix/categorization-review-hardening` → `main` (done this session). Do NOT redeploy from `main` until the migration/role model is decided, or it crash-loops again.
+
+---
+
+## [2026-06-19] Documented forward goal — personal-finance product (Claude Code)
+
+Owner's north star for the money side: a **Monarch Money / Origin-style finance frontend** with much better categorization + accounting. Owner's current read: the bulk **categorizer is still poor**, the interactive **categorization tool is only OK**. Documented in `project-review.md` §8.4 ("Personal-finance frontend") with the gap analysis (merchant enrichment, learning categorization, accounting model, budgets, review UX) and §8.6 step 5. **Explicitly sequenced AFTER foundation stability** — do not start before the migration/role decision + backups land. Not started; documentation only.
+
+---
+
+## [2026-06-19] Migration/role model decided + implemented (C1/C7) — Claude Code
+
+Resolves the blocker from the deploy incident above ("Do NOT redeploy from `main` until the migration/role model is decided"). **Decision: Option 1 — split privilege by connection.**
+
+- **Runtime** stays the least-privilege scoped role `bowershub_app` (`DB_USER`).
+- **Migrations** run via a short-lived elevated connection as a new role `bowershub_migrator` (`MIGRATION_DB_USER`), opened by `run_migrations()` and closed immediately. Request-handling code never holds the elevated creds.
+
+Why Option 1 over the alternatives (REASSIGN-only / non-superuser owner): the incident's real cause was a **manual step that got skipped**, and both alternatives keep a manual step on the critical path (`REASSIGN`, and `CREATE EXTENSION` which a non-superuser can't auto-apply). Option 1 removes the manual step from every future deploy and is immune to ownership drift from out-of-band superuser SQL (a real risk in the Kiro+Gemini+Claude workflow). It's strictly better than the pre-C7 state where the **app itself** ran as superuser. Trade-off accepted: migrator (superuser) creds live in the app `.env`, used only for the startup migration connection.
+
+**Files touched:**
+- `backend/config.py` — optional `MIGRATION_DB_USER`/`MIGRATION_DB_PASSWORD`; `migration_db_user`/`migration_db_password`/`uses_dedicated_migration_role` accessors. Fall back to `DB_USER` when unset (local/CI/test, where `DB_USER` is already superuser → behaviour unchanged).
+- `backend/database.py` — `run_migrations(pool, config=None)` opens the elevated connection when a dedicated migrator is configured; else reuses the pool. Body refactored into `_apply_migrations(conn)`. **All ~25 existing test callers pass `run_migrations(pool)` → `config=None` → pool path → identical behaviour.**
+- `backend/main.py` — passes `config` to `run_migrations`.
+- `backend/migrations/0021_migration_role.sql` — creates `bowershub_migrator` (idempotent, NOLOGIN/NOSUPERUSER; the privileged attrs are the manual cutover's job) and replicates the `0002/0003/0004` default privileges **FOR ROLE bowershub_migrator** so objects future migrations create as the migrator still auto-grant DML to `bowershub_app`/`n8n_app` and SELECT to `finance_reader`.
+- `docs/c7-db-roles-cutover.md` — **the previously-missing runbook** that `0003` referenced. One-time superuser bootstrap (`ALTER ROLE bowershub_migrator WITH LOGIN SUPERUSER PASSWORD …`), env wiring, optional `REASSIGN OWNED` cleanup, verification, local/CI notes.
+- `.env.example` — documents the runtime vs migration roles; `DB_USER` now shown as `bowershub_app`.
+
+**Verification (throwaway `pgvector/pgvector:pg16`):** full baseline→0021 chain applies cleanly. Decisive test reproduced the **prod topology** — pool as non-superuser `bowershub_app`, migrations via superuser `bowershub_migrator`: 21 migrations recorded, objects owned by the migrator (proving the elevated conn did the DDL), and `bowershub_app` can SELECT `finance.transactions` (grant propagation works). Full backend suite **556 passed**; pure property tests **125 passed**.
+
+- [Next — before redeploying prod] Run `docs/c7-db-roles-cutover.md` once as superuser `michael`: bootstrap `bowershub_migrator` (LOGIN/SUPERUSER/password), set `MIGRATION_DB_USER`/`MIGRATION_DB_PASSWORD` + `DB_USER=bowershub_app` in the server `.env`, then `./scripts/deploy.sh bowershub-ai`. Migrations now self-apply with privilege — the 0016 ownership crash can't recur.
+- [Known gap, ties to C2] On a *from-scratch* rebuild via the migrator, tables created in migrations 0005–0020 inherit grants via the existing no-`FOR ROLE` default-priv statements (keyed to the runner); fold an explicit re-grant audit into the C2 reproducible-schema pass for certainty. Prod-forward (0022+) is covered by 0021. Committed on `fix/migration-role-model`.
+
+---
+
+## [2026-06-19] CI: cover the scoped deploy path (C5) — Claude Code
+
+CI already existed and is solid (`.github/workflows/ci.yml`: frontend typecheck/test/build, backend full suite vs `pgvector/pgvector:pg16`, gitleaks). The **gap**: the backend job runs migrations as the superuser `DB_USER=michael`, so it never exercised the scoped, non-superuser deploy path — **this is why CI was green while prod crash-looped** on 2026-06-19. The incident write-up called for exactly a "migrate-as-app-role smoke job".
+
+- Added `backend/tests/test_migrate_as_app_role.py` — reproduces the **prod topology** on the ephemeral test cluster (runtime pool as non-superuser `bowershub_app`, migrations via superuser `bowershub_migrator`) and asserts: (1) the full baseline→head chain applies through the elevated connection, (2) objects are owned by the migrator — the regression guard that fails if anyone drops the privilege split, (3) the scoped role can actually read app data across `public`/`finance` (grant propagation), (4) the runtime role is not a superuser. This test would have caught the 0016 crash.
+- It's a pytest, so it runs automatically inside the existing backend job (which already has a pgvector Postgres + superuser) — **no workflow change required**. Added a comment in `ci.yml` documenting that the scoped deploy path is now covered.
+
+**Verification:** new test passes standalone and in any order; full backend suite **557 passed** (was 556 + 1). Committed on `fix/migration-role-model`.
+
+- [Note] CI runs `on: [push to main, pull_request]`. Open a PR from `fix/migration-role-model` to get the full matrix (incl. this new test) to run before merge. **Done — PR #12, all 3 checks green.**
+
+---
+
+## [2026-06-19] C7 cutover EXECUTED on prod — Claude Code
+
+Ran `docs/c7-db-roles-cutover.md` against the live `postgres` container (DB `finance`) as superuser `michael`, so prod is prepped for the next deploy of PR #12. **Did NOT redeploy** — the running container still has the old image, which ignores the new env vars, so this is inert until deploy.
+
+- Created role **`bowershub_migrator`** = `LOGIN SUPERUSER` with a strong password (stored in the prod `.env` and to be saved in Dashlane — value is NOT in git/this log). Verified it logs in over TCP as the app will.
+- Wired the prod **`bowershub-ai/.env`** (gitignored): added `MIGRATION_DB_USER=bowershub_migrator` + `MIGRATION_DB_PASSWORD=…`. `DB_USER` was already `bowershub_app` (no change). Pre-edit backup saved OUTSIDE the repo at `/home/michael/env-backups/` (the in-tree `.env.bak` was not covered by gitignore, so it was moved out to avoid a secret leak).
+- Skipped the optional `REASSIGN OWNED` — a superuser migrator makes object ownership irrelevant for DDL, and REASSIGN is the riskier/disruptive step. Ownership stays mixed (`bowershub_app`/`michael`); harmless.
+
+**Deploy de-risk:** diffed repo migrations vs prod `bh_migrations` — the ONLY unrecorded file is `0021_migration_role.sql`. So the next deploy applies exactly one migration, as the superuser migrator (idempotent CREATE ROLE + GRANT + ALTER DEFAULT PRIVILEGES), with no collision risk (unlike the incident's unrecorded hand-applied SQL).
+
+- [Next] Merge PR #12, then `./scripts/deploy.sh bowershub-ai`. Expected log line: "Applying migrations via dedicated migration role 'bowershub_migrator'" then "Applied 1 migration(s)"; health 200. Prod is now safe to redeploy from `main` (lifts the 2026-06-19 hold).
