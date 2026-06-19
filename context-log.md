@@ -663,3 +663,17 @@ Closed the remote-side gap in the off-site backup (which is real: rclone→Googl
 - **`scripts/backup.sh`** — added off-site retention config + **step 8**: after a *successful* rclone sync, list remote → plan via `gfs-prune.sh` → `rclone purge` only the `DELETE` set. Guards: skips if remote can't be listed, planning fails, or the plan would keep 0. On sync failure, PR #14's `notify_failure` fires and the prune is skipped.
 
 **Verification:** `bash -n` clean; `test_gfs_prune.sh` all-pass; stubbed-rclone integration (15 daily dirs → keep 8, purge 7 oldest).
+
+---
+
+## [2026-06-19] Restore test — provable DR (C2) — Claude Code
+
+Made the restore drill repeatable + CI-gated. Off-site is restore-tested, but nothing *re-ran* it, so a change to dump format/role grants/schema could break restore and only surface mid-disaster. (Independently re-confirmed PR #14's finding: restore must use bootstrap superuser `michael`, or `GRANTED BY michael` role memberships silently fail — encoded in the script.)
+
+- **`scripts/restore-test.sh`** (new) — runs the documented restore order (`globals.sql` → `createdb` → `pg_restore --no-owner`) into a **throwaway container** and asserts the four app roles, `public`+`finance` schemas, and **exact per-table row counts** survive. Modes: default (dump fresh from live, read-only), `--from-backup DIR` (real stored artifact), `--selftest` (self-contained: builds its own source via `run_migrations`).
+- **`.github/workflows/ci.yml`** — new `restore-test` job runs `--selftest` every push/PR.
+- Two findings handled: the postgres entrypoint init-race (wait for the init-complete marker) and PG16 `GRANTED BY` grantors (restore as the same superuser as the source).
+
+**Verification (clean-room, no prod contact):** built a source baseline→head in an isolated container → restore clean, 4 roles + 2 schemas, **51/51 tables row-count match**; `--selftest` (CI path) passes end-to-end. Throwaway containers auto-removed.
+
+- [Next foundation] C2 tail is mechanical (0014/0019 unqualified-ref + 0005–0020 grant-audit). Then the ask-db hardening (separate PR #16) and pgvector semantic memory.
