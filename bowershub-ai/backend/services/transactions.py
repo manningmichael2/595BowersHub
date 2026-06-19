@@ -10,6 +10,7 @@ Returns a dict with '_display' key containing pre-formatted markdown.
 """
 import logging
 from datetime import date, timedelta
+from urllib.parse import quote
 from typing import Optional
 
 from backend.database import get_pool
@@ -89,7 +90,7 @@ async def _recent_transactions(pool, limit: int = 15) -> dict:
     """Show the most recent transactions."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT t.posted_date, t.description, t.amount, c.name as category
+            SELECT t.id, t.posted_date, t.description, t.amount, c.name as category
             FROM finance.transactions t
             LEFT JOIN finance.categories c ON c.id = t.category_id
             WHERE t.is_transfer = false
@@ -107,7 +108,7 @@ async def _transactions_by_date(pool, start: date, end: date) -> dict:
     """Show transactions in a date range."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT t.posted_date, t.description, t.amount, c.name as category
+            SELECT t.id, t.posted_date, t.description, t.amount, c.name as category
             FROM finance.transactions t
             LEFT JOIN finance.categories c ON c.id = t.category_id
             WHERE t.posted_date >= $1 AND t.posted_date <= $2
@@ -133,7 +134,7 @@ async def _search_transactions(pool, term: str) -> dict:
     """Search transactions by description OR category name."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT t.posted_date, t.description, t.amount, c.name as category
+            SELECT t.id, t.posted_date, t.description, t.amount, c.name as category
             FROM finance.transactions t
             LEFT JOIN finance.categories c ON c.id = t.category_id
             WHERE (t.description ILIKE $1 OR c.name ILIKE $1)
@@ -170,7 +171,15 @@ def _format_transaction_table(rows, title: str) -> str:
         else:
             amount_str = f"-${abs(amount):,.2f}"
 
-        cat_str = f" · {category}" if category and category != "—" else ""
+        # Interactive link: clicking pre-fills the composer with a ready-to-finish
+        # command (the user just appends the category). The `fill:` scheme is
+        # handled client-side (MessageList); the text routes to categorize-transaction.
+        txn_id = str(row.get("id", ""))
+        prefill = quote(f"Recategorize {txn_id} to ") if txn_id else ""
+        if category and category != "—":
+            cat_str = f" · {category}" + (f" [✎](fill:{prefill})" if prefill else "")
+        else:
+            cat_str = " · [Categorize](fill:{})".format(prefill) if prefill else " · Uncategorized"
         lines.append(f"- **{date_str}** {desc} — {amount_str}{cat_str}")
 
     lines.append("")
@@ -187,7 +196,7 @@ async def get_large_transactions(threshold: float = 100.0) -> dict:
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT t.posted_date, t.description, t.amount, c.name as category
+            SELECT t.id, t.posted_date, t.description, t.amount, c.name as category
             FROM finance.transactions t
             LEFT JOIN finance.categories c ON c.id = t.category_id
             WHERE ABS(t.amount) >= $1
@@ -247,7 +256,7 @@ async def get_uncategorized_transactions() -> dict:
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT t.posted_date, t.description, t.amount, NULL as category
+            SELECT t.id, t.posted_date, t.description, t.amount, NULL as category
             FROM finance.transactions t
             WHERE t.category_id IS NULL
             AND t.is_transfer = false

@@ -1,197 +1,156 @@
 """
-Native override-category skill — replaces the n8n Override Transaction Category workflow.
-
-Flow:
-1. Validate category exists (or create if create_if_missing=true)
-2. Extract merchant pattern from the transaction description
-3. Count similar transactions
-4. If similar exist and confirm_retroactive not set → return needs_confirmation
-5. On confirmation → update primary + cascade to similar + upsert category_examples
+Native categorization tools — replaces the jumbled override-category skill.
+Implements the 'Propose & Commit' pattern for bulk updates and specific ID fixes.
 """
 import logging
 import re
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from backend.database import get_pool
+from backend.services.normalization import lookup_category_alias
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_merchant_pattern(description: str) -> Optional[str]:
+async def categorize_merchant(description_pattern: str, category_name: str) -> dict:
     """
-    Extract a merchant pattern from a transaction description.
-    Takes the first alphabetic word >=3 chars, uppercased.
-    E.g., "WALMART SUPERCENTER #1234" → "WALMART"
+    PROPOSE: Set a merchant rule and preview the impact.
+    Does NOT update transactions yet.
     """
-    if not description:
-        return None
-    words = re.findall(r'[A-Za-z]{3,}', description)
-    if words:
-        return words[0].upper()
-    return None
-
-
-async def override_category(
-    transaction_id: str,
-    category_name: str,
-    create_if_missing: bool = False,
-    confirm_retroactive: bool = False,
-) -> dict:
-    """
-    Override a transaction's category with a learning loop.
-    """
-    if not transaction_id or not transaction_id.strip():
-        return {"error": "Missing transaction_id.", "_display": "⚠️ Provide a transaction ID."}
-    if not category_name or not category_name.strip():
-        return {"error": "Missing category_name.", "_display": "⚠️ Provide the new category name."}
-
-    transaction_id = transaction_id.strip()
-    category_name = category_name.strip()
+    if not description_pattern or not category_name:
+        return {"error": "Missing merchant pattern or category name."}
 
     pool = get_pool()
     async with pool.acquire() as conn:
-        # 1. Look up the category
+        # 1. Normalize category
+        canonical_category = await lookup_category_alias(conn, category_name)
+        
         cat_row = await conn.fetchrow(
-            "SELECT id, name FROM finance.categories WHERE name = $1",
-            category_name,
+            "SELECT id, name FROM finance.categories WHERE name ILIKE $1",
+            canonical_category.strip(),
         )
-
         if not cat_row:
-            # Category doesn't exist
-            if not create_if_missing:
-                # Return all categories so the agent/user can pick
-                cats = await conn.fetch("""
-                    SELECT c.name, p.name as parent_name
-                    FROM finance.categories c
-                    LEFT JOIN finance.categories p ON p.id = c.parent_id
-                    ORDER BY COALESCE(p.name, c.name), c.name
-                """)
-                
-                by_parent = {}
-                for c in cats:
-                    parent = c["parent_name"] or "Top-level"
-                    by_parent.setdefault(parent, []).append(c["name"])
-                
-                cat_display = []
-                for parent, children in sorted(by_parent.items()):
-                    if parent == "Top-level":
-                        cat_display.extend(children)
-                    else:
-                        cat_display.append(f"{parent}: {', '.join(children)}")
+            return {"error": f"Category '{category_name}' not found."}
 
-                return {
-                    "success": False,
-                    "error": "category_not_found",
-                    "message": f'Category "{category_name}" does not exist. Confirm with the user whether to create it, then call again with create_if_missing=true.',
-                    "existing_categories_by_parent": by_parent,
-                    "_display": (
-                        f'⚠️ Category "{category_name}" doesn\'t exist.\n\n'
-                        f"**Available categories:**\n" +
-                        "\n".join(f"- {c}" for c in cat_display) +
-                        f'\n\nTo create it, re-run with `create_if_missing=true`.'
-                    ),
-                }
-            else:
-                # Create the category
-                cat_row = await conn.fetchrow(
-                    "INSERT INTO finance.categories (name) VALUES ($1) RETURNING id, name",
-                    category_name,
-                )
-                logger.info(f"Created new category: {category_name} (id={cat_row['id']})")
-
-        category_id = cat_row["id"]
-
-        # 2. Look up the transaction
-        txn = await conn.fetchrow(
-            "SELECT id, description, amount, category_id FROM finance.transactions WHERE id = $1",
-            int(transaction_id) if transaction_id.isdigit() else transaction_id,
+        # 2. Find matching transactions (fuzzy + ilike)
+        rows = await conn.fetch(
+            """
+            SELECT id, description, amount, posted_date
+            FROM finance.transactions
+            WHERE (UPPER(description) LIKE $1 OR similarity(description, $2) > 0.20)
+              AND user_category_override = false
+              AND (category_id IS NULL OR category_id != $3)
+            ORDER BY posted_date DESC
+            """,
+            f"%{description_pattern.upper()}%",
+            description_pattern,
+            cat_row["id"]
         )
-        if not txn:
-            return {"error": f"Transaction {transaction_id} not found.", "_display": f"⚠️ Transaction `{transaction_id}` not found."}
 
-        # 3. Extract merchant pattern
-        pattern = _extract_merchant_pattern(txn["description"])
-
-        # 4. Count similar transactions (same pattern, not user-overridden)
-        similar_count = 0
-        if pattern:
-            row = await conn.fetchrow(
-                """
-                SELECT COUNT(*) as cnt FROM finance.transactions
-                WHERE UPPER(description) LIKE $1
-                  AND id != $2
-                  AND user_category_override = false
-                """,
-                f"%{pattern}%",
-                txn["id"],
-            )
-            similar_count = row["cnt"] if row else 0
-
-        # 5. If similar exist and not confirmed → ask for confirmation
-        if similar_count > 0 and not confirm_retroactive:
-            return {
-                "success": False,
-                "needs_confirmation": True,
-                "similar_count": similar_count,
-                "pattern": pattern,
-                "message": f"Found {similar_count} similar transactions matching pattern \"{pattern}\". Retroactively update them all to \"{category_name}\"?",
-                "_display": (
-                    f"Found **{similar_count}** similar transactions matching \"{pattern}\".\n\n"
-                    f"Update them all to **{category_name}**?\n\n"
-                    f"Call again with `confirm_retroactive=true` to apply."
-                ),
-            }
-
-        # 6. Apply the override
-        # Update the primary transaction
+        # 3. Always save the rule (Learning Loop)
         await conn.execute(
-            "UPDATE finance.transactions SET category_id = $1, user_category_override = true WHERE id = $2",
-            category_id, txn["id"],
+            """
+            INSERT INTO finance.category_examples (description_pattern, category_id, times_reinforced)
+            VALUES ($1, $2, 1)
+            ON CONFLICT (lower(description_pattern), category_id) DO UPDATE
+            SET times_reinforced = finance.category_examples.times_reinforced + 1,
+                updated_at = NOW()
+            """,
+            description_pattern.upper(), cat_row["id"],
         )
 
-        # Cascade to similar transactions (if confirmed)
-        cascade_count = 0
-        if similar_count > 0 and confirm_retroactive and pattern:
-            result = await conn.execute(
-                """
-                UPDATE finance.transactions
-                SET category_id = $1
-                WHERE UPPER(description) LIKE $2
-                  AND id != $3
-                  AND user_category_override = false
-                """,
-                category_id, f"%{pattern}%", txn["id"],
-            )
-            # Parse "UPDATE N" result
-            try:
-                cascade_count = int(result.split()[-1])
-            except (ValueError, IndexError):
-                cascade_count = similar_count
+    if not rows:
+        return {
+            "success": True,
+            "rule_saved": True,
+            "_display": f"✅ Rule saved: **{description_pattern}** will now be auto-categorized as **{cat_row['name']}**.\n\n(No existing transactions found to update.)"
+        }
 
-        # 7. Upsert into category_examples (learning loop)
-        if pattern:
-            await conn.execute(
-                """
-                INSERT INTO finance.category_examples (pattern, category_id, times_reinforced)
-                VALUES ($1, $2, 1)
-                ON CONFLICT (pattern) DO UPDATE
-                SET category_id = $2, times_reinforced = category_examples.times_reinforced + 1,
-                    last_reinforced_at = NOW()
-                """,
-                pattern, category_id,
-            )
+    # Format preview
+    total_amount = sum(float(r["amount"]) for r in rows)
+    preview_lines = [f"✅ Rule saved: **{description_pattern}** is now **{cat_row['name']}**.\n"]
+    preview_lines.append(f"I found **{len(rows)}** existing transactions that match this pattern (Total: ${abs(total_amount):,.2f}).")
+    preview_lines.append("\n**Should I update them all now?** (Say 'yes' or 'proceed')")
+    
+    return {
+        "success": True,
+        "needs_commit": True,
+        "pattern": description_pattern,
+        "category": cat_row["name"],
+        "match_count": len(rows),
+        "_display": "\n".join(preview_lines)
+    }
 
-    display_parts = [f"✅ Updated transaction #{transaction_id} → **{category_name}**"]
-    if cascade_count > 0:
-        display_parts.append(f"Also updated {cascade_count} similar \"{pattern}\" transactions.")
-    if pattern:
-        display_parts.append(f"Pattern \"{pattern}\" saved for future auto-categorization.")
+
+async def commit_bulk_update(description_pattern: str, category_name: str) -> dict:
+    """
+    COMMIT: Execute the bulk update previously proposed.
+    """
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        # Resolve natural-language aliases (e.g. "groceries" -> "Food_Groceries"),
+        # matching categorize_merchant/categorize_transaction. Without this, the
+        # commit step of the propose→commit flow fails whenever the user (or the
+        # LLM echoing context) names a category by alias rather than exact name.
+        canonical_category = await lookup_category_alias(conn, category_name)
+        cat_row = await conn.fetchrow(
+            "SELECT id, name FROM finance.categories WHERE name ILIKE $1",
+            canonical_category.strip(),
+        )
+        if not cat_row:
+            return {"error": f"Category '{category_name}' not found."}
+
+        result = await conn.execute(
+            """
+            UPDATE finance.transactions
+            SET category_id = $1, user_category_override = true
+            WHERE (UPPER(description) LIKE $2 OR similarity(description, $3) > 0.20)
+              AND user_category_override = false
+            """,
+            cat_row["id"], 
+            f"%{description_pattern.upper()}%",
+            description_pattern,
+        )
+        
+        try:
+            count = int(result.split()[-1])
+        except (ValueError, IndexError):
+            count = 0
+
+    return {
+        "success": True,
+        "updated_count": count,
+        "_display": f"🚀 Successfully updated **{count}** transactions to **{cat_row['name']}**."
+    }
+
+
+async def categorize_transaction(transaction_id: str, category_name: str) -> dict:
+    """
+    SPECIFIC: Update a single transaction by ID.
+    """
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        # Normalize category
+        canonical_category = await lookup_category_alias(conn, category_name)
+        cat_row = await conn.fetchrow(
+            "SELECT id, name FROM finance.categories WHERE name ILIKE $1",
+            canonical_category.strip(),
+        )
+        if not cat_row:
+            return {"error": f"Category '{category_name}' not found."}
+
+        # Update the row
+        result = await conn.execute(
+            "UPDATE finance.transactions SET category_id = $1, user_category_override = true WHERE id = $2",
+            cat_row["id"], transaction_id
+        )
+        
+        if result == "UPDATE 0":
+            return {"error": f"Transaction '{transaction_id}' not found."}
 
     return {
         "success": True,
         "transaction_id": transaction_id,
-        "category": category_name,
-        "pattern": pattern,
-        "cascade_count": cascade_count,
-        "_display": "\n".join(display_parts),
+        "category": cat_row["name"],
+        "_display": f"✅ Transaction **{transaction_id}** updated to **{cat_row['name']}**."
     }

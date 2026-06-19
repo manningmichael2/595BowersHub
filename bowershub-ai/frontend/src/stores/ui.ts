@@ -7,6 +7,9 @@ interface UIState {
   searchOpen: boolean
   modelSelection: string // 'auto' or model ID
   modelLocked: boolean
+  // One-shot text to load into the composer (e.g. from a `fill:` chat link).
+  // InputArea consumes it, then calls setComposerPrefill(null) to clear.
+  composerPrefill: string | null
 
   toggleTheme: () => void
   toggleSidebar: () => void
@@ -15,6 +18,7 @@ interface UIState {
   setSearchOpen: (open: boolean) => void
   setModel: (model: string, locked?: boolean) => void
   resetModel: () => void
+  setComposerPrefill: (text: string | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -24,6 +28,7 @@ export const useUIStore = create<UIState>((set) => ({
   searchOpen: false,
   modelSelection: 'auto',
   modelLocked: false,
+  composerPrefill: null,
 
   toggleTheme: () => set(state => {
     const next = state.theme === 'dark' ? 'light' : 'dark'
@@ -39,4 +44,5 @@ export const useUIStore = create<UIState>((set) => ({
 
   setModel: (model, locked = false) => set({ modelSelection: model, modelLocked: locked }),
   resetModel: () => set({ modelSelection: 'auto', modelLocked: false }),
+  setComposerPrefill: (text) => set({ composerPrefill: text }),
 }))

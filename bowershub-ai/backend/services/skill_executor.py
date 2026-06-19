@@ -131,6 +131,10 @@ class SkillExecutor:
             if not await self.check_workspace_permitted(skill["id"], workspace_id):
                 raise SkillPermissionError(f"Skill '{skill_name}' not available in this workspace")
 
+        # Normalize parameters (synonym mapping)
+        from backend.services.normalization import normalize_skill_params
+        params = normalize_skill_params(skill_name, params)
+
         # Check for native (in-process Python) skill handler first
         native_result = await self._try_native_skill(skill_name, params, user_id)
         if native_result is not None:
