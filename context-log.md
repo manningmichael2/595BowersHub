@@ -638,3 +638,16 @@ PR #12 merged to `main` (all 3 CI checks green) and deployed via `./scripts/depl
 **The 2026-06-19 do-not-redeploy hold is LIFTED.** `main` deploys cleanly through the migration/runtime privilege model, and CI (`test_migrate_as_app_role.py`) guards the scoped deploy path going forward.
 
 - [Next foundation item] C2 — off-site backups + reproducible schema. The from-scratch grant-audit note (0005–0020 default-priv coverage) folds into the reproducible-schema pass.
+
+---
+
+## [2026-06-19] Backups verified + hardened (C2 off-site is real) — Claude Code
+
+Owner thought the off-site backup used rsync; it's actually **rclone → Google Drive**, nightly 3am via `scripts/backup.sh` (cron). **Verified it's genuinely running and genuinely off-site** (the thing `project-review.md` §C2 said to confirm): local backups daily through today with 7-day pruning; `backup.log` has **zero WARNING lines ever**; and `rclone ls gdrive:595BowersHub-Backups/2026-06-19_0300/` shows all 5 artifacts at matching sizes (dump 4.5M, files 245M, globals, knowledge, configs). So **C2's off-site half is done and real** — the deploy-incident note "No off-site backup (C2)" was misleading (off-site exists; the real incident gap was no *immediate pre-DDL* snapshot).
+
+**Restore test (B) — the backup is restorable, and the test caught a real DR gap.** Restored today's `postgres_finance.dump` into a throwaway `pgvector/pgvector:pg16`: 78 tables / 6 schemas, `finance.transactions` 414 rows, all config tables, pgvector extension, `pg_restore` exit 0. **Gap found:** the recovery cluster's bootstrap superuser MUST be `michael`. The globals dump replays role memberships as `GRANTED BY michael`; under a different superuser (I first tried `postgres`) those 2 GRANTs silently fail, leaving `bowershub_app` NOT a member of `finance_reader` → ask-db `SET ROLE` would break. Re-tested bootstrapped as `michael` → memberships restore correctly. Baked this into the RESTORE runbook comment in `backup.sh`.
+
+**Alerting (A) — silent failure is now impossible.** `backup.sh` previously swallowed off-site failures (`|| echo WARNING`), so an expired rclone token would stop off-site backups with nobody knowing. Added Pushover alerting (creds read from `bowershub-ai/.env`): an `ERR` trap pages on any aborting command (broken pg_dump/tar/etc.), and the rclone step now alerts-but-continues on off-site failure (local backup is still kept). Verified: creds resolve, a test push delivered (`status:1`), and the ERR trap fires on a simulated failure. Live for tonight's 3am run (cron executes the working-tree file directly).
+
+- [Note] Today's 03:00 `globals.sql` predates `bowershub_migrator` (created 12:59 today), so the migrator role isn't in today's backup — tonight's run captures it. Deploys now depend on this role; if doing DR before tonight, recreate it per `docs/c7-db-roles-cutover.md`.
+- [Remaining C2 nice-to-haves, not blocking] (1) no remote retention policy — Drive accumulates every dated folder forever (local prunes at 7d); (2) restore test is manual/ad-hoc — could be a periodic automated verify.
