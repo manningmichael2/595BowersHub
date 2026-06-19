@@ -610,4 +610,18 @@ CI already existed and is solid (`.github/workflows/ci.yml`: frontend typecheck/
 
 **Verification:** new test passes standalone and in any order; full backend suite **557 passed** (was 556 + 1). Committed on `fix/migration-role-model`.
 
-- [Note] CI runs `on: [push to main, pull_request]`. Open a PR from `fix/migration-role-model` to get the full matrix (incl. this new test) to run before merge.
+- [Note] CI runs `on: [push to main, pull_request]`. Open a PR from `fix/migration-role-model` to get the full matrix (incl. this new test) to run before merge. **Done — PR #12, all 3 checks green.**
+
+---
+
+## [2026-06-19] C7 cutover EXECUTED on prod — Claude Code
+
+Ran `docs/c7-db-roles-cutover.md` against the live `postgres` container (DB `finance`) as superuser `michael`, so prod is prepped for the next deploy of PR #12. **Did NOT redeploy** — the running container still has the old image, which ignores the new env vars, so this is inert until deploy.
+
+- Created role **`bowershub_migrator`** = `LOGIN SUPERUSER` with a strong password (stored in the prod `.env` and to be saved in Dashlane — value is NOT in git/this log). Verified it logs in over TCP as the app will.
+- Wired the prod **`bowershub-ai/.env`** (gitignored): added `MIGRATION_DB_USER=bowershub_migrator` + `MIGRATION_DB_PASSWORD=…`. `DB_USER` was already `bowershub_app` (no change). Pre-edit backup saved OUTSIDE the repo at `/home/michael/env-backups/` (the in-tree `.env.bak` was not covered by gitignore, so it was moved out to avoid a secret leak).
+- Skipped the optional `REASSIGN OWNED` — a superuser migrator makes object ownership irrelevant for DDL, and REASSIGN is the riskier/disruptive step. Ownership stays mixed (`bowershub_app`/`michael`); harmless.
+
+**Deploy de-risk:** diffed repo migrations vs prod `bh_migrations` — the ONLY unrecorded file is `0021_migration_role.sql`. So the next deploy applies exactly one migration, as the superuser migrator (idempotent CREATE ROLE + GRANT + ALTER DEFAULT PRIVILEGES), with no collision risk (unlike the incident's unrecorded hand-applied SQL).
+
+- [Next] Merge PR #12, then `./scripts/deploy.sh bowershub-ai`. Expected log line: "Applying migrations via dedicated migration role 'bowershub_migrator'" then "Applied 1 migration(s)"; health 200. Prod is now safe to redeploy from `main` (lifts the 2026-06-19 hold).
