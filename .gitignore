@@ -2,6 +2,11 @@
 .env
 *.env
 !.env.example
+# Editor swap/backup files — can mirror secret file contents (e.g. .env.swp)
+*.swp
+*.swo
+*~
+*.bak
 
 # Python
 __pycache__/
