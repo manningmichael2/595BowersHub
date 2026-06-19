@@ -670,3 +670,9 @@ Set out to `/spec` C1 (ask-db sandbox); **deep grounding research (3 parallel sp
 **Tests:** execution-pattern test mirrors the hardened block (lock_timeout, search_path resolution); new cursor-cap test (10k rows → cap+1). Existing `bh_users` denial test kept. **Full backend suite 558 passed** on throwaway pgvector pg16. PR #16.
 
 **Deferred:** separate read-only pool (conscious non-build post-C7); DB-driven per-skill `min_role` to kill hardcoded `ADMIN_ONLY_SKILLS` (`TODO(phase-1)` — own light spec, **[Next candidate]**); grant-audit tail.
+
+---
+
+## [2026-06-19] project-review.md status cleanup — Claude Code
+
+The 2026-06-08 review was misleading future sessions: it lists C1/C2/C3/C5/C7 as open 🔴/🟠 when context-log shows them resolved (this cost a near-miss — almost spec'd the already-built C1 sandbox this session). Annotated it in place (preserved the historical prose): a dated **STATUS UPDATE** banner atop §5, ✅/PARTIAL/DECIDED prefixes on the C1–C7 headers, and struck-through the now-false executive-summary bullets (1,2,3,4,5). Saved a memory ([[project-review-stale]]) so future sessions verify the review against context-log before acting. C4 left as DECIDED (owner declined the table-allowlist); C5/C6 marked PARTIAL (CI/ErrorBoundary done, deeper coverage/`any`-types/toast remain).

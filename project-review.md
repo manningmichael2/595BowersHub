@@ -14,11 +14,11 @@
 
 But the project is **not yet "best-in-class" or "built to last a lifetime,"** and several issues are serious enough that I'd fix them before building anything new:
 
-1. **A real, exploitable security hole in the `ask-db` skill** — an LLM generates SQL from free text and it is executed on the **database superuser connection** behind only a regex blocklist. Any authenticated member can read every table including `bh_users` password hashes, and likely read files on the DB host. (`services/finance.py:455-459`)
-2. **The schema cannot be rebuilt from scratch.** Two competing migration directories exist; the authoritative one crashes on a fresh database (`013`, `021` alter tables that were never created). There is no single source of truth for the schema, which directly contradicts the "lasts a lifetime / reproducible" goal.
-3. **A committed live bank credential** (SimpleFin) sits in git history. (`n8n-workflows/simplefin-backfill.py:17`)
-4. **A redundant, unauthenticated twin** of the database browser (`db-admin/app.py`, 2943 lines) exposes full DDL with SQL-identifier injection and zero auth.
-5. **The product's core — the routing engine, skill executor, and WebSocket chat — has essentially zero automated tests, and there is no CI at all.** The exhaustively-tested parts are the periphery (db-browser, themes); the heart is untested.
+1. ~~**A real, exploitable security hole in the `ask-db` skill**~~ — *✅ RESOLVED (2026-06-09/10, hardened 2026-06-19).* An LLM generated SQL from free text executed on the superuser pool behind only a regex blocklist. Now: sqlglot single-SELECT validation + least-privilege `finance_reader` role + READ ONLY txn + statement/lock timeouts + cursor row-cap. See the C1 status note in §5.
+2. ~~**The schema cannot be rebuilt from scratch.**~~ — *✅ RESOLVED.* Migrations squashed to a reproducible `0001_baseline.sql`; CI/`fresh_db` build the schema from empty; off-site backups are live with retention + an automated restore drill. See the C2 status note in §5.
+3. ~~**A committed live bank credential** (SimpleFin) sits in git history.~~ — *✅ RESOLVED.* Rotated → `SIMPLEFIN_AUTH` env; git history clean per gitleaks. (C3)
+4. ~~**A redundant, unauthenticated twin** of the database browser (`db-admin/app.py`).~~ — *✅ RESOLVED.* `db-admin/` archived and the container decommissioned; its unique features live behind auth in `bowershub-ai`. (C3/C7)
+5. ~~**...there is no CI at all.**~~ — *✅ CI ADDED (PR #12).* `.github/workflows/ci.yml` runs frontend + the full backend suite + gitleaks + the restore drill on every push/PR. Core routing/skill-executor coverage is improved but still worth deepening — the *no-CI* gap itself is closed.
 
 The encouraging news: the team (you + Kiro) already self-identified many architectural risks in the June 5 "Architecture Review & Pushback" section of the steering doc, and the instinct there — *skip the framework churn, fix backups/secrets/deploys first* — was correct. This review extends that honesty into the parts the steering doc hasn't caught yet.
 
@@ -84,9 +84,21 @@ These are genuine and worth protecting through any refactor:
 
 ## 5. Critical Issues
 
+> **⚠️ STATUS UPDATE — 2026-06-19 (this review is dated 2026-06-08 and is now largely historical).**
+> Most of the issues below have since been **resolved** — see `context-log.md` for the work. Quick status:
+> - **C1** (ask-db sandbox) — ✅ **RESOLVED.** sqlglot `validate_select` + least-privilege `finance_reader` role (`0002`) + READ ONLY txn + `statement_timeout` + `SET LOCAL ROLE`, deployed 2026-06-09/10; hardened 2026-06-19 (server-side cursor row-cap, `lock_timeout`, explicit `search_path` — PR #16). The "separate pool" was a deliberate non-build (SET ROLE de-escalation on the non-superuser app pool).
+> - **C2** (reproducible schema + backups) — ✅ **RESOLVED.** Migrations squashed to a reproducible `0001_baseline.sql`; `fresh_db`/CI build from empty; off-site backups live (rclone→Drive) with GFS retention + an automated restore drill (PR #15).
+> - **C3** (committed secret + db-admin) — ✅ **RESOLVED.** SimpleFin credential rotated → `SIMPLEFIN_AUTH` env (git history clean per gitleaks); `db-admin/` archived + container decommissioned.
+> - **C4** (db_browser allowlist) — **DECIDED/WON'T-FIX.** Owner wants full-table admin access; table-allowlist fence declined. (Any remaining DDL-`DEFAULT` injection / undo-atomicity sub-items are unverified — treat as open if revisited.)
+> - **C5** (no CI) — ✅ **CI ADDED** (`.github/workflows/ci.yml`: frontend + full backend suite + gitleaks + restore drill). Core routing/skill-executor test coverage is improved but still worth deepening.
+> - **C6** (frontend) — **PARTIAL.** Top-level `ErrorBoundary` added; PWA caching is intentional polish; `any`-at-the-boundary and a global toast remain open.
+> - **C7** (operational) — ✅ **RESOLVED.** Scoped DB roles + migration/runtime privilege split, CORS allowlist, login rate-limiter wired, Tailscale IP env-ized, image pins, db-admin retired.
+>
+> The detailed original text is preserved below for historical context. **Verify against `context-log.md` before treating any item as open.**
+
 Ordered by severity. The first three I'd treat as "stop and fix."
 
-### 🔴 C1 — `ask-db` executes LLM-generated SQL on the superuser pool (RCE-adjacent data breach)
+### ✅ C1 (RESOLVED) — `ask-db` executes LLM-generated SQL on the superuser pool (RCE-adjacent data breach)
 `services/finance.py:386-465`. Free-text → Haiku → SQL → `conn.fetch(sql)` on the **main superuser connection pool**. The only guards are a keyword-regex blocklist (`_DANGEROUS_SQL`) and a `startswith SELECT/WITH` check. This is inadequate:
 - A pure read-only `SELECT` is already catastrophic: `SELECT email, password_hash FROM public.bh_users` dumps every credential; `SELECT pg_read_file('/etc/passwd')` reads files on the DB host; `COPY ... FROM PROGRAM` / `lo_import` are reachable via crafted SQL.
 - The schema prompt *hides* `bh_*` tables from Haiku but **nothing stops generated SQL from querying them.**
@@ -95,7 +107,7 @@ Ordered by severity. The first three I'd treat as "stop and fix."
 
 **This is the most important issue in the report.** Fix: dedicated least-privilege Postgres role (`GRANT SELECT` on only finance/inventory tables, revoke `pg_read_file`/`COPY`/`lo_*`/`bh_*`), separate connection pool, read-only transaction with `statement_timeout`, and a real SQL parser (e.g. `sqlglot`) to assert a single SELECT. Gate to admin until that's in place.
 
-### 🔴 C2 — The schema cannot be rebuilt; two migration systems, fresh-DB boot crashes
+### ✅ C2 (RESOLVED) — The schema cannot be rebuilt; two migration systems, fresh-DB boot crashes
 - `bowershub-ai/backend/migrations/` (31 files, `NNN_name.sql`, auto-applied) is authoritative in code. The top-level `/migrations/` (9 files, `NNN-name.sql`) is **referenced by nothing** but is the *only* place the finance/inventory/files/cook/house schemas and tables are defined.
 - `013_investment_flag.sql:5` and `021_finance_schema.sql:15` `ALTER`/`SET SCHEMA` tables (`public.transactions`, `public.accounts`) that the backend migrations **never create** → `relation does not exist` → `SystemExit` → **the app will not boot on a clean database.** The running system only works because those tables were created out-of-band long ago.
 - **Seven duplicate migration numbers** (009, 010, 012, 013, 015, 017, 022 each appear 2–3× with different names). Apply order within a number is decided by ASCII sort of the filename suffix — arbitrary relative to intent. The project rationalizes this in a comment in `015` rather than fixing it.
@@ -103,32 +115,32 @@ Ordered by severity. The first three I'd treat as "stop and fix."
 
 For a "lasts a lifetime" system, **inability to reproduce the schema is the deepest structural problem** — it breaks disaster recovery, fresh deploys, and test-from-scratch. Everything else is fixable around it; this one undermines the foundation.
 
-### 🔴 C3 — Committed live secret + an unauthenticated injectable service
+### ✅ C3 (RESOLVED) — Committed live secret + an unauthenticated injectable service
 - `n8n-workflows/simplefin-backfill.py:17` hardcodes a base64 SimpleFin credential that decodes to a `username:password` pair with **full access to bank transaction history.** It is in git. Rotate now, move to env.
 - `db-admin/app.py` (2943 lines) is a **redundant, unauthenticated** reimplementation of `db_browser.py`. It exposes `DROP COLUMN`, `RENAME TABLE`, `CREATE SCHEMA`, arbitrary row delete/insert, and `DELETE FROM files.assets` to **anyone who can reach port 5002**, and it interpolates schema/table/**column** names raw into f-strings (identifier injection the `bowershub-ai` version explicitly closes via `_quote_ident`). It also has duplicate route definitions (`/api/inbox-files`, `/api/inbox-process` defined twice). This service should be **deleted**, its unique inbox/AI-extract features folded into `bowershub-ai` behind `require_admin`.
 
-### 🟠 C4 — The db_browser is a powerful, mostly-non-transactional monolith with a DDL injection sink
+### 🟠 C4 (DECIDED — allowlist declined) — The db_browser is a powerful, mostly-non-transactional monolith with a DDL injection sink
 `routers/db_browser.py` (4283 lines, the largest file in the repo):
 - **DDL `DEFAULT` values are injected raw** (`db_browser.py:2540`): `parts.append(f"DEFAULT {default_str}")` with zero sanitization, flowing into `CREATE TABLE`/`ALTER TABLE ADD COLUMN`. Admin-only, but a genuine injection sink and untested.
 - **Mutations + undo-log writes are not atomic** (`update_row` at 1040/1077, `bulk_edit` at 1388). If the undo insert fails it's swallowed; the data change commits unrecoverably. Bulk ops have no surrounding transaction and can partially apply.
 - **No table allowlist** — any admin token can read/edit/DDL `public.bh_users`, auth/token tables, the undo log itself. `_quote_ident` stops injection but does nothing to restrict *which* tables are reachable.
 - Massive duplication (the ~120-line filter/sort builder is copy-pasted verbatim between `get_rows` and `export_csv`; the PK-lookup query is repeated 6+ times), N+1 query patterns (CSV import is row-by-row `execute`, no COPY/`executemany`), and a fragile undo model that breaks after any rename/drop-column.
 
-### 🟠 C5 — The core of the product is untested, and there is no CI
+### 🟠 C5 (PARTIAL — CI added) — The core of the product is untested, and there is no CI
 - **Zero tests** for `router_engine.py` (1569 lines — the L1/L2/L3 cascade, the actual product), `skill_executor.py` (only ever monkeypatched away), the WebSocket chat handlers (the primary UX), and the AI skills (`weather`, `sports_score`, `finance`).
 - Auth's `authenticate()` / password verification is explicitly never called in tests (`test_branding_router.py:90`).
 - The db-browser property-based tests are **largely tautological** — they reimplement the SQL logic in Python inside the test and fuzz the reimplementation, not the real code. They test the author's mental model, not the system.
 - Finance endpoint tests **mock the database entirely**, so SQL correctness (the thing most likely to silently corrupt financial data) is unverified.
 - **No `.github/workflows/` exists at all.** Nothing runs the suite automatically. For a tool that must not lose financial/knowledge data, regressions ship silently.
 
-### 🟠 C6 — Frontend: no error boundary, no PWA offline/caching layer, weak type safety at the boundary
+### 🟠 C6 (PARTIAL — error boundary added) — Frontend: no error boundary, no PWA offline/caching layer, weak type safety at the boundary
 - **No top-level error boundary** — any render throw white-screens the whole app. The only `ErrorBoundary` is on one dashboard widget.
 - **It is a real, installable PWA** — valid `manifest.json` (`display: standalone`, full icon set incl. maskable), a working service worker, and even a Web Share Target into Quick Capture. It installs and runs correctly as a standalone app on Android. **What it lacks is an offline/caching layer:** the service worker (`public/sw.js`) does deliberate network-only pass-through and clears all caches on activate, so there is **no precaching (slower cold launches), no offline shell, and no update-on-deploy prompt**, and there's no `navigator.onLine` UI feedback. `vite-plugin-pwa` is installed but unused (`sw.js` is hand-written). Note this is an *intentional* choice — caching was disabled to avoid staleness bugs (per the file comment), and since the app is unusable offline anyway (every feature needs the backend), this is **polish, not a foundation blocker.** Revisit only when faster launches/offline-shell are wanted, done properly via `vite-plugin-pwa`/Workbox with an update handshake.
 - **~178 `any` occurrences** in non-test source; the entire `ApiClient` returns `Promise<any>` and responses are blind-cast (`as Conversation[]`) with no runtime validation — a backend shape change fails silently at runtime, defeating the "strict" TS config at the boundary.
 - **No global toast/notification system** — WebSocket and API error paths `console.error` and no-op, so the user sees the typing indicator vanish with no message when the assistant errors.
 - `AdminConsolePage.tsx` is a 1643-line god-file with 38 `useState` calls, eagerly bundled despite being admin-only.
 
-### 🟡 C7 — Operational gaps that bite a lifetime tool
+### ✅ C7 (RESOLVED) — Operational gaps that bite a lifetime tool
 - **Every container connects to Postgres as the superuser `michael`** — any one service can `DROP TABLE` anything. No per-app scoped DB roles. (Also the root cause that makes C1 catastrophic instead of contained.)
 - **CORS `allow_origins=["*"]` with `allow_credentials=True`** (`main.py:188`) on a public-facing proxy.
 - **Rate limiting is fully implemented but never called anywhere** (`middleware/rate_limit.py`) — `/api/auth/login` has unlimited password-guessing.
