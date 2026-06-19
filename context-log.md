@@ -542,3 +542,29 @@ Reviewed and smoke-tested the 2026-06-12 Gemini CLI changes (categorization over
 **Verification:** `tsc` clean, vitest 224 pass, backend pure tests 125 pass, all modules import, full baseline→0020 migration apply clean on a throwaway DB.
 
 - [Next] Migrations 0014/0019 remain unqualified on disk (immutable once applied). The `SET LOCAL search_path` fix makes them safe, but fold the qualification into the eventual C2 reproducible-schema pass for belt-and-suspenders.
+
+---
+
+## [2026-06-19] Deploy incident + recovery — Claude Code (categorization migrations)
+
+Deploying the categorization work (`./scripts/deploy.sh bowershub-ai`) put the app into a **crash-loop**. Recovered; documenting honestly.
+
+**What happened:** on startup the app's migration runner (connecting as the scoped role `bowershub_app`) failed:
+`Migration 0016 failed: must be owner of view "transactions"`.
+
+**Root cause — systemic, not just 0016:** `bowershub_app` has DML grants but does **not own** the pre-existing `postgres`-owned objects. Gemini's migrations modify those objects (`0016` DROP/CREATE the `public.transactions` view; `0018` CREATE TRIGGER on `finance.transactions`; `0019` ALTER TABLE + constraints), all of which require ownership. **These migrations are not applyable by the scoped app role** — they were authored assuming superuser.
+
+**"Already applied to prod" was wrong.** The migrations were never recorded in `bh_migrations`. Gemini had run *some* of the SQL manually as superuser (so `category_aliases` and the CHECK constraints already existed), but unrecorded — so the app re-ran them and collided. The DB superuser is `michael`, not `postgres` (POSTGRES_USER), which is why earlier recovery attempts using `-U postgres` failed.
+
+**Recovery (as superuser `michael`):**
+- Applied `0016`,`0017`,`0018` cleanly; recorded them.
+- `0019` was non-idempotent against partially-present objects → applied an **idempotent reconciliation** (guarded constraints, `WHERE NOT EXISTS` skill/pattern inserts) to reach its end-state, recorded `0019` with the on-disk file's checksum.
+- Applied `0020`, restarted → `HTTP 200`.
+- **Prod data fix:** the live `categorize-merchant` L1 pattern (id 13) had a hand-inserted `param_template` mapping `category_name` to `$3`, but the regex has only 2 groups → empty category → "Missing… category name". Fixed to `$2`. (From-scratch is unaffected: the `0019` file ships `$2`.)
+
+**Foundation takeaways (the real lesson):**
+- **No CI.** A `tsc && pytest` gate plus a *migrate-as-app-role* smoke job would have caught both the non-compiling frontend and this ownership crash **before** prod. Highest-leverage gap (project-review C5).
+- **Migration/role model is unresolved (C1/C7).** Schema-changing migrations can't run under the scoped role today; we hand-applied as superuser. Needs a real decision (superuser deploy step vs. targeted object-ownership) before the next schema migration.
+- **No off-site backup (C2)** — ran DDL + a `DELETE` on prod with no net.
+
+- [Next] Merge `fix/categorization-review-hardening` → `main` (done this session). Do NOT redeploy from `main` until the migration/role model is decided, or it crash-loops again.
