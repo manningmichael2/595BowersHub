@@ -63,8 +63,10 @@ async def lifespan(app: FastAPI):
             import asyncio
             await asyncio.sleep(2)
 
-    # Run migrations
-    await run_migrations(pool)
+    # Run migrations. Pass config so a dedicated elevated migration role (if
+    # configured) is used for schema DDL while the runtime pool stays scoped
+    # (project-review.md C1/C7; docs/c7-db-roles-cutover.md).
+    await run_migrations(pool, config)
     app.state.pool = pool
 
     # Warm the model-catalog resolver cache (T1: after migrations, before scheduler) so
