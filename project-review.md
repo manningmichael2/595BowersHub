@@ -134,7 +134,7 @@ For a "lasts a lifetime" system, **inability to reproduce the schema is the deep
 - **Rate limiting is fully implemented but never called anywhere** (`middleware/rate_limit.py`) — `/api/auth/login` has unlimited password-guessing.
 - **Hardcoded Tailscale IP `100.106.180.101`** across n8n scripts, dashboard, db-admin, and even backend source (`knowledge.py:18`, `db_browser.py:3777`) — a single re-IP breaks dozens of references, contradicting "lasts a lifetime."
 - **`:latest` image tags** for n8n and Ollama (`infrastructure/docker-compose.yml`); filewriter `pip install`s unpinned deps on every container start instead of using its own Dockerfile.
-- **Backups**: the steering doc says nightly `pg_dump` + tar is done locally but **off-site/remote is "ready to enable," not enabled.** One SSD failure still loses everything. (Verify this is actually running and actually off-site.)
+- **Backups**: ✅ RESOLVED (2026-06-19). Nightly `pg_dump` + tar locally (7-day), and off-site **is** enabled — rsynced to Google Drive via rclone, restore-tested 2026-06-09. Off-site now has GFS retention (7 daily/4 weekly/6 monthly) so the remote no longer grows unbounded. An SSD failure is survivable.
 
 ---
 
@@ -149,13 +149,13 @@ For a "lasts a lifetime" system, **inability to reproduce the schema is the deep
 5. **Add a top-level React error boundary** in `main.tsx` and a minimal toast system wired to the WS/API error paths. (C6)
 6. **Renumber the seven duplicate migrations** so apply-order is unambiguous. Mechanical. (C2)
 7. **Add a `.github/workflows/ci.yml`** that spins up Postgres and runs `pytest` + `vitest`. Even with today's coverage this catches regressions. (C5)
-8. **Confirm off-site backups are actually running** and restore-tested — not "ready to enable." (C7)
+8. ~~**Confirm off-site backups are actually running** and restore-tested — not "ready to enable."~~ ✅ DONE (2026-06-19). Off-site is live: `backup.sh` rsyncs nightly to Google Drive via rclone, restore-tested 2026-06-09. Added GFS off-site retention (7 daily/4 weekly/6 monthly, `scripts/gfs-prune.sh` + unit tests) — previously the remote grew unbounded. (C7)
 9. **Pin `:latest` images** to digests/fixed tags; switch filewriter compose to `build: .`. (C7)
 10. **Move the hardcoded `100.106.180.101`** to config/env and use Docker service DNS for container-to-container calls. (C7)
 
 ### Longer-term architectural improvements
 
-1. **Make the schema reproducible (the highest-leverage structural fix).** Merge the top-level `/migrations` finance/domain DDL into the backend migration chain *before* `013`/`021`, delete the orphaned directory, add a CI job that builds the full schema from an empty Postgres. Add content checksums to `bh_migrations` to detect drift. Until this is done, disaster recovery is theoretical. (C2)
+1. **Make the schema reproducible (the highest-leverage structural fix).** ✅ Largely DONE (2026-06): the migration chain was squashed to a reproducible `0001_baseline.sql` + forward-only files, the orphaned top-level `/migrations` is gone, content checksums are in `bh_migrations`, and the backend CI job builds the full schema from an empty Postgres (the `fresh_db` fixtures). **Disaster recovery is no longer theoretical** — off-site backups are restore-tested (manual 2026-06-09; now automated via `scripts/restore-test.sh` + a CI `restore-test` job that round-trips globals→createdb→pg_restore and asserts row counts). Remaining tail: fold the 0014/0019 unqualified-ref + 0005–0020 grant-audit belt-and-suspenders. (C2)
 2. **Properly sandbox `ask-db`**: least-privilege `finance_reader` role + separate pool + read-only transaction + `statement_timeout` + `sqlglot` validation. Then introduce **per-app scoped DB roles** for every service (the same root cause). This converts C1 from catastrophic to contained. (C1, C7)
 3. **Delete `db-admin`**, migrate its unique inbox/AI-extract endpoints into `bowershub-ai` behind auth. Eliminates 2943 lines of unauthenticated, injectable, duplicated DDL surface and removes a whole class of "two divergent implementations" bugs. (C3)
 4. **Decompose the two monoliths.** Split `db_browser.py` into a package (`introspection/crud/ddl/csv/images/views/undo/inbox`) with shared `_quote_ident`/PK-lookup helpers extracted; wrap every multi-statement mutation in a transaction; add a table allowlist. Split `AdminConsolePage.tsx` into per-section lazy-loaded files. (C4, C6)

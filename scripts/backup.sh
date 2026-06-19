@@ -1,6 +1,6 @@
 #!/bin/bash
 # 595BowersHub Nightly Backup Script
-# 
+#
 # Backs up:
 #   1. Postgres database (pg_dump)
 #   2. /home/michael/knowledge/ (markdown knowledge base)
@@ -14,6 +14,8 @@
 # survive an SSD failure. Verify the off-site copy with:  rclone lsd gdrive:595BowersHub-Backups/
 # Failures (local OR off-site) now send a Pushover alert — a backup that silently
 # stops is worse than no backup. Creds are read from bowershub-ai/.env.
+# Off-site keeps GFS retention (step 8: 7 daily / 4 weekly / 6 monthly) so Drive
+# doesn't grow unbounded; local keeps 7 days.
 #
 # RESTORE (bare-metal disaster recovery), in order:
 #   1. createuser/roles:  psql -U michael -f globals.sql      (roles + grants; see step 0)
@@ -25,14 +27,28 @@
 # globals dump replays role memberships as `GRANTED BY michael`, which silently fail
 # under a different superuser (e.g. postgres) — leaving bowershub_app NOT a member of
 # finance_reader, which breaks ask-db's SET ROLE. (Verified via restore test 2026-06-19.)
+#
+# This restore path is exercised automatically: scripts/restore-test.sh runs the
+# full globals->createdb->pg_restore round-trip into a throwaway container and
+# asserts every table's row count survives. CI runs it self-contained (--selftest);
+# to validate a *real* stored backup on the server:
+#   scripts/restore-test.sh --from-backup /home/michael/backups/<date>/
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # === Configuration ===
 BACKUP_ROOT="/home/michael/backups"
 DATE=$(date +%Y-%m-%d_%H%M)
 BACKUP_DIR="${BACKUP_ROOT}/${DATE}"
 RETENTION_DAYS=7  # Keep local backups for 7 days
+
+# Off-site (Google Drive) retention — longer than local so the remote copy
+# survives a corruption you don't notice for weeks. GFS: 7 daily, 4 weekly,
+# 6 monthly. Selection logic lives in scripts/gfs-prune.sh (unit-tested).
+REMOTE_PATH="gdrive:595BowersHub-Backups"
+export DAILY=7 WEEKLY=4 MONTHLY=6
 
 # Postgres connection (via Docker network)
 PG_CONTAINER="postgres"
@@ -42,7 +58,6 @@ PG_USER="michael"
 # === Failure alerting (Pushover) ===
 # A silent backup failure defeats the whole point, so any error sends a push.
 # Creds live in the app .env (resolved relative to this script, not hardcoded).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/../bowershub-ai/.env"
 PUSHOVER_USER_KEY="$(grep -E '^PUSHOVER_USER_KEY=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
 PUSHOVER_API_TOKEN="$(grep -E '^PUSHOVER_API_TOKEN=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
@@ -126,8 +141,36 @@ find "${BACKUP_ROOT}" -maxdepth 1 -type d -mtime +${RETENTION_DAYS} -exec rm -rf
 # token) is the exact failure mode that leaves you with no net. Tested in an `if`
 # so set -e / the ERR trap don't double-fire; we alert explicitly instead.
 echo "[$(date)] Syncing to Google Drive..."
-if rclone sync "${BACKUP_DIR}/" "gdrive:595BowersHub-Backups/${DATE}/" --quiet; then
+if rclone sync "${BACKUP_DIR}/" "${REMOTE_PATH}/${DATE}/" --quiet; then
   echo "[$(date)] Off-site sync OK."
+
+  # === 8. Prune off-site backups (GFS retention) ===
+  # Without this, every nightly run leaves a new remote folder forever — the local
+  # 7-day cleanup (step 6) never touched the remote, so Drive grew unbounded. Only
+  # runs after a successful sync (no point pruning if we couldn't even upload).
+  echo "[$(date)] Pruning off-site backups (GFS ${DAILY}d/${WEEKLY}w/${MONTHLY}m)..."
+  if REMOTE_DIRS=$(rclone lsf --dirs-only "${REMOTE_PATH}/" 2>/dev/null | sed 's:/*$::' | grep -v '^[[:space:]]*$'); then
+    # Plan first (pure, no deletes). If planning fails, skip — never delete blind.
+    if PRUNE_PLAN=$(printf '%s\n' "${REMOTE_DIRS}" | bash "${SCRIPT_DIR}/gfs-prune.sh"); then
+      KEEP_N=$(grep -c '^KEEP '   <<<"${PRUNE_PLAN}" || true)
+      DEL_N=$(grep -c '^DELETE ' <<<"${PRUNE_PLAN}" || true)
+      if (( KEEP_N == 0 )); then
+        echo "[$(date)] WARNING: prune plan would keep 0 backups — refusing to delete anything"
+      else
+        echo "[$(date)] Off-site: keeping ${KEEP_N}, removing ${DEL_N}"
+        while read -r victim; do
+          [[ -z "${victim}" ]] && continue
+          echo "[$(date)]   purge ${victim}"
+          rclone purge "${REMOTE_PATH}/${victim}/" --quiet 2>&1 \
+            || echo "[$(date)]   WARNING: purge failed for ${victim} (will retry next run)"
+        done < <(sed -n 's/^DELETE //p' <<<"${PRUNE_PLAN}")
+      fi
+    else
+      echo "[$(date)] WARNING: prune planning failed — skipping off-site cleanup"
+    fi
+  else
+    echo "[$(date)] WARNING: could not list remote (${REMOTE_PATH}) — skipping off-site prune"
+  fi
 else
   notify_failure "Off-site rclone sync to Google Drive FAILED (local backup OK at ${BACKUP_DIR}). Check the token: rclone lsd gdrive:"
 fi

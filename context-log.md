@@ -651,3 +651,29 @@ Owner thought the off-site backup used rsync; it's actually **rclone → Google 
 
 - [Note] Today's 03:00 `globals.sql` predates `bowershub_migrator` (created 12:59 today), so the migrator role isn't in today's backup — tonight's run captures it. Deploys now depend on this role; if doing DR before tonight, recreate it per `docs/c7-db-roles-cutover.md`.
 - [Remaining C2 nice-to-haves, not blocking] (1) no remote retention policy — Drive accumulates every dated folder forever (local prunes at 7d); (2) restore test is manual/ad-hoc — could be a periodic automated verify.
+
+---
+
+## [2026-06-19] Off-site backup retention (GFS) — C2/C7 — Claude Code
+
+Closed the remote-side gap in the off-site backup (which is real: rclone→Google Drive, restore-tested). Each nightly run synced to a *new* dated remote folder and **nothing ever pruned it** — local had a 7-day cleanup but the remote grew unbounded. (Lands alongside PR #14's failure-alerting + runbook fix, which touched the same `backup.sh`; integrated, not clobbered.)
+
+- **`scripts/gfs-prune.sh`** (new) — pure, side-effect-free GFS retention selector. Reads candidate dir names on stdin, prints `KEEP`/`DELETE` per line. Union of restic/borg-style tiers: 7 daily + 4 weekly (newest per ISO-week) + 6 monthly (newest per calendar month). Unparseable names are **always kept**. Factored out so the delete-decision is unit-testable.
+- **`scripts/test_gfs_prune.sh`** (new) — 6 tests (below-limit, 30-day prune, same-day pairs, unparseable-safety, monthly-only, empty input). All pass.
+- **`scripts/backup.sh`** — added off-site retention config + **step 8**: after a *successful* rclone sync, list remote → plan via `gfs-prune.sh` → `rclone purge` only the `DELETE` set. Guards: skips if remote can't be listed, planning fails, or the plan would keep 0. On sync failure, PR #14's `notify_failure` fires and the prune is skipped.
+
+**Verification:** `bash -n` clean; `test_gfs_prune.sh` all-pass; stubbed-rclone integration (15 daily dirs → keep 8, purge 7 oldest).
+
+---
+
+## [2026-06-19] Restore test — provable DR (C2) — Claude Code
+
+Made the restore drill repeatable + CI-gated. Off-site is restore-tested, but nothing *re-ran* it, so a change to dump format/role grants/schema could break restore and only surface mid-disaster. (Independently re-confirmed PR #14's finding: restore must use bootstrap superuser `michael`, or `GRANTED BY michael` role memberships silently fail — encoded in the script.)
+
+- **`scripts/restore-test.sh`** (new) — runs the documented restore order (`globals.sql` → `createdb` → `pg_restore --no-owner`) into a **throwaway container** and asserts the four app roles, `public`+`finance` schemas, and **exact per-table row counts** survive. Modes: default (dump fresh from live, read-only), `--from-backup DIR` (real stored artifact), `--selftest` (self-contained: builds its own source via `run_migrations`).
+- **`.github/workflows/ci.yml`** — new `restore-test` job runs `--selftest` every push/PR.
+- Two findings handled: the postgres entrypoint init-race (wait for the init-complete marker) and PG16 `GRANTED BY` grantors (restore as the same superuser as the source).
+
+**Verification (clean-room, no prod contact):** built a source baseline→head in an isolated container → restore clean, 4 roles + 2 schemas, **51/51 tables row-count match**; `--selftest` (CI path) passes end-to-end. Throwaway containers auto-removed.
+
+- [Next foundation] C2 tail is mechanical (0014/0019 unqualified-ref + 0005–0020 grant-audit). Then the ask-db hardening (separate PR #16) and pgvector semantic memory.

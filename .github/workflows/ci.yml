@@ -97,6 +97,29 @@ jobs:
       - name: Full test suite (Postgres-backed)
         run: PYTHONPATH=. python -m pytest -q
 
+  restore-test:
+    name: Restore drill (backup is restorable)
+    runs-on: ubuntu-latest
+    # Complements the "schema builds from empty" gate: the backend job proves the
+    # migration chain rebuilds the schema, but NOT that a real pg_dump + globals
+    # round-trips back (the 2026-06-09 manual drill, now automated). --selftest is
+    # self-contained — it spins its own source + target containers (Docker is
+    # available on the runner), builds the schema via run_migrations, then
+    # dump -> globals -> createdb -> pg_restore and asserts every table's row count
+    # survives. No service container or prod access needed.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # matches the backend Dockerfile
+          cache: pip
+          cache-dependency-path: bowershub-ai/requirements.txt
+      - name: Install backend deps (run_migrations needs asyncpg)
+        working-directory: bowershub-ai
+        run: pip install -r requirements.txt
+      - name: DR restore drill (self-contained)
+        run: bash scripts/restore-test.sh --selftest
+
   secrets:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
