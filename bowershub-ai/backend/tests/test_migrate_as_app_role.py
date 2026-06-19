@@ -132,6 +132,32 @@ async def test_deploy_path_migrate_as_app_role(fresh_db, db_settings):
             assert await conn.fetchval("SELECT count(*) FROM public.bh_users") >= 0
             assert await conn.fetchval("SELECT count(*) FROM finance.transactions") >= 0
 
+            # 3b. EXHAUSTIVE grant audit (C2 tail): every base table in the app
+            #     schemas must be SELECT-able by the scoped runtime role. The
+            #     spot-checks above only cover two tables; this catches ANY future
+            #     migration (esp. the upcoming finance work) that creates a table
+            #     but forgets to grant it — the exact class of bug that crash-looped
+            #     prod on 2026-06-19, now a hard CI gate instead of a spot-check.
+            ungranted = await conn.fetch(
+                """
+                SELECT t.table_schema, t.table_name
+                FROM information_schema.tables t
+                WHERE t.table_schema IN
+                        ('public','finance','inventory','house','cook','files')
+                  AND t.table_type = 'BASE TABLE'
+                  AND NOT has_table_privilege(
+                        current_user,
+                        format('%I.%I', t.table_schema, t.table_name),
+                        'SELECT')
+                ORDER BY 1, 2
+                """
+            )
+            assert not ungranted, (
+                "scoped runtime role cannot SELECT these app tables (missing GRANT "
+                "in a migration — default-priv coverage gap): "
+                + ", ".join(f"{r['table_schema']}.{r['table_name']}" for r in ungranted)
+            )
+
             # Defense-in-depth: the runtime role really is not a superuser.
             assert await conn.fetchval(
                 "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"
