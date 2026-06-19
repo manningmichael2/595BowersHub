@@ -676,3 +676,20 @@ Set out to `/spec` C1 (ask-db sandbox); **deep grounding research (3 parallel sp
 ## [2026-06-19] project-review.md status cleanup — Claude Code
 
 The 2026-06-08 review was misleading future sessions: it lists C1/C2/C3/C5/C7 as open 🔴/🟠 when context-log shows them resolved (this cost a near-miss — almost spec'd the already-built C1 sandbox this session). Annotated it in place (preserved the historical prose): a dated **STATUS UPDATE** banner atop §5, ✅/PARTIAL/DECIDED prefixes on the C1–C7 headers, and struck-through the now-false executive-summary bullets (1,2,3,4,5). Saved a memory ([[project-review-stale]]) so future sessions verify the review against context-log before acting. C4 left as DECIDED (owner declined the table-allowlist); C5/C6 marked PARTIAL (CI/ErrorBoundary done, deeper coverage/`any`-types/toast remain).
+
+---
+
+## [2026-06-19] Repo cleanup: branch sprawl + doc truth-up — Claude Code
+
+Asked "what's next?" then "shouldn't we clean up first?" — did the cleanup. **Two findings reframed the roadmap:**
+
+**1. pgvector semantic memory (§8.3) is already DONE & on `main`** — not pending. Confirmed on `main`: migrations `0009/0010/0011`, `services/{embedding_worker,embeddings,hybrid_retrieval}.py` (RRF hybrid retrieval, Ollama `bge-m3`), `admin/SemanticMemorySection.tsx`, full test set. So foundation **and** the planned first feature are both shipped.
+
+**2. The `feat/semantic-memory` branch was a stale superseded snapshot.** It forked at PR #11 (`8153fea`); `main` has since moved 32 commits. Its diff-vs-main looked huge only because it's *behind* main (the diff reverts merged foundation files: `restore-test.sh`, `c7-db-roles-cutover.md`, etc.). Verified it has **zero unique feature content** — `main`'s `0010` is byte-identical to the branch's; the "unpushed" `9f61910` weather/filewriter changes are byte-identical to main. Only 2 files were unique: `HANDOFF_GEMINI_2026-06-12.md` + `SYSTEM_REVIEW_2026-06-12.md` (Gemini's handoff/review). Both describe now-shipped work; their only live-looking findings (S1 JWT 24h→30m, S2 db_browser→AuditLogger) are **both already resolved on `main`** (`auth.py:22` = 30 min; `routers/db_browser.py` calls `AuditLogger.log` in 9 places). Nothing to salvage → branch dropped.
+
+**Branch hygiene done (local):** deleted 4 merged + 2 obsolete-unmerged (`chore/standing-followups` = PRs #3/#4/#5 content already on main; `backup/cleanup-2026-06-12` = twin of feat/semantic-memory). Local branches now just `main` + `feat/semantic-memory`.
+**Branch hygiene PENDING (remote):** the bulk `git push origin --delete` of the ~17 stale remote branches (15 merged + `backup/cleanup-2026-06-12` + `chore/standing-followups`, and `feat/semantic-memory`) was blocked by the safety classifier pending explicit per-branch authorization — **not yet executed.**
+
+**Docs truthed-up:** `CLAUDE.md` "When starting the next session" rewritten (foundation + semantic memory both DONE; next = finance-product north star §8.4, plus NO-HARDCODING tail `ADMIN_ONLY_SKILLS`→DB-driven `min_role`, plus C6 `any`/toast tail). Memory `next-dynamic-model-discovery` repurposed to DONE-state. `project-review.md` already had a current §5 status banner — left as-is.
+
+- [Next] Get explicit OK to delete the stale remote branches, then `git push origin --delete …`. After that, the real next feature is the **finance product north star** (Monarch/Origin frontend + better categorization/accounting) — now unblocked since the foundation is stable.
