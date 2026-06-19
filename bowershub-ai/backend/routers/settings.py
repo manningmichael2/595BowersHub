@@ -44,6 +44,7 @@ class SettingsPatch(BaseModel):
     morning_card_workspace_id: Optional[int] = Field(default=None)
     morning_card_disabled: Optional[bool] = Field(default=None)
     voice: Optional[dict[str, Any]] = Field(default=None)
+    use_experimental_dashboard: Optional[bool] = Field(default=None)
 
     model_config = {"extra": "ignore"}
 
@@ -58,6 +59,7 @@ _NULLABLE_KEYS = {
     "morning_card_workspace_id",
     "morning_card_disabled",
     "voice",
+    "use_experimental_dashboard",
 }
 
 

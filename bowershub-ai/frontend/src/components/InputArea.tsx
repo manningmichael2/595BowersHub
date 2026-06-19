@@ -49,6 +49,8 @@ export default function InputArea() {
   const { activeConversation, isStreaming, createConversation } = useConversationStore()
   const { activeWorkspace } = useWorkspaceStore()
   const { modelSelection } = useUIStore()
+  const composerPrefill = useUIStore(s => s.composerPrefill)
+  const setComposerPrefill = useUIStore(s => s.setComposerPrefill)
 
   // Auto-resize textarea
   useEffect(() => {
@@ -58,6 +60,21 @@ export default function InputArea() {
       el.style.height = Math.min(el.scrollHeight, 150) + 'px'
     }
   }, [input])
+
+  // Load `fill:` chat-link text into the composer, focus, and place the cursor
+  // at the end so the user can finish the command (e.g. pick a category).
+  useEffect(() => {
+    if (composerPrefill == null) return
+    setInput(composerPrefill)
+    setComposerPrefill(null)
+    const el = textareaRef.current
+    if (el) {
+      el.focus()
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = el.value.length
+      })
+    }
+  }, [composerPrefill, setComposerPrefill])
 
   // Show slash autocomplete — only when actively typing (not from history nav)
   const [isFromHistory, setIsFromHistory] = useState(false)

@@ -78,6 +78,7 @@ IMPORTANT RULES:
   - Questions that clearly need multiple data sources combined
   - Conversational messages, opinions, or open-ended questions
 - For "recall" skill: only use if the user explicitly asks to search their knowledge base or asks "what do I know about X"
+- For "remember" skill: only use for saving personal facts, preferences, or general notes. Do NOT use for transaction categorization rules.
 - For "ask-db" skill: only use for specific data lookups that are clearly one query ("how much did I spend on X", "list my router bits")
 - When in doubt, return null — it's better to escalate to the full reasoning model
 
@@ -96,6 +97,11 @@ EXAMPLES of messages that SHOULD map to a skill:
 - "batting stats for the game" → sports-score, params: {{"team": "<team from context>", "query_type": "boxscore"}}
 - "what's my balance" → get-balances, params: {{}}
 - "how much did I spend on groceries" → ask-db, params: {{"question": "how much did I spend on groceries"}}
+- "Costco is always groceries" → categorize-merchant, params: {{"description_pattern": "Costco", "category_name": "Food_Groceries"}}
+- "amazon.com is always shopping" → categorize-merchant, params: {{"description_pattern": "amazon.com", "category_name": "Shopping"}}
+- "Lafittes blacksmith is a bar" → categorize-merchant, params: {{"description_pattern": "Lafittes blacksmith", "category_name": "Food_Dining"}}
+- "Recategorize txn 123 to Dining" → categorize-transaction, params: {{"transaction_id": "123", "category_name": "Food_Dining"}}
+- "yes, update them" (after a preview) → commit-bulk-update, params: {{"description_pattern": "<pattern from context>", "category_name": "<category from context>"}}
 - "recall what I know about router bits" → recall, params: {{"query": "router bits"}}
 - "what's in the news?" → news, params: {{}}
 - "sports news" → news, params: {{"category": "sports"}}
@@ -1133,6 +1139,8 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
                     or params.pop("q", None)
                     or original_message
                 )
+        # Note: categorization-skill synonym keys (merchant/pattern/id/category)
+        # are normalized centrally in SkillExecutor via normalize_skill_params().
 
         try:
             # Execute the skill

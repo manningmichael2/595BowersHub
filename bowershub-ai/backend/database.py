@@ -180,6 +180,16 @@ async def run_migrations(pool: asyncpg.Pool):
             try:
                 # Execute migration in a transaction
                 async with conn.transaction():
+                    # The squashed baseline (a pg_dump) runs
+                    # `set_config('search_path', '', false)`, which persists on this
+                    # shared connection for the *rest* of the session. That makes any
+                    # later migration referencing an unqualified relation (e.g.
+                    # `bh_skills` instead of `public.bh_skills`) fail on a from-scratch
+                    # rebuild — even though it resolves fine on an existing prod DB
+                    # (where the baseline is adopted, not executed). Pin a sane
+                    # search_path per migration (transaction-scoped) so rebuilds and
+                    # prod behave identically. See project-review.md C2.
+                    await conn.execute("SET LOCAL search_path = public, finance")
                     await conn.execute(sql)
                     await conn.execute(
                         "INSERT INTO public.bh_migrations (filename, checksum) VALUES ($1, $2)",

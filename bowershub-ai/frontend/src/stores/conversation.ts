@@ -29,6 +29,7 @@ interface ConversationState {
   updateTitle: (id: number, title: string) => Promise<void>
   archiveConversation: (id: number) => Promise<void>
   addMessage: (message: Message) => void
+  sendMessage: (content: string, model?: string) => Promise<void>
   setStreaming: (streaming: boolean, content?: string, layer?: string | null) => void
   appendStreamToken: (token: string) => void
   setSkillStatus: (status: { skill: string; status: string } | null) => void
@@ -129,6 +130,40 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       isStreaming: false,
       streamingLayer: null,
     }))
+  },
+
+  sendMessage: async (content, model = 'auto') => {
+    const { activeConversation } = get()
+    if (!activeConversation) return
+
+    const convId = activeConversation.id
+
+    // Optimistic: add user message
+    const optimisticMsg: Message = {
+      id: Date.now(),
+      conversation_id: convId,
+      role: 'user',
+      content,
+      attachments: [],
+      model_used: null,
+      routing_layer: null,
+      input_tokens: null,
+      output_tokens: null,
+      cost_usd: null,
+      metadata: {},
+      created_at: new Date().toISOString(),
+    }
+    
+    set(state => ({ 
+      messages: [...state.messages, optimisticMsg], 
+      isStreaming: true,
+      streamingContent: '',
+      streamingLayer: null
+    }))
+
+    // Send via WebSocket
+    const { wsClient } = await import('../services/websocket')
+    wsClient.sendMessage(convId, content, model)
   },
 
   setStreaming: (streaming, content = '', layer = null) => {

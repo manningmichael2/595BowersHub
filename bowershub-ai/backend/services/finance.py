@@ -111,8 +111,11 @@ async def filter_transactions(
         params.append(f"%{account}%")
         conditions.append(f"a.account_name ILIKE ${len(params)}")
     if category:
-        params.append(f"%{category}%")
-        conditions.append(f"c.name ILIKE ${len(params)}")
+        if category.lower() in ("uncategorized", "uncat", "none"):
+            conditions.append("t.category_id IS NULL")
+        else:
+            params.append(f"%{category}%")
+            conditions.append(f"c.name ILIKE ${len(params)}")
     if description:
         params.append(f"%{description}%")
         conditions.append(f"t.description ILIKE ${len(params)}")
@@ -344,6 +347,10 @@ async def _build_schema_prompt() -> str:
 AVAILABLE TABLES AND COLUMNS:
 {schema_text}
 
+CRITICAL COLUMN NAMES:
+- finance.category_examples has a column named `description_pattern`. It does NOT have a column named `pattern`.
+- public.bh_patterns has a column named `rule`. It does NOT have a column named `pattern`.
+
 LEAF CATEGORIES (use these exact names): {cat_list}
 
 CATEGORY MAPPING (natural language → leaf category):
@@ -367,6 +374,7 @@ RULES:
 6. For "income" filter amount > 0.
 7. Add LIMIT 100 unless the question asks for a count/sum/total.
 8. Return ONLY the SQL — no markdown fences, no explanation.
+9. For "uncategorized" or "none" category requests, use `WHERE category_id IS NULL`.
 
 Today is {date.today().isoformat()}.
 """

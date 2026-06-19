@@ -1,11 +1,72 @@
-import { useState } from 'react'
-import { Message } from '../stores/conversation'
+import { useState, type ReactNode } from 'react'
+import { Message, useConversationStore } from '../stores/conversation'
 import { useSettingsStore, TextSize, type VoiceSettings } from '../stores/settings'
-import ReactMarkdown from 'react-markdown'
+import { useUIStore } from '../stores/ui'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { tts_strip } from '../lib/tts_strip'
 
 interface Props {
   messages: Message[]
+}
+
+/**
+ * Preserve our in-app link schemes that react-markdown's default transform would
+ * otherwise strip for safety:
+ *   - `cmd:<text>`  → send <text> as a chat message immediately
+ *   - `fill:<text>` → load <text> into the composer (URL-encoded; user completes it)
+ * Everything else falls back to the default (safe) transform.
+ */
+function urlTransform(url: string): string {
+  if (url.startsWith('cmd:') || url.startsWith('fill:')) return url
+  return defaultUrlTransform(url)
+}
+
+/**
+ * Render markdown links, intercepting the `cmd:`/`fill:` schemes as buttons.
+ * Shared by assistant and system messages so the behavior stays in one place.
+ */
+function ChatMarkdown({ content }: { content: string }) {
+  const sendMessage = useConversationStore(s => s.sendMessage)
+  const setComposerPrefill = useUIStore(s => s.setComposerPrefill)
+
+  return (
+    <ReactMarkdown
+      urlTransform={urlTransform}
+      components={{
+        a: ({ href, children }: { href?: string; children?: ReactNode }) => {
+          if (href?.startsWith('cmd:')) {
+            return (
+              <button
+                type="button"
+                onClick={() => sendMessage(decodeURIComponent(href.slice(4)))}
+                className="text-accent hover:underline decoration-dotted underline-offset-4 text-left"
+              >
+                {children}
+              </button>
+            )
+          }
+          if (href?.startsWith('fill:')) {
+            return (
+              <button
+                type="button"
+                onClick={() => setComposerPrefill(decodeURIComponent(href.slice(5)))}
+                className="text-accent hover:underline decoration-dotted underline-offset-4 text-left"
+              >
+                {children}
+              </button>
+            )
+          }
+          return (
+            <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              {children}
+            </a>
+          )
+        },
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  )
 }
 
 /**
@@ -109,7 +170,7 @@ function AssistantMessage({ message }: { message: Message }) {
       </div>
       <div className="flex-1 min-w-0 max-w-[85%]">
         <div className="markdown-content text-text text-sm">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+          <ChatMarkdown content={message.content} />
         </div>
         <div className="flex items-center gap-2 mt-1.5">
           {message.routing_layer && (
@@ -157,7 +218,7 @@ function SystemMessage({ message }: { message: Message }) {
   return (
     <div className="flex justify-center">
       <div className="bg-gray-800/50 rounded-lg px-4 py-2 text-xs text-gray-400 max-w-[80%]">
-        <ReactMarkdown>{message.content}</ReactMarkdown>
+        <ChatMarkdown content={message.content} />
       </div>
     </div>
   )

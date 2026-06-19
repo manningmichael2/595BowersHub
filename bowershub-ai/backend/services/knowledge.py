@@ -141,12 +141,11 @@ async def remember(topic: str, fact: str) -> dict:
     Save a fact to /knowledge/<topic>.md.
     Deduplicates via local Ollama model before saving.
     """
-    if not topic or not topic.strip():
-        return {"error": "Missing required parameter: topic"}
     if not fact or not fact.strip():
         return {"error": "Missing required parameter: fact"}
 
-    topic = topic.strip()
+    # Default to 'general' if no topic provided
+    topic = topic.strip() if (topic and topic.strip()) else "general"
     fact = fact.strip()
 
     # Normalize topic to filesystem-safe path
