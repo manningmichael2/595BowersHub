@@ -568,3 +568,9 @@ Deploying the categorization work (`./scripts/deploy.sh bowershub-ai`) put the a
 - **No off-site backup (C2)** — ran DDL + a `DELETE` on prod with no net.
 
 - [Next] Merge `fix/categorization-review-hardening` → `main` (done this session). Do NOT redeploy from `main` until the migration/role model is decided, or it crash-loops again.
+
+---
+
+## [2026-06-19] Documented forward goal — personal-finance product (Claude Code)
+
+Owner's north star for the money side: a **Monarch Money / Origin-style finance frontend** with much better categorization + accounting. Owner's current read: the bulk **categorizer is still poor**, the interactive **categorization tool is only OK**. Documented in `project-review.md` §8.4 ("Personal-finance frontend") with the gap analysis (merchant enrichment, learning categorization, accounting model, budgets, review UX) and §8.6 step 5. **Explicitly sequenced AFTER foundation stability** — do not start before the migration/role decision + backups land. Not started; documentation only.

@@ -245,6 +245,16 @@ There is currently **no embeddings/semantic search.** Recall is grep-based. For 
 - Net-worth-over-time from periodic balance snapshots (balances already sync; just persist history).
 - Year-round tax/deduction tagging for woodshop/business expenses.
 
+**Personal-finance frontend — toward Monarch Money / Origin (owner's product north star):**
+The end goal for the money side is a dedicated personal-finance app in the mold of **Monarch Money** or **Origin** — a real budgeting/accounting frontend, not just chat answers about spending. Owner's assessment (2026-06-19): the bulk **categorizer is still poor** and the interactive **categorization tool is only OK**; Monarch/Origin are well ahead on *both* categorization and accounting, and that's the bar to clear. **Explicitly gated behind foundation stability (§8.2)** — a "once we're stable" build, not before.
+- *What makes them good (the gap to close):*
+  1. **Merchant enrichment/normalization** — clean merchant names, logos, MCC categories, instead of raw bank strings like `COSTCO WHSE #0393 MADISON HEIGHMI`. This is the single biggest lever; good categorization starts with clean inputs.
+  2. **Learning categorization** — a rules engine + feedback loop that improves from every manual correction. The groundwork exists (`finance.category_examples`, the manual-override learning trigger, pg_trgm fuzzy match) but the nightly auto-categorizer underuses it and leans on a local Ollama call that's weak; this is *why the categorizer is still bad*.
+  3. **Proper accounting model** — transfers, splits, reconciliation, and multi-account net worth, rather than flat one-row-per-transaction.
+  4. **Budgets** — per-category targets, rollover, "left to spend this month."
+  5. **An opinionated review UX** — an uncategorized review queue, bulk edit, recurring/subscription detection surfaced inline (overlaps the "Financial foresight" items above).
+- *Frontend:* a finance-first dashboard (accounts, cash flow, budgets, net-worth-over-time, category drill-down). The React app exists; this is a major new surface on top of it.
+
 **Document & receipt intelligence (filewriter + pdfplumber + smart-capture already exist):**
 - Warranty & manual vault — photograph a receipt → extract purchase date + warranty length → remind before it lapses.
 - Semantic search across all documents (the pgvector payoff).
@@ -269,6 +279,7 @@ There is currently **no embeddings/semantic search.** Recall is grep-based. For 
 2. **Semantic memory** (§8.3): pgvector + local embeddings — the multiplier for everything after.
 3. **First features on top:** proactive capture + entity-centric recall (§8.4 memory), then warranty vault + financial foresight.
 4. **Then the compounding/non-obvious bets** (§8.5): eval harness, Home Assistant bridge, life-logging.
+5. **The personal-finance product track (§8.4):** the Monarch/Origin-style finance frontend + categorization/accounting overhaul — owner's stated north star, sequenced **explicitly after foundations are stable**. Likely starts with merchant enrichment (the biggest categorization lever) before the UI buildout.
 
 ---
 
