@@ -625,3 +625,16 @@ Ran `docs/c7-db-roles-cutover.md` against the live `postgres` container (DB `fin
 **Deploy de-risk:** diffed repo migrations vs prod `bh_migrations` — the ONLY unrecorded file is `0021_migration_role.sql`. So the next deploy applies exactly one migration, as the superuser migrator (idempotent CREATE ROLE + GRANT + ALTER DEFAULT PRIVILEGES), with no collision risk (unlike the incident's unrecorded hand-applied SQL).
 
 - [Next] Merge PR #12, then `./scripts/deploy.sh bowershub-ai`. Expected log line: "Applying migrations via dedicated migration role 'bowershub_migrator'" then "Applied 1 migration(s)"; health 200. Prod is now safe to redeploy from `main` (lifts the 2026-06-19 hold).
+
+---
+
+## [2026-06-19] PR #12 merged + deployed — hold lifted — Claude Code
+
+PR #12 merged to `main` (all 3 CI checks green) and deployed via `./scripts/deploy.sh bowershub-ai`. **Verified end-to-end on prod:**
+- Startup log: `Applying migrations via dedicated migration role 'bowershub_migrator' (runtime role: 'bowershub_app')` → `0021_migration_role.sql applied` → `Applied 1 migration(s)`. The privilege split is live.
+- `0021` recorded in `bh_migrations` (12:59 UTC); `bowershub_migrator` has 12 default-ACL entries so future migrations' objects auto-grant to app/n8n/reader.
+- Health: `{"status":"ok","database":true}`, no crash-loop (contrast the 2026-06-19 incident, which crash-looped at exactly this step).
+
+**The 2026-06-19 do-not-redeploy hold is LIFTED.** `main` deploys cleanly through the migration/runtime privilege model, and CI (`test_migrate_as_app_role.py`) guards the scoped deploy path going forward.
+
+- [Next foundation item] C2 — off-site backups + reproducible schema. The from-scratch grant-audit note (0005–0020 default-priv coverage) folds into the reproducible-schema pass.
