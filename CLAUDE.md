@@ -65,8 +65,15 @@ What makes it best-in-class (not a Kiro clone):
 
 Components: `.claude/skills/spec/` (SKILL.md + templates), `.claude/agents/{spec-researcher,spec-critic}.md`, `.claude/hooks/spec-validate.py`. A `PostToolUse` hook (`.claude/settings.json` → `.claude/hooks/spec-notify.py`) surfaces spec-file writes in the transcript (mirrors Kiro's `fileEdited`). **Note:** skills/agents/hooks load at session start — they take effect in a *new* session, not the one that created them.
 
-Good first dogfood: `/spec dynamic-model-discovery` (the planned next task).
+Good dogfood: `/spec finance-categorization` (the north-star next feature — see "When starting the next session" below).
 
 ## When starting the next session
 
-The planned next tasks (highest-leverage first, from `project-review.md`): **(1)** dynamic model discovery to kill hardcoded model IDs (§9.6), then the foundation blockers — **(2)** reproducible schema + off-site backups (C2), **(3)** `ask-db` sandbox + scoped DB roles (C1/C7), **(4)** CI (C5). After foundations, pgvector semantic memory (§8.3) is the highest-value feature.
+**The foundation blockers are DONE & deployed** (verify against `context-log.md`, not the 2026-06-08 `project-review.md`, which is historical): **dynamic model discovery** (§9.6 — `services/model_catalog.py` + discovery/resolver/cost tests), **reproducible schema + off-site backups** (C2 — squashed `0001_baseline.sql`, `fresh_db`/CI build-from-empty, GFS retention + automated restore drill), **`ask-db` sandbox + scoped roles** (C1/C7 — sqlglot validation, `finance_reader`, migration/runtime privilege split, cutover deployed), and **CI** (C5 — incl. the scoped-deploy-path smoke test). PRs #1–#17 all merged.
+
+**pgvector semantic memory (§8.3) is also DONE & on `main`** — migrations `0010_semantic_memory`/`0011_embedding_config`, `services/{embedding_worker,embeddings,hybrid_retrieval}.py` (RRF hybrid retrieval, Ollama `bge-m3`), `admin/SemanticMemorySection.tsx`, and the full test set. The old `feat/semantic-memory` branch was a stale superseded snapshot (its content all landed on `main`; deleted 2026-06-19).
+
+**Actual next work** (foundation + first feature both done — verify against `context-log.md`):
+- **Finance product north star** — Monarch/Origin-style finance frontend + better bulk categorization & accounting. Owner's stated direction, explicitly gated on "foundation stable" (now true). See `project-review.md` §8.4 and the finance-product memory. This is the big one.
+- **Smaller NO-HARDCODING tail**: `ADMIN_ONLY_SKILLS = {"ask-db", "finance-query"}` in `services/skill_executor.py` should become a DB-driven per-skill `min_role`.
+- **C6 frontend tail**: `any`-at-the-API-boundary cleanup and a global toast (per project-review §5 C6 status).
