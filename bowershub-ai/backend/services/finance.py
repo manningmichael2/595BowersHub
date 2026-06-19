@@ -384,6 +384,11 @@ Today is {date.today().isoformat()}.
     return prompt
 
 
+# Max rows ask-db will fetch/return. Enforced server-side via a cursor so a
+# huge result set is never materialized in full (see the execution block).
+_ASK_DB_MAX_ROWS = 100
+
+
 async def ask_db(question: str) -> dict:
     """
     Natural-language question → Haiku-generated SQL → executed against Postgres.
@@ -450,16 +455,33 @@ async def ask_db(question: str) -> dict:
 
     # Safety layer 2: execute with least privilege — drop to the read-only
     # finance_reader role (no access to bh_* / auth tables, not superuser) in a
-    # READ ONLY transaction with a statement timeout. Even a malicious SELECT
-    # can't read credentials, write, run server programs, or run unbounded.
+    # READ ONLY transaction with timeouts. Even a malicious SELECT can't read
+    # credentials, write, run server programs, run unbounded, or block on a lock.
     pool = get_pool()
     try:
         async with pool.acquire() as conn:
             async with conn.transaction():
                 await conn.execute("SET TRANSACTION READ ONLY")
                 await conn.execute("SET LOCAL statement_timeout = '5000ms'")
+                # Cap time spent blocked on a lock (statement_timeout bounds
+                # total wall-clock, but a fast-failing lock_timeout is clearer).
+                await conn.execute("SET LOCAL lock_timeout = '2000ms'")
+                # pg_catalog first so built-ins can't be shadowed; only the
+                # finance_reader-readable schemas (migration 0002) — never
+                # public (which holds bh_* / auth).
+                await conn.execute(
+                    "SET LOCAL search_path = pg_catalog, finance, inventory, house, cook, files"
+                )
                 await conn.execute("SET LOCAL ROLE finance_reader")
-                rows = await conn.fetch(sql)
+                # Server-side cursor: fetch only up to the cap instead of
+                # materializing the entire result set. statement_timeout bounds
+                # time, not memory — an unqualified SELECT * over a huge table
+                # would otherwise be pulled in full before the display slice.
+                # Fetch one extra row to detect (and signal) truncation.
+                cur = await conn.cursor(sql)
+                fetched = await cur.fetch(_ASK_DB_MAX_ROWS + 1)
+        truncated = len(fetched) > _ASK_DB_MAX_ROWS
+        rows = fetched[:_ASK_DB_MAX_ROWS]
     except Exception as e:
         return {
             "error": f"SQL execution failed: {e}",
@@ -478,7 +500,7 @@ async def ask_db(question: str) -> dict:
     
     # Convert rows to dicts (handle Decimal, date, etc.)
     results = []
-    for r in rows[:100]:  # cap display at 100
+    for r in rows:  # already capped server-side to _ASK_DB_MAX_ROWS
         d = {}
         for k, v in r.items():
             if isinstance(v, Decimal):
@@ -529,10 +551,14 @@ async def ask_db(question: str) -> dict:
         if len(results) > 30:
             lines.append(f"\n*...and {len(results) - 30} more*")
         display = "\n".join(lines)
-    
+
+    if truncated:
+        display += f"\n\n*Showing first {_ASK_DB_MAX_ROWS} rows; more exist — narrow the query for the rest.*"
+
     return {
         "sql_generated": sql,
         "row_count": len(rows),
+        "truncated": truncated,
         "results": results,
         "_display": display,
     }

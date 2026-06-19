@@ -641,39 +641,32 @@ PR #12 merged to `main` (all 3 CI checks green) and deployed via `./scripts/depl
 
 ---
 
-## [2026-06-19] Backups verified + hardened (C2 off-site is real) — Claude Code
+## [2026-06-19] ask-db sandbox hardening (C1 tail) — Claude Code
 
-Owner thought the off-site backup used rsync; it's actually **rclone → Google Drive**, nightly 3am via `scripts/backup.sh` (cron). **Verified it's genuinely running and genuinely off-site** (the thing `project-review.md` §C2 said to confirm): local backups daily through today with 7-day pruning; `backup.log` has **zero WARNING lines ever**; and `rclone ls gdrive:595BowersHub-Backups/2026-06-19_0300/` shows all 5 artifacts at matching sizes (dump 4.5M, files 245M, globals, knowledge, configs). So **C2's off-site half is done and real** — the deploy-incident note "No off-site backup (C2)" was misleading (off-site exists; the real incident gap was no *immediate pre-DDL* snapshot).
+Started to `/spec` C1 (ask-db sandbox), but **deep grounding research (3 parallel spec-researchers) found C1 is already built and deployed** (2026-06-09/10): `sql_guard.validate_select()` (sqlglot single-SELECT), `0002_finance_reader_lockdown.sql`, and the `SET TRANSACTION READ ONLY` + `statement_timeout` + `SET LOCAL ROLE finance_reader` de-escalation in `finance.ask_db`, with tests. `project-review.md` C1 is **stale** (same trap as the schema-CI-gate). So I dropped the greenfield spec and instead shipped the concrete residual gaps the research surfaced — no spec ceremony, since the work is mechanical hardening, not architecture.
 
-**Restore test (B) — the backup is restorable, and the test caught a real DR gap.** Restored today's `postgres_finance.dump` into a throwaway `pgvector/pgvector:pg16`: 78 tables / 6 schemas, `finance.transactions` 414 rows, all config tables, pgvector extension, `pg_restore` exit 0. **Gap found:** the recovery cluster's bootstrap superuser MUST be `michael`. The globals dump replays role memberships as `GRANTED BY michael`; under a different superuser (I first tried `postgres`) those 2 GRANTs silently fail, leaving `bowershub_app` NOT a member of `finance_reader` → ask-db `SET ROLE` would break. Re-tested bootstrapped as `michael` → memberships restore correctly. Baked this into the RESTORE runbook comment in `backup.sh`.
+**Changes (`backend/services/finance.py` ask_db execution block):**
+- **Server-side row cap via cursor** (the real fix): was `rows = await conn.fetch(sql)` then `rows[:100]` — i.e. a `SELECT *` over a huge table was **fully materialized in memory** before slicing; `statement_timeout` bounds time, not memory. Now `cur = await conn.cursor(sql); fetched = await cur.fetch(_ASK_DB_MAX_ROWS + 1)` — the server never streams more than cap+1 rows. Returns a new `truncated` flag + a "showing first N rows" note.
+- **`SET LOCAL lock_timeout = '2000ms'`** — fast-fail instead of blocking behind a long write (statement_timeout was the only lock backstop).
+- **`SET LOCAL search_path = pg_catalog, finance, inventory, house, cook, files`** — pg_catalog first so built-ins can't be shadowed; only the finance_reader-readable schemas, never `public` (which holds bh_*/auth). Side benefit: unqualified domain-table refs now resolve to the fenced schema (e.g. `transactions` → `finance.transactions`, not the `public.transactions` view).
 
-**Alerting (A) — silent failure is now impossible.** `backup.sh` previously swallowed off-site failures (`|| echo WARNING`), so an expired rclone token would stop off-site backups with nobody knowing. Added Pushover alerting (creds read from `bowershub-ai/.env`): an `ERR` trap pages on any aborting command (broken pg_dump/tar/etc.), and the rclone step now alerts-but-continues on off-site failure (local backup is still kept). Verified: creds resolve, a test push delivered (`status:1`), and the ERR trap fires on a simulated failure. Live for tonight's 3am run (cron executes the working-tree file directly).
+**Tests (`test_ask_db_sandbox.py`):** updated the execution-pattern test to mirror the hardened block (asserts `lock_timeout=2s` + unqualified `transactions` resolving to finance via search_path); added `test_ask_db_cursor_caps_result_without_materializing_all` (10k-row `generate_series` → cursor hands back exactly cap+1). The existing `bh_users`/`bh_refresh_tokens` denial test stays as the role-boundary regression guard.
 
-- [Note] Today's 03:00 `globals.sql` predates `bowershub_migrator` (created 12:59 today), so the migrator role isn't in today's backup — tonight's run captures it. Deploys now depend on this role; if doing DR before tonight, recreate it per `docs/c7-db-roles-cutover.md`.
-- [Remaining C2 nice-to-haves, not blocking] (1) no remote retention policy — Drive accumulates every dated folder forever (local prunes at 7d); (2) restore test is manual/ad-hoc — could be a periodic automated verify.
+**Verification (throwaway pgvector pg16):** new + existing sandbox tests pass; **full backend suite 558 passed**. Committed on `harden/ask-db-sandbox`.
 
----
-
-## [2026-06-19] Off-site backup retention (GFS) — C2/C7 — Claude Code
-
-Closed the remote-side gap in the off-site backup (which is real: rclone→Google Drive, restore-tested). Each nightly run synced to a *new* dated remote folder and **nothing ever pruned it** — local had a 7-day cleanup but the remote grew unbounded. (Lands alongside PR #14's failure-alerting + runbook fix, which touched the same `backup.sh`; integrated, not clobbered.)
-
-- **`scripts/gfs-prune.sh`** (new) — pure, side-effect-free GFS retention selector. Reads candidate dir names on stdin, prints `KEEP`/`DELETE` per line. Union of restic/borg-style tiers: 7 daily + 4 weekly (newest per ISO-week) + 6 monthly (newest per calendar month). Unparseable names are **always kept**. Factored out so the delete-decision is unit-testable.
-- **`scripts/test_gfs_prune.sh`** (new) — 6 tests (below-limit, 30-day prune, same-day pairs, unparseable-safety, monthly-only, empty input). All pass.
-- **`scripts/backup.sh`** — added off-site retention config + **step 8**: after a *successful* rclone sync, list remote → plan via `gfs-prune.sh` → `rclone purge` only the `DELETE` set. Guards: skips if remote can't be listed, planning fails, or the plan would keep 0. On sync failure, PR #14's `notify_failure` fires and the prune is skipped.
-
-**Verification:** `bash -n` clean; `test_gfs_prune.sh` all-pass; stubbed-rclone integration (15 daily dirs → keep 8, purge 7 oldest).
+**Deliberately deferred (not gaps to fix now):** separate read-only pool (conscious non-build post-C7); DB-driven per-skill `min_role` to kill the hardcoded `ADMIN_ONLY_SKILLS` (`TODO(phase-1)` — better as its own light spec, **[Next candidate]**); grant-audit tail (0014/0019 unqualified + 0005–0020 default-priv coverage).
 
 ---
 
-## [2026-06-19] Restore test — provable DR (C2) — Claude Code
+## [2026-06-19] ask-db sandbox hardening (C1 tail) — Claude Code
 
-Made the restore drill repeatable + CI-gated. Off-site is restore-tested, but nothing *re-ran* it, so a change to dump format/role grants/schema could break restore and only surface mid-disaster. (Independently re-confirmed PR #14's finding: restore must use bootstrap superuser `michael`, or `GRANTED BY michael` role memberships silently fail — encoded in the script.)
+Set out to `/spec` C1 (ask-db sandbox); **deep grounding research (3 parallel spec-researchers) found C1 is already built and deployed** (2026-06-09/10): `sql_guard.validate_select()` (sqlglot single-SELECT), `0002_finance_reader_lockdown.sql`, and the `SET TRANSACTION READ ONLY` + `statement_timeout` + `SET LOCAL ROLE finance_reader` de-escalation in `finance.ask_db`, with tests. `project-review.md` C1 is **stale** (same trap as the schema-CI-gate). Dropped the greenfield spec; shipped the concrete residual gaps instead (no spec ceremony — mechanical hardening, not architecture).
 
-- **`scripts/restore-test.sh`** (new) — runs the documented restore order (`globals.sql` → `createdb` → `pg_restore --no-owner`) into a **throwaway container** and asserts the four app roles, `public`+`finance` schemas, and **exact per-table row counts** survive. Modes: default (dump fresh from live, read-only), `--from-backup DIR` (real stored artifact), `--selftest` (self-contained: builds its own source via `run_migrations`).
-- **`.github/workflows/ci.yml`** — new `restore-test` job runs `--selftest` every push/PR.
-- Two findings handled: the postgres entrypoint init-race (wait for the init-complete marker) and PG16 `GRANTED BY` grantors (restore as the same superuser as the source).
+**Changes (`backend/services/finance.py` ask_db):**
+- **Server-side row cap via cursor** (the real fix): was `conn.fetch(sql)` then `rows[:100]` — a `SELECT *` over a huge table was **fully materialized in memory** before slicing; `statement_timeout` bounds time, not memory. Now `cur = await conn.cursor(sql); fetched = await cur.fetch(_ASK_DB_MAX_ROWS + 1)`. Adds a `truncated` flag + display note.
+- **`SET LOCAL lock_timeout = '2000ms'`** — fast-fail instead of blocking behind a long write.
+- **`SET LOCAL search_path = pg_catalog, finance, inventory, house, cook, files`** — pg_catalog first so built-ins can't be shadowed; only finance_reader-readable schemas, never `public`. Unqualified domain refs now resolve to the fenced schema.
 
-**Verification (clean-room, no prod contact):** built a source baseline→head in an isolated container → restore clean, 4 roles + 2 schemas, **51/51 tables row-count match**; `--selftest` (CI path) passes end-to-end. Throwaway containers auto-removed.
+**Tests:** execution-pattern test mirrors the hardened block (lock_timeout, search_path resolution); new cursor-cap test (10k rows → cap+1). Existing `bh_users` denial test kept. **Full backend suite 558 passed** on throwaway pgvector pg16. PR #16.
 
-- [Next foundation] C2 tail is mechanical (0014/0019 unqualified-ref + 0005–0020 grant-audit). Then the ask-db hardening (separate PR #16) and pgvector semantic memory.
+**Deferred:** separate read-only pool (conscious non-build post-C7); DB-driven per-skill `min_role` to kill hardcoded `ADMIN_ONLY_SKILLS` (`TODO(phase-1)` — own light spec, **[Next candidate]**); grant-audit tail.
