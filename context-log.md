@@ -597,4 +597,17 @@ Why Option 1 over the alternatives (REASSIGN-only / non-superuser owner): the in
 **Verification (throwaway `pgvector/pgvector:pg16`):** full baseline→0021 chain applies cleanly. Decisive test reproduced the **prod topology** — pool as non-superuser `bowershub_app`, migrations via superuser `bowershub_migrator`: 21 migrations recorded, objects owned by the migrator (proving the elevated conn did the DDL), and `bowershub_app` can SELECT `finance.transactions` (grant propagation works). Full backend suite **556 passed**; pure property tests **125 passed**.
 
 - [Next — before redeploying prod] Run `docs/c7-db-roles-cutover.md` once as superuser `michael`: bootstrap `bowershub_migrator` (LOGIN/SUPERUSER/password), set `MIGRATION_DB_USER`/`MIGRATION_DB_PASSWORD` + `DB_USER=bowershub_app` in the server `.env`, then `./scripts/deploy.sh bowershub-ai`. Migrations now self-apply with privilege — the 0016 ownership crash can't recur.
-- [Known gap, ties to C2] On a *from-scratch* rebuild via the migrator, tables created in migrations 0005–0020 inherit grants via the existing no-`FOR ROLE` default-priv statements (keyed to the runner); fold an explicit re-grant audit into the C2 reproducible-schema pass for certainty. Prod-forward (0022+) is covered by 0021. Not yet committed.
+- [Known gap, ties to C2] On a *from-scratch* rebuild via the migrator, tables created in migrations 0005–0020 inherit grants via the existing no-`FOR ROLE` default-priv statements (keyed to the runner); fold an explicit re-grant audit into the C2 reproducible-schema pass for certainty. Prod-forward (0022+) is covered by 0021. Committed on `fix/migration-role-model`.
+
+---
+
+## [2026-06-19] CI: cover the scoped deploy path (C5) — Claude Code
+
+CI already existed and is solid (`.github/workflows/ci.yml`: frontend typecheck/test/build, backend full suite vs `pgvector/pgvector:pg16`, gitleaks). The **gap**: the backend job runs migrations as the superuser `DB_USER=michael`, so it never exercised the scoped, non-superuser deploy path — **this is why CI was green while prod crash-looped** on 2026-06-19. The incident write-up called for exactly a "migrate-as-app-role smoke job".
+
+- Added `backend/tests/test_migrate_as_app_role.py` — reproduces the **prod topology** on the ephemeral test cluster (runtime pool as non-superuser `bowershub_app`, migrations via superuser `bowershub_migrator`) and asserts: (1) the full baseline→head chain applies through the elevated connection, (2) objects are owned by the migrator — the regression guard that fails if anyone drops the privilege split, (3) the scoped role can actually read app data across `public`/`finance` (grant propagation), (4) the runtime role is not a superuser. This test would have caught the 0016 crash.
+- It's a pytest, so it runs automatically inside the existing backend job (which already has a pgvector Postgres + superuser) — **no workflow change required**. Added a comment in `ci.yml` documenting that the scoped deploy path is now covered.
+
+**Verification:** new test passes standalone and in any order; full backend suite **557 passed** (was 556 + 1). Committed on `fix/migration-role-model`.
+
+- [Note] CI runs `on: [push to main, pull_request]`. Open a PR from `fix/migration-role-model` to get the full matrix (incl. this new test) to run before merge.
