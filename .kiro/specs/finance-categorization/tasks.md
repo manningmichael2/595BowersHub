@@ -26,15 +26,15 @@
 - [x] **Tests:** apply-and-seed on `fresh_db` + pure B1 fallback check; `test_migrate_as_app_role` confirms the migrator/app split + grant propagation hold. **Full suite 561 passed** on throwaway pgvector pg16.
 - *Note:* `eval_labels` taxonomy reconciliation happens when the eval set is seeded (Task 4).
 
-## Task 3: NormalizationService + ingest hook + backfill (R1)
+## Task 3: NormalizationService + ingest hook + backfill (R1) — ✅ DONE (commit pending)
 - **Effort:** M
 - **Dependencies:** Task 2
 - **Requirements:** R1.1, R1.5
-- [ ] Pure-core `normalize(raw) → {key, display, mcc?}` driven by `finance.normalization_rules` (prefix-strip `SQ*`/`TST*`/`PYPL*`, store numbers, city/state tails, case/whitespace); unmatched → cleaned-but-unmatched fallthrough.
-- [ ] Inline-on-read: `TxnContext` derives + persists `merchant_key` when NULL (eliminates the ordering hazard — B3).
-- [ ] Hook normalization after the SimpleFin upsert (`simplefin_sync.py:127-137`) and email/manual paths; upsert into `finance.merchants` (apply MCC prior).
-- [ ] Separate idempotent backfill op (re-derives keys only for rows affected by a `normalization_rules.version` bump; never inline in the nightly critical section).
-- [ ] **Tests:** R1.1 fixture table of input→output pairs (incl. `COSTCO WHSE #0393 MADISON HEIGHMI → Costco`, `SQ *SUNRISE BAKERY → Sunrise Bakery`), each rule individually + unmatched fallthrough; backfill idempotency.
+- [x] `MerchantNormalizer.normalize(raw) → {key, display}` driven by `finance.normalization_rules` (intermediary-prefix strip, store numbers, store-type keywords, whitespace/case); unmatched → cleaned fallthrough, never errors. `0024` seeds the default rules.
+- [x] `normalize_and_store()` single-txn primitive (upsert `finance.merchants` + set `merchant_key`) — the reusable inline-on-read path for the pipeline (B3, consumed in Task 10).
+- [x] Hooked `backfill_merchant_keys(only_missing=True)` after the SimpleFin upsert (non-fatal). *(MCC-prior application deferred — SimpleFin ingest doesn't carry MCC; the MCC tier handles priors.)*
+- [x] Separate idempotent `backfill_merchant_keys` (only_missing or full re-derive); runs in its own connection, not the nightly critical section.
+- [x] **Tests:** R1.1 fixture table run against the **actual seeded rules** (incl. `COSTCO WHSE #0393 MADISON HEIGHMI → Costco`, `SQ *SUNRISE BAKERY → Sunrise Bakery`, unmatched fallthrough) + pure-engine + idempotent backfill. **Full suite 564 passed** on throwaway pgvector pg16.
 
 ## Task 4: Evaluation harness skeleton + labels (R2.7)
 - **Effort:** S
