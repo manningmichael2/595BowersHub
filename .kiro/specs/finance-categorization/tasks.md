@@ -56,13 +56,13 @@
 - [x] Added shared `services/categorization/config.py` (DB-driven per-tier thresholds / engine gate / kNN sizing — used here and by the gate/kNN later).
 - [x] **Tests:** counterpart flag; liability payment via `account_type` (+ refund→queue); ambiguous single-leg → queue; ATM not a transfer; `is_transfer_manual` honored; flag excludes from spending total + un-flag restores; idempotent backfill (skips manual + ambiguous). **6 passed.**
 
-## Task 6: RuleEngine tier (R2.1)
+## Task 6: RuleEngine tier (R2.1) — ✅ DONE
 - **Effort:** S
 - **Dependencies:** Task 2, Task 3
 - **Requirements:** R2.1
-- [ ] Evaluate `finance.user_rules` by user-orderable `priority`, first-match-wins; match any combo of `merchant_key` / description regex / **amount range** / `account_id`; emit `Decision(confidence=1.0, terminal=True)` (rule-locked, R3.4).
-- [ ] "Apply to existing matching" re-runs the predicate over history on demand.
-- [ ] **Tests:** priority ordering / first-match; amount-range match; terminal rule not overwritten by later tiers; apply-to-existing.
+- [x] `services/categorization/rules.py`: evaluate `finance.user_rules` by `priority` (then id) first-match-wins; match any combo of `merchant_key` / description regex / **amount range** (`amount_min`/`amount_max`) / `account_id` (all specified conditions AND-match); emit `Decision(confidence=1.0, terminal=True)` (rule-locked, R3.4). Rules with no conditions are inert (never match-all). Invalid regex is skipped, not fatal.
+- [x] "Apply to existing matching" (`apply_rule_to_existing`) re-runs the predicate over history on demand; guarded UPDATE never clobbers a `user_category_override` (returns matched vs updated so the guard is observable). Bulk write via API → Writer choke point + RBAC in Task 11.
+- [x] **Tests:** priority/first-match; amount-range + regex; empty rule inert; account-scoped rule loaded from DB; apply-to-existing guarded (matched=3, updated=2 with one override). **5 passed.**
 
 ## Task 7: MerchantMemory tier + LearningService (R2.2, R3)
 - **Effort:** M
