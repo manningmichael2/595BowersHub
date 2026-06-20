@@ -104,17 +104,17 @@
 - [x] Observability (R5.6): `categorization_metrics()` reconstructs per-tier / auto-vs-queue / LLM-call / transfer counts from the authoritative decision log.
 - [x] **Tests:** short-circuit ordering; terminal/transfer gating; below→queue best-candidate; per-tier thresholds; disabled-tier skip; Writer guard blocks mid-batch correction (R3.4); shadow mutates nothing but logs; cascade applies + idempotent double-run + provenance; transfer & investment rows never categorized (B-2); LLM residue + call metrics. **11 passed.**
 
-## Task 11: Typed review write API (R4)
+## Task 11: Typed review write API (R4) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 8, Task 10
 - **Requirements:** R3.3, R4.1, R4.2, R4.3, R4.4, R4.5
-- [ ] `routers/finance_review.py` with Pydantic request/response models (no `any`), `Depends(get_current_user)` **+ explicit owner/admin role check** on every write endpoint. *(Follow-up, out of scope: generalize the hardcoded `ADMIN_ONLY_SKILLS` into a DB-driven `bh_skills.min_role` — tracked, not built here.)*
-- [ ] `GET /review-queue` is the **backend read for R4.1** — predicted category + confidence + rationale from the decision log (the frontend in Task 12 renders it).
-- [ ] "Apply to all from this merchant" (R3.3) is the **gated mass-recategorization**: write through the Task 10 Writer choke point (provenance + write-time guard), behind this endpoint's RBAC.
-- [ ] `GET /review-queue` (uncategorized + below-threshold + "transfer?" items, with rationale from the decision log); `POST .../categorize` + `.../bulk-categorize` (R4.2/R4.3 → LearningService); `POST /merchants/{key}/apply-category` (R3.3/R4.3); `POST /user-rules` CRUD.
-- [ ] `GET /recurring` (R4.5): ≥3 charges / ±X% / cadence window, DB-configured tolerances, live read-time query.
-- [ ] DB-unavailable → typed error, no partial write; errors surface via the toast path. Chat skills keep working against the same service.
-- [ ] **Tests:** endpoint contracts; RBAC denies non-owner; bulk + single correction fire learning; recurring grouping; DB-down typed error.
+- [x] `routers/finance_review.py` (registered in `main.py`) with Pydantic request/response models throughout (no `any`); reads use `Depends(get_current_user)`, **every write uses `Depends(require_admin)`** (get_current_user + explicit owner/admin check, MN4). *(Follow-up out of scope: DB-driven `bh_skills.min_role`.)*
+- [x] `GET /review-queue` (R4.1): uncategorized/below-threshold/"transfer?" rows, each annotated with the latest decision-log prediction (category + confidence + tier + `transfer_suspected` + rationale) via a LATERAL join.
+- [x] "Apply to all from this merchant" (R3.3): gated mass-recategorization with per-row provenance (prior_category_id, reversible), optional `set_prior` + `make_rule`, behind RBAC.
+- [x] `POST .../categorize` + `.../bulk-categorize` (R4.2/R4.3 → LearningService reinforcement, sets `user_category_override`); `POST /merchants/{key}/apply-category`; `POST/GET/DELETE /user-rules` (CRUD, optional apply-to-existing).
+- [x] `GET /recurring` (R4.5): live read-time query grouping by merchant_key, `occurrences >= min_occurrences`, amount within DB-configured tolerance, avg cadence.
+- [x] DB-unavailable → typed **503**, no partial write (writes wrapped in a per-request transaction). Chat skills keep using the same `record_correction` service.
+- [x] **Tests:** queue contract; RBAC 403 for non-owner (read allowed); single + bulk fire learning; apply-merchant provenance + prior; rule create + apply-to-existing; recurring grouping/cadence; DB-down typed 503. **8 passed** (async httpx client to share the pool's event loop).
 
 ## Task 12: Finance Review frontend (R4.1, R1.6)
 - **Effort:** M
