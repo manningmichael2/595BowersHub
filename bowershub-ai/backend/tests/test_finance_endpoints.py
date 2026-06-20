@@ -115,8 +115,11 @@ async def test_finance_summary_success(finance_pool):
         )
         cats = {}
         for name in ("Food", "Gas", "Entertainment"):
+            # fetch-or-create: some of these names are now seeded by 0023.
             cats[name] = await conn.fetchval(
-                "INSERT INTO finance.categories (name) VALUES ($1) RETURNING id", name
+                "INSERT INTO finance.categories (name) VALUES ($1) "
+                "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id",
+                name,
             )
 
         # This month: spending across 3 categories (-750 total), income +3500,
@@ -536,7 +539,8 @@ async def test_categorizer_r51_reproduce_then_fix(finance_pool):
             "VALUES (gen_random_uuid()::text, 'Test', 'Checking') RETURNING id"
         )
         cat = await conn.fetchval(
-            "INSERT INTO finance.categories (name) VALUES ('Food_Groceries') RETURNING id"
+            "INSERT INTO finance.categories (name) VALUES ('Food_Groceries') "
+            "ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id"
         )
         txn = await conn.fetchval(
             "INSERT INTO finance.transactions (id, account_id, posted_date, amount, description) "

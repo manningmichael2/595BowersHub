@@ -626,6 +626,12 @@ _FALLBACK_ROLE_MODEL = {
     "deep": "claude-opus-4-5-20251101",
     "local": "llama3.2:3b",
     "embed": "bge-m3",      # matches the 0010 embed-alias seed (semantic-memory)
+    # Privacy-safe default for the nightly categorizer (R2.4): without this key,
+    # resolve_role("categorizer") cold-starts to the hosted "chat" model and
+    # sends transaction descriptors off-box. Keep it on a LOCAL model. Placeholder
+    # (the weak local) until Task 13 repoints it — and the 0023 alias row — to the
+    # local model chosen empirically against the eval set.
+    "categorizer": "llama3.2:3b",
 }
 
 
