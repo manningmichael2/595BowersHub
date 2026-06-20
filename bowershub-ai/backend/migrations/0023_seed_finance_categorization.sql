@@ -11,42 +11,44 @@
 --
 -- Refs: .kiro/specs/finance-categorization (Task 2; B1, B2, R1.3, R2.5).
 
+-- NOTE on idempotency: this seed is guarded with WHERE NOT EXISTS (matching by
+-- name with `=`), NOT ON CONFLICT, and uses NO explicit ids. Two reasons, both
+-- learned from the 2026-06-20 crash-loop:
+--   1. Explicit ids matching prod's rows conflict on the PRIMARY KEY, and
+--      ON CONFLICT (name) does not suppress a *different* constraint's violation.
+--   2. Even without explicit ids, ON CONFLICT (name) was observed NOT to suppress
+--      a couple of existing rows on the live DB (an arbiter/collation quirk),
+--      duplicating them. A plain `=` match (verified against prod) is reliable.
+-- Result: a true no-op on prod (every name already present), a full seed on a
+-- fresh DB. Parent links resolve by name, so nothing depends on prod's id values.
+
 -- 1a. Top-level categories (parent_id NULL) — must precede children (self-FK).
-INSERT INTO finance.categories (id, name, is_system, parent_id) VALUES
-    (4,  'Transportation', true, NULL),
-    (6,  'Subscriptions',  true, NULL),
-    (9,  'Insurance',      true, NULL),
-    (10, 'Medical',        true, NULL),
-    (11, 'Shopping',       true, NULL),
-    (12, 'Entertainment',  true, NULL),
-    (13, 'Transfer',       true, NULL),
-    (14, 'Income',         true, NULL),
-    (15, 'ATM',            true, NULL),
-    (17, 'Other',          true, NULL),
-    (19, 'House',          true, NULL),
-    (20, 'Food',           true, NULL),
-    (22, 'Travel',         true, NULL),
-    (23, 'Woodshop',       true, NULL)
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO finance.categories (name, is_system, parent_id)
+SELECT v.name, true, NULL
+FROM (VALUES
+    ('Transportation'), ('Subscriptions'), ('Insurance'), ('Medical'), ('Shopping'),
+    ('Entertainment'), ('Transfer'), ('Income'), ('ATM'), ('Other'),
+    ('House'), ('Food'), ('Travel'), ('Woodshop')
+) AS v(name)
+WHERE NOT EXISTS (SELECT 1 FROM finance.categories c WHERE c.name = v.name);
 
--- 1b. Sub-categories.
-INSERT INTO finance.categories (id, name, is_system, parent_id) VALUES
-    (31, 'Trans_Gas',             true, 4),
-    (32, 'Trans_Car_Maintenance', true, 4),
-    (33, 'Trans_Car_Insurance',   true, 4),
-    (34, 'Trans_Public_Transit',  true, 4),
-    (24, 'House_Mortgage',        true, 19),
-    (25, 'House_Utilities',       true, 19),
-    (26, 'House_Maintenance',     true, 19),
-    (27, 'House_Improvement',     true, 19),
-    (28, 'House_Furniture',       true, 19),
-    (29, 'Food_Groceries',        true, 20),
-    (30, 'Food_Dining',           true, 20)
-ON CONFLICT (name) DO NOTHING;
-
--- Keep the id sequence ahead of the explicit ids we inserted (no-op on prod,
--- where the sequence is already past max(id)).
-SELECT setval('finance.categories_id_seq', (SELECT max(id) FROM finance.categories));
+-- 1b. Sub-categories — parent resolved by name (works on fresh; skipped on prod).
+INSERT INTO finance.categories (name, is_system, parent_id)
+SELECT v.name, true, (SELECT id FROM finance.categories c2 WHERE c2.name = v.parent)
+FROM (VALUES
+    ('Trans_Gas',             'Transportation'),
+    ('Trans_Car_Maintenance', 'Transportation'),
+    ('Trans_Car_Insurance',   'Transportation'),
+    ('Trans_Public_Transit',  'Transportation'),
+    ('House_Mortgage',        'House'),
+    ('House_Utilities',       'House'),
+    ('House_Maintenance',     'House'),
+    ('House_Improvement',     'House'),
+    ('House_Furniture',       'House'),
+    ('Food_Groceries',        'Food'),
+    ('Food_Dining',           'Food')
+) AS v(name, parent)
+WHERE NOT EXISTS (SELECT 1 FROM finance.categories c WHERE c.name = v.name);
 
 -- 2. Categorizer config defaults (R2.5 per-tier thresholds, rollout gate, kNN
 --    sizing, recurring tolerances). Feature-gate starts at 'legacy' so the new

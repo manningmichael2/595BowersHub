@@ -9,11 +9,15 @@ is valid and applies from empty — C2).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from backend.database import close_pool
 from backend.services import model_catalog
 from backend.tests.semantic_helpers import apply_migrations
+
+_MIGRATIONS = Path(__file__).resolve().parent.parent / "migrations"
 
 
 def test_categorizer_role_fallback_is_local(monkeypatch):
@@ -100,5 +104,26 @@ async def test_0022_0023_apply_seed_and_columns(fresh_db, db_settings):
                     col,
                 )
                 assert in_view, f"public.transactions view missing {col}"
+    finally:
+        await close_pool()
+
+
+@pytest.mark.asyncio
+async def test_0023_seed_is_idempotent_when_categories_exist(fresh_db, db_settings):
+    """Regression for the 2026-06-20 crash-loop: the seed must be a clean no-op
+    when the categories already exist (the prod condition). The original seed
+    supplied explicit ids with ON CONFLICT (name), so re-running hit the pkey
+    constraint instead of the name arbiter. fresh_db (empty) hid that — so here
+    we run the 0023 seed a SECOND time against a DB that already has it."""
+    pool = await apply_migrations(fresh_db, db_settings)  # runs 0023 once → 25 categories
+    try:
+        seed_sql = (_MIGRATIONS / "0023_seed_finance_categorization.sql").read_text()
+        async with pool.acquire() as conn:
+            before = await conn.fetchval("SELECT count(*) FROM finance.categories")
+            assert before == 25
+            # Re-apply the entire seed: must not raise and must not duplicate.
+            await conn.execute(seed_sql)
+            after = await conn.fetchval("SELECT count(*) FROM finance.categories")
+            assert after == 25
     finally:
         await close_pool()
