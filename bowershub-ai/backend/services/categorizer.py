@@ -215,8 +215,9 @@ def _parse_response(
         parsed = json.loads(match.group(0))
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning(f"Categorizer: failed to parse response: {e}")
-        # Fallback: assign all to Other
-        return [{"id": tid, "category_id": other_id, "fallback": True} for tid in batch_ids]
+        # R5.5: parse failure → abstain (rows stay uncategorized → review queue),
+        # NEVER assign "Other". The previous Other-fallback masked failures.
+        return []
 
     results = []
     for item in parsed:
@@ -224,12 +225,15 @@ def _parse_response(
             continue
         tid = str(item.get("id", ""))
         cat_name = item.get("category", "")
-        cat_id = cat_id_by_name.get(cat_name, other_id)
+        cat_id = cat_id_by_name.get(cat_name)
+        if cat_id is None:
+            # Unknown category → abstain (queue), never "Other" (R5.5).
+            continue
         results.append({
             "id": tid,
             "category_id": cat_id,
             "assigned_category": cat_name,
-            "fallback": cat_name not in cat_id_by_name,
+            "fallback": False,
         })
 
     return results

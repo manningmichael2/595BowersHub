@@ -84,13 +84,13 @@
 - [x] **Volume measured (2026-06-20 live DB): 414 txns / 372 categorized / ≤ few-hundred distinct merchants** → seeded `k=15`, `min_neighbors=3` appropriate; merchant-level vectors keep the HNSW index (0022) trivially small. Figure documented in `knn.py`. Task 13 calibrates.
 - [x] **Tests:** majority-vote + agreement-fraction confidence (k=3, 2-of-3); cold-start category-desc fallback; abstain when Ollama down; HNSW index present on fresh_db; embed_merchants/embed_categories populate + idempotent. **5 passed.**
 
-## Task 9: LLMFallback tier (R2.4) + failure handling
+## Task 9: LLMFallback tier (R2.4) + failure handling — ✅ DONE
 - **Effort:** S
 - **Dependencies:** Task 2, Task 3
 - **Requirements:** R2.4, R5.5
-- [ ] LLM tier over residue only, via `resolve_role("categorizer")` (no literal model ID); reuse the prompt scaffolding minus the hardcoded rules block; map score to [0,1].
-- [ ] Parse-failure / Ollama-down / Batch-timeout → **abstain → queue, never "Other"**; delete the `_parse_response` Other-fallback (`categorizer.py:213-214`).
-- [ ] **Tests:** residue-only invocation; parse-failure and Ollama-down defer to queue (reuse `FakeEmbeddingsClient(fail=True)` pattern); assert the Other-fallback is gone.
+- [x] `services/categorization/llm.py`: LLM tier via `resolve_role("categorizer")` (no literal model id; recorded in rationale for the eval per-model accuracy); single-txn structured prompt over the leaf-category tree, minus the hardcoded rules block; model self-reported score mapped+clamped to [0,1]. Model call is injectable for tests.
+- [x] Parse-failure / Ollama-down / timeout → **abstain → queue, never "Other"** (rationale `model_unavailable` / `parse_failure_or_unknown`); unknown category name also abstains. Deleted the `_parse_response` Other-fallback in legacy `categorizer.py` (parse-failure → `[]`, unknown category → skip).
+- [x] **Tests:** valid mapping + confidence; markdown-strip + clamp; Ollama-down abstain; parse-failure + unknown-category abstain (never Other); `build_llm_tier` loads leaves from DB; legacy Other-fallback source removed. **6 passed** (+ legacy reproduce-then-fix still green).
 
 ## Task 10: Pipeline + ConfidenceGate + Writer + nightly orchestration (R2.5, R2.6, R3.4, R5.2, R5.3, R5.6)
 - **Effort:** L
