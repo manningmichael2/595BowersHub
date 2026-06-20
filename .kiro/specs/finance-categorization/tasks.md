@@ -64,15 +64,15 @@
 - [x] "Apply to existing matching" (`apply_rule_to_existing`) re-runs the predicate over history on demand; guarded UPDATE never clobbers a `user_category_override` (returns matched vs updated so the guard is observable). Bulk write via API → Writer choke point + RBAC in Task 11.
 - [x] **Tests:** priority/first-match; amount-range + regex; empty rule inert; account-scoped rule loaded from DB; apply-to-existing guarded (matched=3, updated=2 with one override). **5 passed.**
 
-## Task 7: MerchantMemory tier + LearningService (R2.2, R3)
+## Task 7: MerchantMemory tier + LearningService (R2.2, R3) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 2, Task 3
 - **Requirements:** R2.2, R3.1, R3.2
-- [ ] MerchantMemory tier: deterministic lookup of `finance.merchants.category_prior` + strongest `finance.merchant_memory` signal for the `merchant_key`, consulted **before any model call** (R2.2); confidence from reinforcement + recency.
-- [ ] `LearningService.record_correction` upserts/strengthens `merchant_memory` keyed on normalized `merchant_key` (R3.1), feeding the deterministic tier (R3.2).
-- [ ] **Redirect the existing writer (B-1):** route `category_override.py:53-56` corrections through `LearningService.record_correction` instead of the (now-migrated-away) `category_examples` table, so chat-path corrections reinforce `merchant_memory`.
-- [ ] **Migration:** drop the `0018` trigger + `fn_learn_from_manual_override`; forward-migrate `category_examples` → `merchant_memory` (re-keyed; documented down-migration). Retain `category_aliases` + `lookup_category_alias`.
-- [ ] **Tests:** corrected merchant categorized on next occurrence **without an LLM call**; reinforcement raises confidence; **a correction via the chat-skill path lands in `merchant_memory`**; trigger gone, aliases intact.
+- [x] MerchantMemory tier (`services/categorization/memory.py`): deterministic lookup of the strongest `finance.merchant_memory` signal for the `merchant_key`, falling back to the directory `category_prior_id` (R1.2/R2.2), consulted **before any model call**; bounded monotone confidence (`memory_confidence`) from reinforcement count + recency half-life decay.
+- [x] `LearningService.record_correction` (`services/categorization/learning.py`) upserts/strengthens `merchant_memory` keyed on normalized `merchant_key` (R3.1, derived via the DB rules when only a description is given), bumps reinforcement+recency, ensures a directory row, appends a provenance decision row — feeding the deterministic tier (R3.2).
+- [x] **Redirect the existing writer (B-1):** `category_override.categorize_merchant` now calls `record_correction` (source=`chat_skill`) instead of the deprecated `category_examples` INSERT.
+- [x] **Migration `0026_learning_service_cutover.sql`:** drops the `0018` trigger + `fn_learn_from_manual_override`; forward-migrates `category_examples` → `merchant_memory` (re-keyed via `UPPER(trim())`, `ON CONFLICT DO NOTHING` idempotent; provenance row); documented manual down-migration. `category_aliases` + `lookup_category_alias` retained (M1); deprecated `category_examples` table left in place (non-destructive/reversible).
+- [x] **Tests:** corrected merchant categorized next time with **no model call** (unknown abstains); reinforcement raises confidence; category_prior fallback weaker; **chat-path correction lands in `merchant_memory`**; trigger+function gone, `category_aliases` reader intact; forward-migration idempotent. **7 passed.**
 - *Note:* the **gated mass-recategorization** behind "apply to all from this merchant" (R3.3) is performed in Task 11 via the Writer choke point (Task 10) + endpoint RBAC — `record_correction` here only provides the learning helper, not the bulk write.
 
 ## Task 8: EmbeddingKNN tier (R2.3)

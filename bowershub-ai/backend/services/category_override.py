@@ -7,6 +7,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from backend.database import get_pool
+from backend.services.categorization.learning import record_correction
 from backend.services.normalization import lookup_category_alias
 
 logger = logging.getLogger(__name__)
@@ -47,16 +48,14 @@ async def categorize_merchant(description_pattern: str, category_name: str) -> d
             cat_row["id"]
         )
 
-        # 3. Always save the rule (Learning Loop)
-        await conn.execute(
-            """
-            INSERT INTO finance.category_examples (description_pattern, category_id, times_reinforced)
-            VALUES ($1, $2, 1)
-            ON CONFLICT (lower(description_pattern), category_id) DO UPDATE
-            SET times_reinforced = finance.category_examples.times_reinforced + 1,
-                updated_at = NOW()
-            """,
-            description_pattern.upper(), cat_row["id"],
+        # 3. Always reinforce the learned signal (Learning Loop). Redirected from
+        #    the now-deprecated category_examples table to the deterministic
+        #    LearningService → finance.merchant_memory (B-1), so chat-path
+        #    corrections feed the tier the cascade actually reads (R3.2). The
+        #    pattern is normalized to a merchant_key via the DB rules.
+        await record_correction(
+            conn, category_id=cat_row["id"], description=description_pattern,
+            source="chat_skill",
         )
 
     if not rows:
