@@ -136,6 +136,14 @@ async def sync_simplefin(window_days: int = 14) -> dict:
             if result:
                 inserted += 1
 
+    # Normalize merchant keys for newly-ingested transactions (R1.1/R1.5 ingest
+    # hook). Non-fatal: a normalization failure must not fail the sync.
+    try:
+        from backend.services.merchant_normalizer import backfill_merchant_keys
+        await backfill_merchant_keys(only_missing=True)
+    except Exception as e:
+        logger.warning(f"Merchant normalization after sync failed: {e}")
+
     # Flag investments and transfers on the new data
     try:
         from backend.services.investment_detector import flag_investments_in_db
