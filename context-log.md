@@ -726,3 +726,27 @@ Implemented the first three spec tasks, each verified against a throwaway `pgvec
 
 - **`main` is now AHEAD of `spec/finance-categorization`** (the `0023` fix landed on main directly). Continue Task 4+ from `main` (or a fresh branch off main); the spec branch is stale.
 - [Next] Tasks 4–13 (eval harness → TransferDetector → RuleEngine → MerchantMemory/learning → kNN → LLM → pipeline/gate/writer → review API → frontend → calibrate+cutover). Still gated behind `categorizer_engine`; flip `legacy→shadow→cascade` only after the tiers + eval land.
+
+---
+
+## [2026-06-20] finance-categorization Tasks 4–13 IMPLEMENTED (cascade complete, still dark) — Claude Code
+
+Continued the spec from Tasks 1–3 → implemented the remaining **Tasks 4–13** on branch `feat/finance-categorization-tiers` (off `main`), each verified against a throwaway `pgvector/pgvector:pg16` (port 5544; the live `postgres` container is the prod `finance` DB — kept untouched). **Full backend suite 621 passed** (was 564 after Task 3), **frontend 230 passed + tsc clean**, **spec validator 32/32 traceable**. One commit per task.
+
+**What landed** (all under the new `services/categorization/` package + `categorization_eval.py`):
+- **T4** `0025_seed_eval_labels.sql` (25 hand-verified labels, 6 transfer/debt cases incl. ATM-not-transfer) + classifier-agnostic eval harness (`score_classifier`, per-tier/per-model accuracy + transfer confusion). `Decision`/`TxnContext`/`Classifier` spine in `base.py`.
+- **T5** `TransferDetector` (tier 0): counterpart match (R6.1) + confirmed liability payment via `account_type` (R6.2); asymmetric gate (auto high-conf, ambiguous→"transfer?" queue, R6.3); honors `is_transfer_manual` (M6); idempotent historical `transfer_backfill`. Shared `config.py` (DB-driven thresholds/engine/knn).
+- **T6** `RuleEngine` (tier 1): priority first-match over `user_rules`, AND-match merchant_key/regex/amount-range/account_id, terminal conf 1.0; guarded apply-to-existing.
+- **T7** `MerchantMemory` (tier 2) + `LearningService.record_correction` (keyed on normalized merchant_key); `0026_learning_service_cutover.sql` drops the 0018 trigger + forward-migrates `category_examples`→`merchant_memory` (idempotent); `category_override.py` chat writer redirected (B-1); `category_aliases` kept (M1). **Recalibrated base confidence so a single correction (0.85) clears τ → R3 stickiness.**
+- **T8** `EmbeddingKNN` (tier 3): merchant-level bge-m3/halfvec kNN majority vote (agreement-fraction confidence), cold-start nearest-category fallback (B2), graceful Ollama-down abstain; `embed_merchants`/`embed_categories`. **Volume measured (414 txns) → k=15/min_neighbors=3 confirmed.**
+- **T9** `LLMFallback` (tier 4): residue-only via `resolve_role("categorizer")` (no literal id), injectable model call, parse-fail/down/unknown→abstain (never "Other"); deleted the legacy `_parse_response` Other-fallback.
+- **T10** `CategorizationPipeline` + `ConfidenceGate` (per-tier τ) + single `Writer` (guarded write-time recheck R3.4, provenance R2.6) + `orchestrator.run_cascade` (work-set B-2, inline-on-read B3, per-row commit R5.2, **shadow suppresses all writes** M4) + `categorization_metrics` (R5.6). `run_categorizer` now dispatches by the `categorizer_engine` gate; legacy path preserved.
+- **T11** `routers/finance_review.py` (registered): Pydantic models (no `any`); reads via `get_current_user`, writes via `require_admin` (RBAC MN4); `/review-queue` (R4.1), categorize/bulk-categorize (learning), `/merchants/{key}/apply-category` (gated mass-recat R3.3), user-rules CRUD, `/recurring` (R4.5), `/categories`; DB-down→typed 503.
+- **T12** `pages/FinanceReviewPage.tsx` (route `/finance/review`, lazy) + typed `services/financeReview.ts` + `components/MerchantLogo.tsx` (graceful favicon→avatar, R1.6).
+- **T13** `score_cascade` (full-cascade scoring) + `write_thresholds`/`set_engine`; `test_eval_regression_gate.py` (CI gate, documented in `ci.yml`); nightly `categorization_warmup` job (02:15: embeddings + transfer backfill); `docs/finance-categorization-cutover.md` runbook.
+
+**State / behavior:** **Nothing changed in prod categorization behavior** — `categorizer_engine` is still `legacy`, so the whole cascade is dark scaffolding; the only live effects remain the Task-1 R5.1 fix + merchant-key normalization on ingest. Migrations `0025`/`0026` are migrator-owned and apply from empty (C2). Branch is **not merged/deployed yet** — awaiting review.
+
+**Remaining = owner-gated manual steps (Task 13 runbook):** (1) run the model A/B against **live Ollama** to pick the local `categorizer` model and update `_FALLBACK_ROLE_MODEL["categorizer"]` + the `0023` alias in lockstep (placeholder `llama3.2:3b` until then); (2) calibrate thresholds; (3) flip `legacy→shadow`, validate from the decision log; (4) flip `shadow→cascade`. All are single config rows, instant rollback, no redeploy.
+
+- [Next] Open a PR from `feat/finance-categorization-tiers` → review → merge → deploy (migrations `0025`/`0026` apply as migrator). Then walk `docs/finance-categorization-cutover.md` on prod when ready to turn the cascade on.
