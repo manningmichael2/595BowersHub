@@ -36,13 +36,13 @@
 - [x] Separate idempotent `backfill_merchant_keys` (only_missing or full re-derive); runs in its own connection, not the nightly critical section.
 - [x] **Tests:** R1.1 fixture table run against the **actual seeded rules** (incl. `COSTCO WHSE #0393 MADISON HEIGHMI → Costco`, `SQ *SUNRISE BAKERY → Sunrise Bakery`, unmatched fallthrough) + pure-engine + idempotent backfill. **Full suite 564 passed** on throwaway pgvector pg16.
 
-## Task 4: Evaluation harness skeleton + labels (R2.7)
+## Task 4: Evaluation harness skeleton + labels (R2.7) — ✅ DONE
 - **Effort:** S
 - **Dependencies:** Task 2
 - **Requirements:** R2.7
-- [ ] Seed `finance.eval_labels` with hand-verified `transaction → category` pairs, **including transfer/debt-payment cases**.
-- [ ] `services/categorization_eval.py` skeleton — scoring/reporting plumbing that takes a classifier callable and emits per-tier/per-model accuracy + transfer-flag confusion. (Full-cascade scoring is wired once the pipeline exists — Task 13.)
-- [ ] **Tests:** labels seed on `fresh_db` against seeded categories; the harness scores a single stub classifier end-to-end (proves the plumbing, not the real tiers).
+- [x] Seed `finance.eval_labels` with hand-verified `transaction → category` pairs, **including transfer/debt-payment cases** (`0025_seed_eval_labels.sql`: 25 labels, 6 transfer/debt cases incl. an ATM-not-transfer negative; idempotent `NOT EXISTS` guard; categories resolved by name).
+- [x] `services/categorization_eval.py` skeleton — classifier-agnostic plumbing (`score_classifier(classify, labels)`) emitting per-tier/per-model accuracy + a transfer-flag confusion matrix (precision/recall). Category accuracy scored over non-transfer labels only. (Full-cascade scoring wired in Task 13.) Core `Decision`/`TxnContext`/`Classifier` value objects added in `services/categorization/base.py`.
+- [x] **Tests:** labels seed + resolve on `fresh_db`; seed idempotency; the harness scores a stub classifier end-to-end (per-tier accuracy, transfer TP/FP, abstain count, serialization). **3 passed.**
 
 ## Task 5: TransferDetector tier (Feature 6)
 - **Effort:** M
