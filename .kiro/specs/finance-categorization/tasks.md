@@ -44,16 +44,17 @@
 - [x] `services/categorization_eval.py` skeleton — classifier-agnostic plumbing (`score_classifier(classify, labels)`) emitting per-tier/per-model accuracy + a transfer-flag confusion matrix (precision/recall). Category accuracy scored over non-transfer labels only. (Full-cascade scoring wired in Task 13.) Core `Decision`/`TxnContext`/`Classifier` value objects added in `services/categorization/base.py`.
 - [x] **Tests:** labels seed + resolve on `fresh_db`; seed idempotency; the harness scores a stub classifier end-to-end (per-tier accuracy, transfer TP/FP, abstain count, serialization). **3 passed.**
 
-## Task 5: TransferDetector tier (Feature 6)
+## Task 5: TransferDetector tier (Feature 6) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 2, Task 3
 - **Requirements:** R6.1, R6.2, R6.3, R6.4
-- [ ] Tier-0 detector: counterpart-matched inter-account transfers (R6.1) and payments into known-liability accounts via `finance.accounts.account_type` (R6.2); sets `is_transfer`, short-circuits spending categorization (R6.4).
-- [ ] Asymmetric gate: auto-flag only ≥ `τ_transfer`; ambiguous single-leg cases → distinct "transfer?" review item, never a silent flag (R6.3).
-- [ ] Honor `is_transfer_manual` in the cascade-entry predicate and the work-set (`AND is_transfer = false`); never re-flag a hand-marked row (M6).
-- [ ] One-time idempotent historical transfer-flag backfill (respects `is_transfer_manual`).
-- [ ] Leave `investment_detector` / `is_investment` untouched (orthogonal, out of scope).
-- [ ] **Tests:** checking→savings + CC/loan/mortgage payment flagged via DB `account_type`, excluded from spending totals, never categorized; ambiguous single-leg → queue; un-flag restores the spending total.
+- [x] Tier-0 detector (`services/categorization/transfer.py`): counterpart-matched inter-account transfers (R6.1, opposite-sign/~equal-amount/near-date in a *different* account) and confirmed payments into known-liability accounts via `finance.accounts.account_type` (R6.2); sets `is_transfer`, returns `category_id=None` so spending categorization is short-circuited (R6.4).
+- [x] Asymmetric gate: counterpart/confirmed-liability → high confidence (0.95–0.98, terminal); ambiguous single-leg / unconfirmed liability inflow → confidence 0.5, non-terminal → distinct "transfer?" review item (R6.3), never a silent flag. Bare ATM cash withdrawal is NOT treated as a transfer.
+- [x] Honor `is_transfer_manual`: detector abstains entirely on hand-marked rows (M6); the work-set predicate (`AND is_transfer = false`) keeps manually-flagged rows out.
+- [x] One-time idempotent historical transfer-flag backfill (`transfer_backfill.py`): flags only ≥ `τ_transfer` (DB config), guarded UPDATE respects `is_transfer_manual`, per-row commit, own connection.
+- [x] `investment_detector` / `is_investment` left untouched (orthogonal).
+- [x] Added shared `services/categorization/config.py` (DB-driven per-tier thresholds / engine gate / kNN sizing — used here and by the gate/kNN later).
+- [x] **Tests:** counterpart flag; liability payment via `account_type` (+ refund→queue); ambiguous single-leg → queue; ATM not a transfer; `is_transfer_manual` honored; flag excludes from spending total + un-flag restores; idempotent backfill (skips manual + ambiguous). **6 passed.**
 
 ## Task 6: RuleEngine tier (R2.1)
 - **Effort:** S
