@@ -108,12 +108,38 @@ async def lifespan(app: FastAPI):
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
     from backend.services.categorizer import run_categorizer
+    from backend.services.simplefin_sync import sync_simplefin
     from backend.services.embedding_worker import run_embedding_worker
     from backend.services.alerts import check_budgets, check_inbox, check_reminders
     from backend.services.gameday_alerts import check_gameday_alerts
 
     scheduler = AsyncIOScheduler()
-    # Run categorizer at 2:30am daily (after SimpleFin nightly sync at 2am)
+
+    async def _scheduled_simplefin_sync():
+        # R5.4: the nightly SimpleFin sync now actually runs (it was never
+        # scheduled — the categorizer's "after the 2am sync" comment was fiction).
+        # It is an independent job, so a failure or overrun never blocks the
+        # 2:30 categorizer — that run simply works on present data and picks up
+        # late arrivals next night (sync is idempotent on txn id).
+        try:
+            result = await sync_simplefin()
+            if not result.get("ok", False):
+                logger.warning(
+                    "Scheduled SimpleFin sync did not complete cleanly: %s",
+                    result.get("error"),
+                )
+            return result
+        except Exception:
+            logger.exception("Scheduled SimpleFin sync failed")
+
+    # Run SimpleFin sync at 2:00am, then the categorizer at 2:30am (R5.4).
+    scheduler.add_job(
+        _scheduled_simplefin_sync,
+        CronTrigger(hour=2, minute=0),
+        id="simplefin_sync",
+        name="SimpleFin nightly sync",
+        replace_existing=True,
+    )
     scheduler.add_job(
         run_categorizer,
         CronTrigger(hour=2, minute=30),
@@ -208,7 +234,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.start()
     app.state.scheduler = scheduler
-    logger.info("Background scheduler started (categorizer 2:30am, briefing 7am, alerts every 30-60min, reminders every 1min, gameday every 30min)")
+    logger.info("Background scheduler started (simplefin sync 2:00am, categorizer 2:30am, briefing 7am, alerts every 30-60min, reminders every 1min, gameday every 30min)")
 
     # Discover and register native skill handlers
     from backend.services.skill_registry import discover_skills

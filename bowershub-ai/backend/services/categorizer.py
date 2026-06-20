@@ -42,20 +42,25 @@ async def run_categorizer() -> dict:
 
     async with pool.acquire() as conn:
         # 1. Fetch categories (to build the leaf list)
+        # NOTE: all finance relations are schema-qualified to finance.* (R5.1).
+        # The runtime bowershub_app role has no SET search_path, so unqualified
+        # `transactions` resolves to public.transactions — a non-updatable JOIN
+        # view (migration 0016) — which made the nightly UPDATE below silently
+        # error and persist nothing.
         categories = await conn.fetch(
-            "SELECT id, name, parent_id FROM categories ORDER BY COALESCE(parent_id, id), name"
+            "SELECT id, name, parent_id FROM finance.categories ORDER BY COALESCE(parent_id, id), name"
         )
 
         # 2. Fetch few-shot examples
         examples = await conn.fetch(
             "SELECT e.description_pattern, c.name AS category_name "
-            "FROM category_examples e JOIN categories c ON e.category_id = c.id "
+            "FROM finance.category_examples e JOIN finance.categories c ON e.category_id = c.id "
             "ORDER BY e.times_reinforced DESC, e.updated_at DESC LIMIT 30"
         )
 
         # 3. Fetch uncategorized transactions
         transactions = await conn.fetch(
-            "SELECT id, description, memo, amount FROM transactions "
+            "SELECT id, description, memo, amount FROM finance.transactions "
             "WHERE category_id IS NULL AND user_category_override = false "
             "ORDER BY posted_date DESC LIMIT $1",
             MAX_TRANSACTIONS,
@@ -141,7 +146,7 @@ async def run_categorizer() -> dict:
                 if item["category_id"] is None:
                     continue
                 await conn.execute(
-                    "UPDATE transactions SET category_id = $1 "
+                    "UPDATE finance.transactions SET category_id = $1 "
                     "WHERE id = $2 AND user_category_override = false AND category_id IS NULL",
                     item["category_id"],
                     item["id"],

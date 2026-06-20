@@ -28,79 +28,40 @@ from backend.routers.dashboard import (
     finance_balances,
     finance_recent_transactions,
 )
+from backend.services.categorizer import run_categorizer
+from backend.tests.semantic_helpers import apply_migrations
 
 
 # ---------------------------------------------------------------------------
 # Real-DB fixture
 #
-# The success-path tests below run against a fresh ephemeral Postgres DB
-# (see conftest.py::fresh_db) with the `finance` schema created to match
-# what the endpoints actually query — they previously used hand-built
-# AsyncMocks that drifted out of sync with the real SQL (the accounts query
-# now selects org_name/account_name/last_balance, not name/type/current_balance).
-# init_pool() populates the module-level pool that dashboard.get_pool() reads,
-# so no patching of get_pool is needed.
+# The success-path tests below run against a fresh ephemeral Postgres DB built
+# from the REAL baseline via run_migrations() (not a hand-rolled mini-schema).
+# The previous hand-built `finance` schema drifted from production — most
+# importantly it gave `finance.transactions` a SERIAL `id` and omitted
+# `user_category_override`, which is *why* the R5.1 categorizer bug went
+# unnoticed (the nightly UPDATE never ran against the real non-updatable
+# public.transactions JOIN view in tests). apply_migrations() sets the
+# module-level pool that dashboard.get_pool()/categorizer.get_pool() read, so
+# the endpoints and the categorizer hit this DB without any monkeypatching.
+#
+# Real-schema notes for seeding: finance.accounts.id and finance.transactions.id
+# are varchar(128) with no default; finance.transactions.account_id is NOT NULL
+# (FK → finance.accounts). finance.categories.id has a sequence default, so
+# category inserts may omit id.
 # ---------------------------------------------------------------------------
-
-
-async def _create_finance_schema(pool: asyncpg.Pool) -> None:
-    async with pool.acquire() as conn:
-        await conn.execute("CREATE SCHEMA IF NOT EXISTS finance")
-        await conn.execute(
-            """
-            CREATE TABLE finance.categories (
-                id   SERIAL PRIMARY KEY,
-                name TEXT NOT NULL
-            )
-            """
-        )
-        await conn.execute(
-            """
-            CREATE TABLE finance.transactions (
-                id            SERIAL PRIMARY KEY,
-                account_id    INT,
-                amount        NUMERIC NOT NULL,
-                description   TEXT,
-                category_id   INT REFERENCES finance.categories(id),
-                posted_date   DATE,
-                is_transfer   BOOLEAN NOT NULL DEFAULT false,
-                is_investment BOOLEAN NOT NULL DEFAULT false,
-                created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-        await conn.execute(
-            """
-            CREATE TABLE finance.accounts (
-                id           SERIAL PRIMARY KEY,
-                org_name     TEXT,
-                account_name TEXT,
-                last_balance NUMERIC
-            )
-            """
-        )
 
 
 @pytest_asyncio.fixture
 async def finance_pool(fresh_db, db_settings):
-    """Ephemeral DB with the `finance` schema; yields the live asyncpg pool.
+    """Ephemeral DB built from the real baseline; yields the live asyncpg pool.
 
-    init_pool() sets the module-level pool consumed by dashboard.get_pool(),
-    so the endpoints hit this DB without any monkeypatching.
+    apply_migrations() sets the module-level pool consumed by
+    dashboard.get_pool() and categorizer.get_pool(), so callers hit this DB
+    without any monkeypatching.
     """
-    config = Config(
-        ANTHROPIC_API_KEY="test",
-        DB_HOST=str(db_settings["host"]),
-        DB_PORT=int(db_settings["port"]),
-        DB_NAME=fresh_db,
-        DB_USER=str(db_settings["user"]),
-        DB_PASSWORD=str(db_settings["password"]),
-        JWT_SECRET="test-secret-for-finance-endpoint-tests",
-        N8N_BASE="http://localhost:5678",
-    )
-    pool = await init_pool(config)
+    pool = await apply_migrations(fresh_db, db_settings)
     try:
-        await _create_finance_schema(pool)
         yield pool
     finally:
         await close_pool()
@@ -148,6 +109,10 @@ async def test_finance_summary_success(finance_pool):
     be excluded from the spending/income totals.
     """
     async with finance_pool.acquire() as conn:
+        acct = await conn.fetchval(
+            "INSERT INTO finance.accounts (id, org_name, account_name) "
+            "VALUES (gen_random_uuid()::text, 'Test', 'Checking') RETURNING id"
+        )
         cats = {}
         for name in ("Food", "Gas", "Entertainment"):
             cats[name] = await conn.fetchval(
@@ -161,16 +126,16 @@ async def test_finance_summary_success(finance_pool):
         await conn.execute(
             f"""
             INSERT INTO finance.transactions
-                (amount, description, category_id, posted_date, is_transfer, is_investment)
+                (id, account_id, amount, description, category_id, posted_date, is_transfer, is_investment)
             VALUES
-                (-400, 'groceries',  $1, {this_month}, false, false),
-                (-200, 'fuel',       $2, {this_month}, false, false),
-                (-150, 'movie',      $3, {this_month}, false, false),
-                ( 3500,'paycheck', NULL, {this_month}, false, false),
-                (-1000,'xfer',     NULL, {this_month}, true,  false),
-                (-500, 'brokerage',NULL, {this_month}, false, true)
+                (gen_random_uuid()::text, $4, -400, 'groceries',  $1, {this_month}, false, false),
+                (gen_random_uuid()::text, $4, -200, 'fuel',       $2, {this_month}, false, false),
+                (gen_random_uuid()::text, $4, -150, 'movie',      $3, {this_month}, false, false),
+                (gen_random_uuid()::text, $4,  3500,'paycheck', NULL, {this_month}, false, false),
+                (gen_random_uuid()::text, $4, -1000,'xfer',     NULL, {this_month}, true,  false),
+                (gen_random_uuid()::text, $4, -500, 'brokerage',NULL, {this_month}, false, true)
             """,
-            cats["Food"], cats["Gas"], cats["Entertainment"],
+            cats["Food"], cats["Gas"], cats["Entertainment"], acct,
         )
 
         # Previous month: spending -2000, income +3000.
@@ -178,11 +143,12 @@ async def test_finance_summary_success(finance_pool):
         await conn.execute(
             f"""
             INSERT INTO finance.transactions
-                (amount, description, category_id, posted_date, is_transfer, is_investment)
+                (id, account_id, amount, description, category_id, posted_date, is_transfer, is_investment)
             VALUES
-                (-2000, 'rent',  NULL, {prev_month}, false, false),
-                ( 3000, 'wages', NULL, {prev_month}, false, false)
-            """
+                (gen_random_uuid()::text, $1, -2000, 'rent',  NULL, {prev_month}, false, false),
+                (gen_random_uuid()::text, $1,  3000, 'wages', NULL, {prev_month}, false, false)
+            """,
+            acct,
         )
 
     with patch("backend.routers.dashboard._validate_finance_columns", new_callable=AsyncMock):
@@ -262,13 +228,13 @@ async def test_finance_balances_success(finance_pool):
     async with finance_pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO finance.accounts (org_name, account_name, last_balance)
+            INSERT INTO finance.accounts (id, org_name, account_name, last_balance)
             VALUES
-                ('Chase',          'Checking', 5000),
-                ('Chase',          'Credit',  -2000),
-                ('Ally',           'Savings', 15000),
-                ('Vanguard',       '401k',    50000),
-                ('Email Receipts', 'noise',     999)
+                (gen_random_uuid()::text, 'Chase',          'Checking', 5000),
+                (gen_random_uuid()::text, 'Chase',          'Credit',  -2000),
+                (gen_random_uuid()::text, 'Ally',           'Savings', 15000),
+                (gen_random_uuid()::text, 'Vanguard',       '401k',    50000),
+                (gen_random_uuid()::text, 'Email Receipts', 'noise',     999)
             """
         )
 
@@ -325,10 +291,10 @@ async def test_finance_balances_null_balance(finance_pool):
     async with finance_pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO finance.accounts (org_name, account_name, last_balance)
+            INSERT INTO finance.accounts (id, org_name, account_name, last_balance)
             VALUES
-                ('Chase', 'Checking', NULL),
-                ('Ally',  'Savings',  100)
+                (gen_random_uuid()::text, 'Chase', 'Checking', NULL),
+                (gen_random_uuid()::text, 'Ally',  'Savings',  100)
             """
         )
 
@@ -547,3 +513,59 @@ async def test_validate_finance_columns_runs_once():
 
     # Reset for other tests
     mod._finance_columns_validated = False
+
+
+# ---------------------------------------------------------------------------
+# R5.1 — the nightly categorizer's write must persist to finance.transactions
+#
+# Reproduce-then-fix regression for the silently-dead categorizer: it used to
+# UPDATE an *unqualified* `transactions`, which under the runtime role resolves
+# to public.transactions — a non-updatable multi-table JOIN view (migration
+# 0016, no INSTEAD OF trigger) — so the UPDATE errored and nothing persisted.
+# Run against the REAL baseline so public.transactions is the real view and
+# finance.transactions has all categorization columns (the old hand-rolled test
+# schema had neither, which is why this bug went unnoticed).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_categorizer_r51_reproduce_then_fix(finance_pool):
+    async with finance_pool.acquire() as conn:
+        acct = await conn.fetchval(
+            "INSERT INTO finance.accounts (id, org_name, account_name) "
+            "VALUES (gen_random_uuid()::text, 'Test', 'Checking') RETURNING id"
+        )
+        cat = await conn.fetchval(
+            "INSERT INTO finance.categories (name) VALUES ('Food_Groceries') RETURNING id"
+        )
+        txn = await conn.fetchval(
+            "INSERT INTO finance.transactions (id, account_id, posted_date, amount, description) "
+            "VALUES (gen_random_uuid()::text, $1, CURRENT_DATE, -42.00, 'KROGER #123') RETURNING id",
+            acct,
+        )
+
+        # (1) Reproduce: the OLD unqualified write targeted public.transactions,
+        # a non-updatable JOIN view — the UPDATE raises.
+        with pytest.raises(asyncpg.PostgresError):
+            await conn.execute(
+                "UPDATE public.transactions SET category_id = $1 WHERE id = $2",
+                cat, txn,
+            )
+
+    # (2) Fix: run_categorizer (now schema-qualified to finance.*) persists the
+    # category to finance.transactions. Ollama is stubbed to return a valid label.
+    fake_response = '[{"id": "%s", "category": "Food_Groceries"}]' % txn
+    with patch(
+        "backend.services.categorizer._call_ollama",
+        new=AsyncMock(return_value=fake_response),
+    ):
+        summary = await run_categorizer()
+
+    assert summary["status"] == "completed"
+    assert summary["updated"] == 1
+
+    async with finance_pool.acquire() as conn:
+        persisted = await conn.fetchval(
+            "SELECT category_id FROM finance.transactions WHERE id = $1", txn
+        )
+    assert persisted == cat
