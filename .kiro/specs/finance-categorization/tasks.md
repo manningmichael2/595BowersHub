@@ -92,17 +92,17 @@
 - [x] Parse-failure / Ollama-down / timeout → **abstain → queue, never "Other"** (rationale `model_unavailable` / `parse_failure_or_unknown`); unknown category name also abstains. Deleted the `_parse_response` Other-fallback in legacy `categorizer.py` (parse-failure → `[]`, unknown category → skip).
 - [x] **Tests:** valid mapping + confidence; markdown-strip + clamp; Ollama-down abstain; parse-failure + unknown-category abstain (never Other); `build_llm_tier` loads leaves from DB; legacy Other-fallback source removed. **6 passed** (+ legacy reproduce-then-fix still green).
 
-## Task 10: Pipeline + ConfidenceGate + Writer + nightly orchestration (R2.5, R2.6, R3.4, R5.2, R5.3, R5.6)
+## Task 10: Pipeline + ConfidenceGate + Writer + nightly orchestration — ✅ DONE
 - **Effort:** L
 - **Dependencies:** Task 5, Task 6, Task 7, Task 8, Task 9
 - **Requirements:** R2.5, R2.6, R3.4, R5.2, R5.3, R5.6
-- [ ] `CategorizationPipeline` runs tiers in **fixed code order** (transfer→rule→memory→kNN→LLM, R5.3), short-circuits on first decision clearing its per-tier τ or on `is_transfer`/`terminal` (R2.6); returns best sub-threshold decision for the queue.
-- [ ] Work-set predicate excludes already-settled rows: `category_id IS NULL AND user_category_override = false AND is_transfer = false AND is_investment = false` (B-2 — investment rows must not be categorized as spending; leaves `investment_detector`/`is_investment` untouched).
-- [ ] `ConfidenceGate` uses **per-tier thresholds** from `finance.categorizer_config` (R2.5); above → auto-apply, below → review queue (never "Other").
-- [ ] Single Writer choke point: schema-qualified UPDATE with `WHERE user_category_override=false AND category_id IS NULL` (write-time re-check, R3.4); per-row commit (idempotent + resumable, R5.2); append `categorization_decision` with `prior_category_id` (R2.6, reversible).
-- [ ] Evolve `run_categorizer()` into the orchestrator; honor the `categorizer_engine` gate incl. **shadow mode suppressing all writes** (category + `is_transfer`), provenance-only.
-- [ ] Observability (R5.6): structured per-tier / auto-vs-queue / LLM-call / failure metrics computed from the decision log (authoritative).
-- [ ] **Tests:** cascade order/short-circuit; per-tier gate (below→queue, above→auto); mid-batch correction not clobbered (R3.4); double-run no-op + partial-batch resumable (R5.2); shadow mode mutates nothing; provenance reconstructs coverage/LLM counts (R5.6); an `is_transfer=true` and an `is_investment=true` row are each never assigned a spending category.
+- [x] `CategorizationPipeline` (`pipeline.py`) runs tiers in **fixed code order** (transfer→rule→memory→kNN→LLM), short-circuits on `is_transfer`, `terminal`, or first decision clearing its per-tier τ; otherwise returns the most-confident sub-threshold decision for the queue (R4.1). Honors per-tier `enable` flags.
+- [x] Work-set predicate (`orchestrator._WORKSET_SQL`): `category_id IS NULL AND user_category_override = false AND is_transfer = false AND is_investment = false` (B-2). `investment_detector`/`is_investment` untouched.
+- [x] `ConfidenceGate` uses **per-tier thresholds** from `finance.categorizer_config` (R2.5). Recalibrated default merchant-memory base so a single user correction (0.85) clears τ (0.8) → R3 stickiness.
+- [x] Single `Writer` choke point: schema-qualified guarded UPDATEs (`user_category_override=false AND category_id IS NULL` for category; `is_transfer=false AND is_transfer_manual=false` for transfer); appends `categorization_decision` (prior/applied category, model_id, is_transfer_set, auto_applied, rationale) — reversible (R2.6); per-row transaction = idempotent + resumable (R5.2).
+- [x] `run_categorizer()` dispatches by the `categorizer_engine` gate: `legacy` → R5.1-fixed single pass (`_run_legacy`); `shadow`/`cascade` → `run_cascade`. **Shadow suppresses ALL writes** (category + is_transfer), provenance-only (M4). Inline-on-read merchant-key derivation (B3). Injectable embeddings/LLM for tests.
+- [x] Observability (R5.6): `categorization_metrics()` reconstructs per-tier / auto-vs-queue / LLM-call / transfer counts from the authoritative decision log.
+- [x] **Tests:** short-circuit ordering; terminal/transfer gating; below→queue best-candidate; per-tier thresholds; disabled-tier skip; Writer guard blocks mid-batch correction (R3.4); shadow mutates nothing but logs; cascade applies + idempotent double-run + provenance; transfer & investment rows never categorized (B-2); LLM residue + call metrics. **11 passed.**
 
 ## Task 11: Typed review write API (R4)
 - **Effort:** M

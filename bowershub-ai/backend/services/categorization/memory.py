@@ -19,9 +19,12 @@ from .base import Decision, TxnContext
 
 logger = logging.getLogger(__name__)
 
-# Reinforcement → base confidence: 1 correction → 0.70, then +0.05 each, capped.
-_BASE_FLOOR = 0.70
-_BASE_STEP = 0.05
+# Reinforcement → base confidence. An explicit user correction is authoritative,
+# so a single one (0.85) already clears the default τ_merchant_memory (0.8) — this
+# is what gives R3 "correction stickiness" (a corrected merchant auto-applies next
+# time rather than re-queuing). Further reinforcement raises it toward the cap.
+_BASE_FLOOR = 0.85
+_BASE_STEP = 0.03
 _BASE_CAP = 0.95
 # Recency half-life (days) for the gentle decay applied to the base confidence.
 _HALF_LIFE_DAYS = 730.0

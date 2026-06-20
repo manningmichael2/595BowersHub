@@ -35,8 +35,27 @@ MAX_TRANSACTIONS = 500
 
 async def run_categorizer() -> dict:
     """
-    Main entry point. Fetches uncategorized transactions and classifies them.
-    Returns a summary dict with counts.
+    Main entry point, dispatched by the `categorizer_engine` feature-gate
+    (finance.categorizer_config):
+      - 'legacy'        → the R5.1-fixed single-LLM pass below.
+      - 'shadow'        → the new cascade, provenance-only (no writes).
+      - 'cascade'       → the new cascade, live writes through the Writer.
+    Defaults to 'legacy' so the new path is dark until explicitly enabled.
+    """
+    pool = get_pool()
+    from backend.services.categorization.config import load_config
+    async with pool.acquire() as conn:
+        cfg = await load_config(conn)
+    if cfg.engine in ("shadow", "cascade"):
+        from backend.services.categorization.orchestrator import run_cascade
+        return await run_cascade(pool, config=cfg)
+    return await _run_legacy()
+
+
+async def _run_legacy() -> dict:
+    """
+    The original single-pass categorizer (R5.1-fixed: schema-qualified to
+    finance.*). Retained as the `legacy` engine path.
     """
     pool = get_pool()
 
