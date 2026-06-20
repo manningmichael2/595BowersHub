@@ -75,14 +75,14 @@
 - [x] **Tests:** corrected merchant categorized next time with **no model call** (unknown abstains); reinforcement raises confidence; category_prior fallback weaker; **chat-path correction lands in `merchant_memory`**; trigger+function gone, `category_aliases` reader intact; forward-migration idempotent. **7 passed.**
 - *Note:* the **gated mass-recategorization** behind "apply to all from this merchant" (R3.3) is performed in Task 11 via the Writer choke point (Task 10) + endpoint RBAC — `record_correction` here only provides the learning helper, not the bulk write.
 
-## Task 8: EmbeddingKNN tier (R2.3)
+## Task 8: EmbeddingKNN tier (R2.3) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 2, Task 3, Task 7
 - **Requirements:** R2.3
-- [ ] Embed normalized merchant strings once per merchant (`finance.merchants.embedding`) reusing `EmbeddingsClient` + `bge-m3`; compute category-description embeddings on `finance.categories.embedding` (cold-start).
-- [ ] kNN: nearest `k` categorized merchants → majority vote, confidence = agreement fraction; `< min_neighbors` → category-description fallback → abstain; graceful Ollama-down abstain.
-- [ ] Measure transaction volume; size `k` / HNSW index / `min_neighbors` from it; document the figure.
-- [ ] **Tests:** majority-vote + agreement-fraction confidence; cold-start category-desc fallback; abstain when Ollama down; index applies on fresh_db.
+- [x] `services/categorization/knn.py`: `embed_merchants()` embeds normalized merchant strings once per merchant (`finance.merchants.embedding`, idempotent) reusing `EmbeddingsClient` + `bge-m3` + the current embedding version; `embed_categories()` computes category-description embeddings (humanized name) on `finance.categories.embedding` (cold-start B2).
+- [x] kNN: nearest `k` merchants with a resolvable category (directory prior, else majority of their categorized txns) → majority vote, confidence = agreement fraction; `< min_neighbors` → nearest-category-embedding fallback (confidence = cosine similarity) → abstain; graceful Ollama-down abstain (stored vector reused when present, else embed-on-read).
+- [x] **Volume measured (2026-06-20 live DB): 414 txns / 372 categorized / ≤ few-hundred distinct merchants** → seeded `k=15`, `min_neighbors=3` appropriate; merchant-level vectors keep the HNSW index (0022) trivially small. Figure documented in `knn.py`. Task 13 calibrates.
+- [x] **Tests:** majority-vote + agreement-fraction confidence (k=3, 2-of-3); cold-start category-desc fallback; abstain when Ollama down; HNSW index present on fresh_db; embed_merchants/embed_categories populate + idempotent. **5 passed.**
 
 ## Task 9: LLMFallback tier (R2.4) + failure handling
 - **Effort:** S
