@@ -750,3 +750,15 @@ Continued the spec from Tasks 1–3 → implemented the remaining **Tasks 4–13
 **Remaining = owner-gated manual steps (Task 13 runbook):** (1) run the model A/B against **live Ollama** to pick the local `categorizer` model and update `_FALLBACK_ROLE_MODEL["categorizer"]` + the `0023` alias in lockstep (placeholder `llama3.2:3b` until then); (2) calibrate thresholds; (3) flip `legacy→shadow`, validate from the decision log; (4) flip `shadow→cascade`. All are single config rows, instant rollback, no redeploy.
 
 - [Next] Open a PR from `feat/finance-categorization-tiers` → review → merge → deploy (migrations `0025`/`0026` apply as migrator). Then walk `docs/finance-categorization-cutover.md` on prod when ready to turn the cascade on.
+
+---
+
+## [2026-06-20] finance-categorization Tasks 4–13 MERGED (PR #20) + DEPLOYED — Claude Code
+
+PR #20 (`feat/finance-categorization-tiers` → `main`) squash-merged after all 4 CI checks passed (backend 3m24s, frontend, restore drill, gitleaks), branch deleted. Deployed via `./scripts/deploy.sh bowershub-ai`.
+
+**De-risk before deploy** (lesson from the 0023 incident): diffed repo migrations vs prod `bh_migrations` — only `0025`/`0026` unrecorded. Dry-ran `0026` against prod in a `BEGIN…ROLLBACK`: forward-migrates all **9** `category_examples` → `merchant_memory`, +1 provenance row, drops the 0018 trigger/function, **no errors**.
+
+**Deploy verified on prod:** startup log `Applying migrations via dedicated migration role 'bowershub_migrator'` → `0025` ✓ → `0026` ✓ → `Applied 2 migration(s)` (no crash-loop). Health `{"status":"ok","database":true}`. State: `eval_labels=25`, `merchant_memory=9` (the migrated examples), 0018 trigger gone, **`categorizer_engine='legacy'`** — so the cascade is live scaffolding but **dark; zero categorization behavior change**. The only live effects remain the Task-1 R5.1 fix + ingest merchant-key normalization.
+
+- [Next] Turn the cascade on when ready via `docs/finance-categorization-cutover.md`: (1) model A/B against live Ollama → pick local `categorizer` model + update `_FALLBACK_ROLE_MODEL["categorizer"]`/`0023` alias in lockstep; (2) calibrate thresholds; (3) `legacy→shadow`, validate from the decision log; (4) `shadow→cascade`. All single config rows, instant rollback.
