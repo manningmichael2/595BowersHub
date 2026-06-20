@@ -2,16 +2,16 @@
 
 > Each task traces to one or more requirements in `requirements.md` and follows the §Sequencing in `design.md`. Work top-to-bottom; respect dependencies. Ship behind the `categorizer_engine` feature-gate (`legacy → shadow → cascade`).
 
-## Task 1: Fix R5.1 (code-only) + schedule SimpleFin + real-schema tests
+## Task 1: Fix R5.1 (code-only) + schedule SimpleFin + real-schema tests — ✅ DONE (commit 3235ba1)
 - **Effort:** M
 - **Dependencies:** none
 - **Requirements:** R5.1, R5.4
-- [ ] Schema-qualify every relation in `services/categorizer.py` to `finance.*` (the unqualified `transactions`/`categories`/`category_examples` at `categorizer.py:46,51,57,144` currently hit the non-updatable `public.transactions` JOIN view).
-- [ ] Schedule `simplefin_sync.sync_simplefin` in `main.py` to run (and complete) **before** the 02:30 categorizer; on sync failure/overrun the categorizer runs on present data and logs/alerts — does not block.
-- [ ] Replace the divergent hand-rolled schema in `test_finance_endpoints.py:46-81` (omits `user_category_override`/`memo`, which hid this bug) with the real baseline via `run_migrations()` / `fresh_db`.
-- [ ] Capture the pre-overhaul baseline auto-categorization rate (expected ~0 until this lands).
-- [ ] **Tests:** DB-backed reproduce-then-fix on `fresh_db` — assert the unqualified `UPDATE public.transactions` raises, then assert the qualified path persists `category_id` to `finance.transactions` (stub `_call_ollama`).
-- [ ] **No migration** — code-only; verify no owned-object DDL, so no migrator-role/cutover dependency.
+- [x] Schema-qualify every relation in `services/categorizer.py` to `finance.*` (the unqualified `transactions`/`categories`/`category_examples` that hit the non-updatable `public.transactions` JOIN view).
+- [x] Schedule `simplefin_sync.sync_simplefin` in `main.py` to run **before** the 02:30 categorizer (was never scheduled); independent jobs, so a sync failure/overrun never blocks the run and is logged/alerted.
+- [x] Replace the divergent hand-rolled schema in `test_finance_endpoints.py` (omitted `user_category_override`, which hid this bug) with the real baseline via `apply_migrations()` / `fresh_db`; fix the dashboard-test inserts for the real schema (varchar ids + account FK).
+- [x] **Tests:** reproduce-then-fix on `fresh_db` — the unqualified `UPDATE public.transactions` raises, then `run_categorizer` persists `category_id` to `finance.transactions` (stub `_call_ollama`). Verified: **559 passed** on a throwaway pgvector pg16 (the new test is +1 over the prior 558).
+- [x] **No migration** — code-only; no owned-object DDL, no migrator-role/cutover dependency.
+- *Note:* baseline auto-rate capture (R5.6) deferred to the observability task (Task 10); the R5.1 fix is the prerequisite that makes any nonzero rate possible.
 
 ## Task 2: Schema migrations 0022+ (config tables, account_type, decision log, category seed)
 - **Effort:** L
