@@ -140,11 +140,36 @@ async def lifespan(app: FastAPI):
         name="SimpleFin nightly sync",
         replace_existing=True,
     )
+    async def _scheduled_categorization_warmup():
+        # Keep the cascade's inputs reconciled (the shadow→cascade flip is gated
+        # on this being caught up): merchant + category embeddings for the kNN
+        # tier, and the historical transfer-flag backfill. All idempotent and run
+        # in their own connections, so a failure never blocks the 2:30 categorizer.
+        try:
+            from backend.database import get_pool as _get_pool
+            from backend.services.embeddings import EmbeddingsClient
+            from backend.services.categorization.knn import embed_categories, embed_merchants
+            from backend.services.categorization.transfer_backfill import backfill_transfer_flags
+            pool = _get_pool()
+            client = EmbeddingsClient("http://ollama:11434", pool)
+            await embed_categories(client, pool)
+            await embed_merchants(client, pool, only_missing=True)
+            await backfill_transfer_flags()
+        except Exception:
+            logger.exception("Scheduled categorization warm-up failed")
+
+    scheduler.add_job(
+        _scheduled_categorization_warmup,
+        CronTrigger(hour=2, minute=15),
+        id="categorization_warmup",
+        name="Categorization warm-up (merchant/category embeddings + transfer backfill)",
+        replace_existing=True,
+    )
     scheduler.add_job(
         run_categorizer,
         CronTrigger(hour=2, minute=30),
         id="categorizer",
-        name="Transaction Categorizer (local model)",
+        name="Transaction Categorizer (cascade, gated by categorizer_engine)",
         replace_existing=True,
     )
 
@@ -331,6 +356,9 @@ app.include_router(dashboard_router)
 
 from backend.routers.db_browser import router as db_browser_router
 app.include_router(db_browser_router)
+
+from backend.routers.finance_review import router as finance_review_router
+app.include_router(finance_review_router)
 
 
 # --- Slash commands endpoint (used by frontend autocomplete) ---

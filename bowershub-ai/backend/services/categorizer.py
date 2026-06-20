@@ -35,8 +35,27 @@ MAX_TRANSACTIONS = 500
 
 async def run_categorizer() -> dict:
     """
-    Main entry point. Fetches uncategorized transactions and classifies them.
-    Returns a summary dict with counts.
+    Main entry point, dispatched by the `categorizer_engine` feature-gate
+    (finance.categorizer_config):
+      - 'legacy'        → the R5.1-fixed single-LLM pass below.
+      - 'shadow'        → the new cascade, provenance-only (no writes).
+      - 'cascade'       → the new cascade, live writes through the Writer.
+    Defaults to 'legacy' so the new path is dark until explicitly enabled.
+    """
+    pool = get_pool()
+    from backend.services.categorization.config import load_config
+    async with pool.acquire() as conn:
+        cfg = await load_config(conn)
+    if cfg.engine in ("shadow", "cascade"):
+        from backend.services.categorization.orchestrator import run_cascade
+        return await run_cascade(pool, config=cfg)
+    return await _run_legacy()
+
+
+async def _run_legacy() -> dict:
+    """
+    The original single-pass categorizer (R5.1-fixed: schema-qualified to
+    finance.*). Retained as the `legacy` engine path.
     """
     pool = get_pool()
 
@@ -215,8 +234,9 @@ def _parse_response(
         parsed = json.loads(match.group(0))
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning(f"Categorizer: failed to parse response: {e}")
-        # Fallback: assign all to Other
-        return [{"id": tid, "category_id": other_id, "fallback": True} for tid in batch_ids]
+        # R5.5: parse failure → abstain (rows stay uncategorized → review queue),
+        # NEVER assign "Other". The previous Other-fallback masked failures.
+        return []
 
     results = []
     for item in parsed:
@@ -224,12 +244,15 @@ def _parse_response(
             continue
         tid = str(item.get("id", ""))
         cat_name = item.get("category", "")
-        cat_id = cat_id_by_name.get(cat_name, other_id)
+        cat_id = cat_id_by_name.get(cat_name)
+        if cat_id is None:
+            # Unknown category → abstain (queue), never "Other" (R5.5).
+            continue
         results.append({
             "id": tid,
             "category_id": cat_id,
             "assigned_category": cat_name,
-            "fallback": cat_name not in cat_id_by_name,
+            "fallback": False,
         })
 
     return results

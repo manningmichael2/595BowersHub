@@ -19,6 +19,8 @@ import TopNav from './components/TopNav'
 
 // Lazy-loaded DB Browser — code-split to avoid impacting chat page load
 const DbBrowserPage = lazy(() => import('./pages/DbBrowserPage'))
+// Lazy-loaded Finance Review — code-split, only loaded when visited
+const FinanceReviewPage = lazy(() => import('./pages/FinanceReviewPage'))
 
 /**
  * Theme tokens we apply as CSS custom properties on `:root`.
@@ -174,6 +176,7 @@ function App() {
         <Route path="/quick-capture" element={<QuickCapturePage />} />
         <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/finance/review" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceReviewPage /></Suspense>} />
         <Route path="/tools/:toolId" element={<ToolFramePage />} />
         <Route path="/db/*" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><DbBrowserPage /></Suspense>} />
         <Route path="/chat/*" element={<AppShell />} />
