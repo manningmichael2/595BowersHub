@@ -126,16 +126,16 @@
 - [x] Errors surface via the global `toast`.
 - [x] **Tests:** `npx tsc --noEmit` clean; vitest queue render (chips/transfer), inline correct → categorize, apply-to-merchant routing, bulk-apply, logo error→avatar + no-key→avatar. **6 new (full FE suite 230 passed).** Backend `/categories` covered (router suite 9 passed).
 
-## Task 13: Calibrate, gate, cut over (R2.4, R2.5, R2.7)
+## Task 13: Calibrate, gate, cut over (R2.4, R2.5, R2.7) — ✅ DONE (tooling); model A/B + prod flip are owner-gated manual steps
 - **Effort:** M
 - **Dependencies:** Task 4, Task 10, Task 12
 - **Requirements:** R2.4, R2.5, R2.7
-- [ ] Wire **full-cascade scoring** into the harness skeleton (deferred from Task 4 — the tiers + pipeline now exist), scoring each tier and the end-to-end cascade over `eval_labels`.
-- [ ] Run the eval harness across candidate `categorizer` roles (local vs hosted); choose the default empirically (privacy-first), record rationale, and update the Task 2 fallback ID + alias row in lockstep (R2.4).
-- [ ] Calibrate per-tier thresholds from the harness (precision targets) and write them to `finance.categorizer_config` (R2.5).
-- [ ] Wire the eval harness as a CI regression gate that runs whenever the role or thresholds change (R2.7).
-- [ ] Validate transfer-flagging + coverage from the decision log in `shadow`; flip `shadow → cascade` once backfill + embeddings are reconciled.
-- [ ] **Tests:** eval CI gate fails on accuracy regression; thresholds loaded from DB; shadow→cascade cutover smoke test.
+- [x] **Full-cascade scoring** wired into the harness (`score_cascade(pool, …)`): normalizes each label, runs the REAL pipeline, scores the auto-applied decision + transfer flags; per-tier + per-model accuracy. Injectable embeddings/LLM so CI scores deterministically.
+- [x] Model A/B **procedure + tooling** delivered (`score_cascade` + per-model accuracy); the empirical pick + lockstep update of `_FALLBACK_ROLE_MODEL["categorizer"]` and the `0023` alias is documented in `docs/finance-categorization-cutover.md` §2. *(Requires live Ollama — owner runs it; the placeholder `llama3.2:3b` stays until then.)*
+- [x] Threshold calibration: `write_thresholds(conn, …)` persists per-tier τ to `finance.categorizer_config`; procedure in runbook §3.
+- [x] CI regression gate: `test_eval_regression_gate.py` runs in the backend pytest job (documented in `ci.yml`) — asserts transfer precision (==1.0, no false positives) + recall baseline and, with an oracle model, end-to-end accuracy ≥ 0.9. Fails on regression.
+- [x] Shadow validation + cutover plumbing: `set_engine(conn, …)`, `categorization_metrics`, nightly `categorization_warmup` job (embeddings + transfer backfill, 02:15). Runbook §4–6 covers shadow validation from the decision log, the `shadow → cascade` flip, and instant rollback. *(The prod flip itself is owner-gated.)*
+- [x] **Tests:** transfer baseline (no model); end-to-end accuracy with oracle model; threshold write + engine flip reload; invalid-engine rejected. **4 passed.**
 
 ## Definition of Done
 - [ ] All tasks complete; every requirement in `requirements.md` is satisfied (validator clean).

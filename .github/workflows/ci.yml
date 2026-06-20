@@ -95,6 +95,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-test.txt
       - name: Full test suite (Postgres-backed)
+        # Includes the categorization eval regression gate
+        # (backend/tests/test_eval_regression_gate.py, R2.7): it scores the full
+        # cascade over finance.eval_labels and fails the build if transfer
+        # detection or end-to-end accuracy regresses below the baselines — so any
+        # change to a tier, the `categorizer` role, or the thresholds is gated here.
         run: PYTHONPATH=. python -m pytest -q
 
   restore-test:

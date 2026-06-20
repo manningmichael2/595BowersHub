@@ -15,6 +15,7 @@ same way.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, List, Optional
@@ -117,6 +118,83 @@ class EvalReport:
                 "recall": round(self.transfer.recall, 4),
             },
         }
+
+
+async def score_cascade(pool, *, embeddings_client=None, llm_call_model=None,
+                        config=None) -> EvalReport:
+    """Full-cascade scoring (R2.7, deferred from Task 4 — now that the tiers +
+    pipeline exist). Runs the REAL pipeline over each eval label and scores the
+    decision the cascade would *auto-apply* (sub-threshold guesses count as
+    abstains, transfer flags are scored regardless of the gate).
+
+    `embeddings_client` / `llm_call_model` are injectable so CI can score the
+    deterministic tiers without a live Ollama; the live model A/B (per-`categorizer`
+    role) passes the real clients. See docs/finance-categorization-cutover.md.
+    """
+    # Imported here to avoid a circular import (pipeline imports base only).
+    from .categorization.config import load_config
+    from .categorization.knn import EmbeddingKNN
+    from .categorization.llm import build_llm_tier
+    from .categorization.memory import MerchantMemory
+    from .categorization.pipeline import CategorizationPipeline
+    from .categorization.rules import build_rule_engine
+    from .categorization.transfer import TransferDetector
+    from .embeddings import EmbeddingsClient
+    from .merchant_normalizer import build_normalizer
+
+    client = embeddings_client or EmbeddingsClient("http://ollama:11434", pool)
+    async with pool.acquire() as conn:
+        if config is None:
+            config = await load_config(conn)
+        labels = await load_eval_labels(conn)
+        normalizer = await build_normalizer(conn)
+        knn = config.knn
+        tiers = [
+            TransferDetector(conn),
+            await build_rule_engine(conn),
+            MerchantMemory(conn),
+            EmbeddingKNN(conn, client, k=int(knn.get("k", 15)),
+                         min_neighbors=int(knn.get("min_neighbors", 3))),
+            await build_llm_tier(conn, call_model=llm_call_model),
+        ]
+        pipeline = CategorizationPipeline(tiers, config)
+
+        async def classify(ctx: TxnContext) -> Decision:
+            ctx.merchant_key = normalizer.normalize(ctx.description).key
+            result = await pipeline.classify(ctx)
+            d = result.decision
+            if result.auto_apply or d.is_transfer:
+                return d
+            # Sub-threshold guess → queued, not applied → counts as an abstain.
+            return Decision(category_id=None, confidence=d.confidence, tier=d.tier,
+                            is_transfer=d.is_transfer, rationale=d.rationale)
+
+        return await score_classifier(classify, labels)
+
+
+async def write_thresholds(conn, thresholds: dict) -> None:
+    """Persist calibrated per-tier τ to finance.categorizer_config (R2.5)."""
+    await conn.execute(
+        "INSERT INTO finance.categorizer_config (key, value, updated_at) "
+        "VALUES ('thresholds', $1::jsonb, now()) "
+        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+        thresholds,
+    )
+
+
+async def set_engine(conn, engine: str) -> None:
+    """Flip the categorizer_engine gate (legacy|shadow|cascade)."""
+    from .categorization.config import VALID_ENGINES
+    if engine not in VALID_ENGINES:
+        raise ValueError(f"invalid engine {engine!r}")
+    # The jsonb codec passes str through as-is (assumes pre-serialized JSON), so a
+    # bare "shadow" is invalid JSON — encode it to a quoted JSON string.
+    await conn.execute(
+        "INSERT INTO finance.categorizer_config (key, value, updated_at) "
+        "VALUES ('categorizer_engine', $1::jsonb, now()) "
+        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+        json.dumps(engine),
+    )
 
 
 async def load_eval_labels(conn) -> List[EvalLabel]:
