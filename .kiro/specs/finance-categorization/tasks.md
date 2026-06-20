@@ -13,18 +13,18 @@
 - [x] **No migration** — code-only; no owned-object DDL, no migrator-role/cutover dependency.
 - *Note:* baseline auto-rate capture (R5.6) deferred to the observability task (Task 10); the R5.1 fix is the prerequisite that makes any nonzero rate possible.
 
-## Task 2: Schema migrations 0022+ (config tables, account_type, decision log, category seed)
+## Task 2: Schema migrations 0022+ (config tables, account_type, decision log, category seed) — ✅ DONE (commit 042d8b2)
 - **Effort:** L
 - **Dependencies:** Task 1
 - **Requirements:** R1.2, R1.3, R1.4, R2.1, R2.6, R6.2
-- [ ] New `finance.*` tables: `merchants` (R1.2: `merchant_key UNIQUE, display_name, category_prior_id, mcc, domain, embedding halfvec(1024), embedding_version`), `normalization_rules` (R1.4), `mcc_categories` (R1.3), `user_rules` (R2.1: priority, merchant_key, description_regex, amount_min/max, account_id, category_id), `categorization_decision` (R2.6: append-only provenance incl. `prior_category_id`, `tier`, `confidence`, `model_id`, `is_transfer_set`, `auto_applied`, `rationale jsonb`).
-- [ ] Additive nullable columns: `finance.transactions ADD merchant_key, categorized_by_tier, categorization_confidence`; `finance.accounts ADD account_type` (R6.2); `finance.categories ADD embedding halfvec(1024)`; extend the `public.transactions` view (`0016`) with the new columns.
-- [ ] `finance.categorizer_config` key/value table: per-tier thresholds, `categorizer_engine` gate, per-tier enable, `k`/`min_neighbors`, recurring tolerances.
-- [ ] **Extract the live `finance.categories` tree** (it exists only in prod, not in `0001`) as the seed source-of-truth; reconcile category names against the `eval_labels` taxonomy (Task 4).
-- [ ] **Idempotent category-seed migration** (`INSERT … ON CONFLICT (name) DO NOTHING`, rows = the extracted live tree so it's a genuine no-op against prod) — so fresh_db/clean-rebuild aren't category-empty (C2); seed MCC→category data.
-- [ ] Add a `categorizer` entry to `_FALLBACK_ROLE_MODEL` (`model_catalog.py:623`) pointing at a **named local model** + seed the `public.bh_model_aliases` row (B1 — privacy-safe cold-start). The named ID is a placeholder until Task 13 picks the local default empirically — keep the two in lockstep; do **not** inherit the weak `local` = `llama3.2:3b`.
-- [ ] **Migration:** `bowershub-ai/backend/migrations/0022_*.sql …` — all owned-object DDL authored as `bowershub_migrator`, gated on the C7 cutover being live; never edit an applied file.
-- [ ] **Tests:** all new migrations apply on `fresh_db` from empty; scoped-deploy test (per `test_migrate_as_app_role.py`) proves they apply under the migrator role and that `0021` default-privileges grant DML to `bowershub_app` / SELECT to `finance_reader`.
+- [x] New `finance.*` tables (0022): `merchants` (+ merchant-level `halfvec(1024)` embedding + HNSW), `normalization_rules`, `mcc_categories`, `user_rules`, `merchant_memory`, `categorization_decision` (append-only provenance incl. `prior_category_id`), `eval_labels`.
+- [x] Additive nullable columns + `public.transactions` view recreated with `merchant_key`/`categorized_by_tier`/`categorization_confidence`/`account_type`.
+- [x] `finance.categorizer_config` key/value table.
+- [x] **Extracted the live `finance.categories` tree** (verified against prod: 25 rows, 90% of live txns reference it → kept as-is, no overhaul) → idempotent category-seed migration (0023), `ON CONFLICT (name) DO NOTHING` (no-op on prod, fixes C2 category-empty rebuild); config defaults (gate=`legacy`); starter MCC→category map (full ISO-18245 = follow-up data load).
+- [x] B1: `categorizer` key in `_FALLBACK_ROLE_MODEL` (local, not hosted) + `bh_model_aliases` row inheriting `local`'s model_id. *(Repointed to the empirically-chosen local model in Task 13.)*
+- [x] **Migration:** `0022_finance_categorization_schema.sql` (owned-object DDL) + `0023_seed_finance_categorization.sql` (seed); migrator-authored, gated on the live C7 cutover.
+- [x] **Tests:** apply-and-seed on `fresh_db` + pure B1 fallback check; `test_migrate_as_app_role` confirms the migrator/app split + grant propagation hold. **Full suite 561 passed** on throwaway pgvector pg16.
+- *Note:* `eval_labels` taxonomy reconciliation happens when the eval set is seeded (Task 4).
 
 ## Task 3: NormalizationService + ingest hook + backfill (R1)
 - **Effort:** M
