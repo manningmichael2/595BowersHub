@@ -116,14 +116,15 @@
 - [x] DB-unavailable → typed **503**, no partial write (writes wrapped in a per-request transaction). Chat skills keep using the same `record_correction` service.
 - [x] **Tests:** queue contract; RBAC 403 for non-owner (read allowed); single + bulk fire learning; apply-merchant provenance + prior; rule create + apply-to-existing; recurring grouping/cadence; DB-down typed 503. **8 passed** (async httpx client to share the pool's event loop).
 
-## Task 12: Finance Review frontend (R4.1, R1.6)
+## Task 12: Finance Review frontend (R4.1, R1.6) — ✅ DONE
 - **Effort:** M
 - **Dependencies:** Task 11
 - **Requirements:** R4.1, R1.6
-- [ ] Dedicated Finance Review surface (replacing the chat-only `fill:` tool): queue list with predicted category + confidence + rationale chips (R4.1); multi-select bulk-apply; inline correct with "apply to all from this merchant / make a rule"; recurring sub-view.
-- [ ] Typed API client + strict TS types matching the Pydantic models (no `any` at the boundary).
-- [ ] Merchant logo via Logo.dev/favicon that **degrades gracefully** — no broken image, no blocked render (R1.6).
-- [ ] **Tests:** `npx tsc --noEmit` clean; vitest for queue render + bulk/inline actions + logo-failure fallback.
+- [x] `pages/FinanceReviewPage.tsx` (route `/finance/review`, lazy-loaded): queue list with merchant logo, description, amount, predicted-category + confidence + rationale (tier) chips + "transfer?" badge (R4.1); multi-select bulk-apply bar; per-row inline correct with "apply to all from this merchant" (sets prior); recurring sub-view tab.
+- [x] Typed API client `services/financeReview.ts` with strict TS types mirroring the Pydantic models (no `any`). Added `GET /api/finance/categories` for the correction dropdown.
+- [x] `components/MerchantLogo.tsx`: favicon attempt → deterministic letter-avatar fallback on error / missing key (R1.6 — never a broken image, renders immediately).
+- [x] Errors surface via the global `toast`.
+- [x] **Tests:** `npx tsc --noEmit` clean; vitest queue render (chips/transfer), inline correct → categorize, apply-to-merchant routing, bulk-apply, logo error→avatar + no-key→avatar. **6 new (full FE suite 230 passed).** Backend `/categories` covered (router suite 9 passed).
 
 ## Task 13: Calibrate, gate, cut over (R2.4, R2.5, R2.7)
 - **Effort:** M

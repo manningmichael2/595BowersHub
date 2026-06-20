@@ -117,6 +117,12 @@ class RecurringResponse(BaseModel):
     charges: list[RecurringCharge]
 
 
+class CategoryOption(BaseModel):
+    id: int
+    name: str
+    parent_id: Optional[int] = None
+
+
 # --------------------------------------------------------------------------- helpers
 def _db_error(e: Exception) -> HTTPException:
     logger.warning("finance_review: DB unavailable: %s", e)
@@ -222,6 +228,20 @@ async def get_recurring(user: dict = Depends(get_current_user)) -> RecurringResp
         )
         for r in rows
     ])
+
+
+@router.get("/categories", response_model=list[CategoryOption])
+async def list_categories(user: dict = Depends(get_current_user)) -> list[CategoryOption]:
+    """Category list for the review-UI correction dropdown (R4.1/R4.3)."""
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, name, parent_id FROM finance.categories "
+                "ORDER BY COALESCE(parent_id, id), name")
+    except (asyncpg.PostgresError, OSError, RuntimeError) as e:
+        raise _db_error(e)
+    return [CategoryOption(id=r["id"], name=r["name"], parent_id=r["parent_id"]) for r in rows]
 
 
 @router.get("/user-rules", response_model=list[UserRuleModel])

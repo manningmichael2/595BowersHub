@@ -67,6 +67,15 @@ async def test_review_queue_returns_uncategorized(seeded):
 
 
 @pytest.mark.asyncio
+async def test_categories_list(seeded):
+    async with _client(_ADMIN) as client:
+        r = await client.get("/api/finance/categories")
+    assert r.status_code == 200
+    names = {c["name"] for c in r.json()}
+    assert "Food_Dining" in names and "Food_Groceries" in names
+
+
+@pytest.mark.asyncio
 async def test_categorize_sets_override_and_learns(seeded):
     tid = seeded["ids"]["a"]
     async with _client(_ADMIN) as client:
