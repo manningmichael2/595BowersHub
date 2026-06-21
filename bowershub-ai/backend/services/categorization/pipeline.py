@@ -111,7 +111,8 @@ class Writer:
                     "UPDATE finance.transactions "
                     "SET category_id = $1, categorized_by_tier = $2, "
                     "    categorization_confidence = $3, updated_at = now() "
-                    "WHERE id = $4 AND user_category_override = false AND category_id IS NULL",
+                    "WHERE id = $4 AND user_category_override = false AND category_id IS NULL "
+                    "  AND is_split = false",  # never categorize a split parent (R1.5 defense-in-depth)
                     decision.category_id, decision.tier, decision.confidence, ctx.txn_id,
                 )
                 wrote_category = res.endswith(" 1")

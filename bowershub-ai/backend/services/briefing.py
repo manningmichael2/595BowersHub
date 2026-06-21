@@ -283,22 +283,21 @@ class BriefingService:
             pool = get_pool()
             async with pool.acquire() as conn:
                 rows = await conn.fetch("""
-                    SELECT 
+                    SELECT
                         c.name as category,
                         b.limit_amount as budget,
-                        COALESCE(SUM(ABS(t.amount)), 0) as spent
+                        COALESCE(SUM(ABS(ra.amount)), 0) as spent
                     FROM finance.budgets b
                     JOIN finance.categories c ON c.id = b.category_id
-                    LEFT JOIN finance.transactions t 
-                        ON t.category_id = c.id
-                        AND t.posted_date >= date_trunc('month', CURRENT_DATE)::date
-                        AND t.posted_date <= CURRENT_DATE
-                        AND t.amount < 0
-                        AND t.is_transfer = false
+                    LEFT JOIN public.real_activity ra
+                        ON ra.category_id = c.id
+                        AND ra.posted_date >= date_trunc('month', CURRENT_DATE)::date
+                        AND ra.posted_date <= CURRENT_DATE
+                        AND ra.amount < 0
                     WHERE b.limit_amount > 0
                       AND b.month = date_trunc('month', CURRENT_DATE)::date
                     GROUP BY c.name, b.limit_amount
-                    ORDER BY (COALESCE(SUM(ABS(t.amount)), 0) / b.limit_amount) DESC
+                    ORDER BY (COALESCE(SUM(ABS(ra.amount)), 0) / b.limit_amount) DESC
                     LIMIT 5
                 """)
             if rows:

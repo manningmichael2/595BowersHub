@@ -434,3 +434,53 @@ async def delete_user_rule(rule_id: int, user: dict = Depends(require_admin)) ->
     if res == "DELETE 0":
         raise HTTPException(status_code=404, detail="Rule not found")
     return {"deleted": 1, "id": rule_id}
+
+
+# --------------------------------------------------------------------------- splits (R1.4/R1.7)
+class SplitAllocation(BaseModel):
+    category_id: Optional[int] = None
+    amount: float
+
+
+class SplitRequest(BaseModel):
+    allocations: list[SplitAllocation] = Field(min_length=2)
+
+
+@router.post("/transactions/{txn_id}/split")
+async def split_transaction(txn_id: str, body: SplitRequest,
+                            user: dict = Depends(require_admin)) -> dict:
+    from backend.services.splits import create_split
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            return await create_split(
+                conn, txn_id, [a.model_dump() for a in body.allocations])
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (asyncpg.PostgresError, OSError, RuntimeError) as e:
+        raise _db_error(e)
+
+
+@router.post("/transactions/{txn_id}/unsplit")
+async def unsplit_transaction(txn_id: str, user: dict = Depends(require_admin)) -> dict:
+    from backend.services.splits import unsplit
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            return await unsplit(conn, txn_id)
+    except (asyncpg.PostgresError, OSError, RuntimeError) as e:
+        raise _db_error(e)
+
+
+@router.get("/transactions/{txn_id}/allocations")
+async def get_transaction_allocations(txn_id: str,
+                                      user: dict = Depends(get_current_user)) -> dict:
+    from backend.services.splits import get_allocations
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            return {"allocations": await get_allocations(conn, txn_id)}
+    except (asyncpg.PostgresError, OSError, RuntimeError) as e:
+        raise _db_error(e)

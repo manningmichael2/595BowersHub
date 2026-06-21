@@ -192,39 +192,38 @@ async def spending_summary(month: Optional[str] = None) -> dict:
     
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Category breakdown (only spending, exclude transfers and income)
+        # Category breakdown — allocation-aware via public.real_activity (counts
+        # split children, excludes split parents + transfers + investments; R2.1/R2.2).
         cat_rows = await conn.fetch("""
             SELECT COALESCE(c.name, 'Uncategorized') as category,
-                   SUM(ABS(t.amount)) as total,
+                   SUM(ABS(ra.amount)) as total,
                    COUNT(*) as count
-            FROM finance.transactions t
-            LEFT JOIN finance.categories c ON c.id = t.category_id
-            WHERE t.posted_date >= $1 AND t.posted_date <= $2
-              AND t.amount < 0
-              AND t.is_transfer = false
+            FROM public.real_activity ra
+            LEFT JOIN finance.categories c ON c.id = ra.category_id
+            WHERE ra.posted_date >= $1 AND ra.posted_date <= $2
+              AND ra.amount < 0
             GROUP BY c.name
             ORDER BY total DESC
         """, start, end)
-        
-        # Top 5 individual purchases
+
+        # Top 5 individual purchases (list of real spend rows; join txn for description)
         top_rows = await conn.fetch("""
-            SELECT t.posted_date, t.description, t.amount, c.name as category
-            FROM finance.transactions t
-            LEFT JOIN finance.categories c ON c.id = t.category_id
-            WHERE t.posted_date >= $1 AND t.posted_date <= $2
-              AND t.amount < 0
-              AND t.is_transfer = false
-            ORDER BY t.amount ASC
+            SELECT ra.posted_date, t.description, ra.amount, c.name as category
+            FROM public.real_activity ra
+            JOIN finance.transactions t ON t.id = ra.id
+            LEFT JOIN finance.categories c ON c.id = ra.category_id
+            WHERE ra.posted_date >= $1 AND ra.posted_date <= $2
+              AND ra.amount < 0
+            ORDER BY ra.amount ASC
             LIMIT 5
         """, start, end)
-        
+
         # Total income
         income_row = await conn.fetchrow("""
             SELECT COALESCE(SUM(amount), 0) as total
-            FROM finance.transactions
+            FROM public.real_activity
             WHERE posted_date >= $1 AND posted_date <= $2
               AND amount > 0
-              AND is_transfer = false
         """, start, end)
     
     total_spent = sum(float(r["total"]) for r in cat_rows)
