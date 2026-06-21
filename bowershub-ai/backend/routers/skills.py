@@ -22,6 +22,7 @@ class SkillCreate(BaseModel):
     param_schema: dict = {}
     response_hint: Optional[str] = None
     restricted_users: List[int] = []
+    min_role: Optional[str] = Field(default=None, pattern="^(member|admin)$")
 
 
 class SkillUpdate(BaseModel):
@@ -32,6 +33,7 @@ class SkillUpdate(BaseModel):
     response_hint: Optional[str] = None
     is_active: Optional[bool] = None
     restricted_users: Optional[List[int]] = None
+    min_role: Optional[str] = Field(default=None, pattern="^(member|admin)$")
 
 
 class SkillResponse(BaseModel):
@@ -44,6 +46,7 @@ class SkillResponse(BaseModel):
     response_hint: Optional[str]
     is_active: bool
     restricted_users: List[int]
+    min_role: Optional[str] = None
 
 
 class SkillTestRequest(BaseModel):
@@ -75,6 +78,7 @@ async def list_skills(user: dict = Depends(get_current_user)):
             response_hint=r["response_hint"],
             is_active=r["is_active"],
             restricted_users=list(r["restricted_users"]) if r["restricted_users"] else [],
+            min_role=r["min_role"],
         )
         for r in rows
     ]
@@ -87,11 +91,11 @@ async def create_skill(body: SkillCreate, user: dict = Depends(require_admin)):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO public.bh_skills
-                (name, description, webhook_url, http_method, param_schema, response_hint, restricted_users)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (name, description, webhook_url, http_method, param_schema, response_hint, restricted_users, min_role)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING *
         """, body.name, body.description, body.webhook_url, body.http_method,
-            body.param_schema, body.response_hint, body.restricted_users)
+            body.param_schema, body.response_hint, body.restricted_users, body.min_role)
 
     return SkillResponse(
         id=row["id"], name=row["name"], description=row["description"],
@@ -100,6 +104,7 @@ async def create_skill(body: SkillCreate, user: dict = Depends(require_admin)):
         response_hint=row["response_hint"],
         is_active=row["is_active"],
         restricted_users=list(row["restricted_users"]) if row["restricted_users"] else [],
+        min_role=row["min_role"],
     )
 
 
@@ -132,6 +137,7 @@ async def update_skill(skill_id: int, body: SkillUpdate, user: dict = Depends(re
         webhook_url=row["webhook_url"], http_method=row["http_method"],
         param_schema=row["param_schema"] or {}, response_hint=row["response_hint"],
         is_active=row["is_active"], restricted_users=row["restricted_users"] or [],
+        min_role=row["min_role"],
     )
 
 
