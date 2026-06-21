@@ -762,3 +762,45 @@ PR #20 (`feat/finance-categorization-tiers` → `main`) squash-merged after all 
 **Deploy verified on prod:** startup log `Applying migrations via dedicated migration role 'bowershub_migrator'` → `0025` ✓ → `0026` ✓ → `Applied 2 migration(s)` (no crash-loop). Health `{"status":"ok","database":true}`. State: `eval_labels=25`, `merchant_memory=9` (the migrated examples), 0018 trigger gone, **`categorizer_engine='legacy'`** — so the cascade is live scaffolding but **dark; zero categorization behavior change**. The only live effects remain the Task-1 R5.1 fix + ingest merchant-key normalization.
 
 - [Next] Turn the cascade on when ready via `docs/finance-categorization-cutover.md`: (1) model A/B against live Ollama → pick local `categorizer` model + update `_FALLBACK_ROLE_MODEL["categorizer"]`/`0023` alias in lockstep; (2) calibrate thresholds; (3) `legacy→shadow`, validate from the decision log; (4) `shadow→cascade`. All single config rows, instant rollback.
+
+---
+
+## [2026-06-20] Prowlarr + AudioBookBay Integration � Gemini IDE
+
+Deployed official Prowlarr + Jackett containers for AudioBookBay integration.
+AudioBookBay actively blocks Prowlarr's Cardigann scrapers, so Jackett was deployed as a proxy to scrape ABB and feed Torznab to Prowlarr.
+
+**What landed:**
+- prowlarr/docker-compose.yml created on the host containing lscr.io/linuxserver/prowlarr and lscr.io/linuxserver/jackett.
+- Both containers deployed and running on i-services_ai-network.
+- Ports exposed: 9696 (Prowlarr) and 9117 (Jackett).
+- PUID/PGID set to 1000, mapped to /home/michael/prowlarr and /home/michael/jackett.
+
+- [Next] User to configure AudioBookBay inside Jackett UI, then add Jackett as a Generic Torznab indexer inside Prowlarr.
+
+---
+
+## [2026-06-20] AudioBookBay Cloudflare Fix � Gemini IDE
+
+Jackett encountered Cloudflare anti-bot timeouts when configuring AudioBookBay. 
+Added ghcr.io/flaresolverr/flaresolverr container to prowlarr/docker-compose.yml to act as a headless browser proxy for Jackett.
+- Deployed on i-services_ai-network at port 8191.
+- Updated the walkthrough guide with instructions to point Jackett to http://flaresolverr:8191 for clearance.
+
+---
+
+## [2026-06-20] finance-categorization CUTOVER COMPLETE — cascade is LIVE (PR #21) — Claude Code
+
+Walked `docs/finance-categorization-cutover.md` end-to-end against prod. The cascade is now **`categorizer_engine='cascade'`** — live auto-categorization, no longer dark.
+
+**Model A/B (step 2):** scored the full cascade over `finance.eval_labels` against live Ollama for `llama3.2:3b` / `qwen3:4b` / `qwen3:8b` (`scripts/ab_categorizer_eval.py`). qwen3:8b was the best *classifier* (0.8 vs llama's 0.6) but **OOM-kills on this 12GB box** (swap 100% full at baseline; `ollama` log `llama-server ... signal: killed`) — not operationally viable. Picked **llama3.2:3b** (already the configured alias + `_FALLBACK_ROLE_MODEL` default → no lockstep change). Side-finding (not fixed, irrelevant to llama): the shipped `llm.py` uses `num_predict:256` with thinking left on, so a future *reasoning*-model swap would burn the budget on `<think>` and abstain ~100% (verified: `done_reason=length`, empty content). `think:false` fixes it in isolation but 500s under batch load on this Ollama build → don't rely on it.
+
+**Reconcile (step 1):** `scripts/reconcile_cascade_inputs.py` + `reconcile_embeddings.py` — merchant_key 414/414, merchants 209 (all embedded), categories 25 embedded, transfer backfill +27 (`is_transfer` 12→39). Thresholds already at conservative runbook defaults (llm 0.6 / rule 1.0 / transfer 0.9 / knn 0.7 / mem 0.8) → no calibration write.
+
+**Shadow validation (step 4) caught a real blocker** before any write: 7 investment txns were leaking into the work-set and getting labeled **Income @ conf ~1.0**. **Root cause = a latent bug:** `investment_detector.flag_investments_in_db` bound matched ids as `$1::int[]`, but `finance.transactions.id` is `character varying` (`TRN-…`) → the UPDATE errored on every match, and the ingest call swallows it in a try/except (`simplefin_sync.py`) → **investment flagging silently failed on all new data.** Fixed the cast to `text[]` + reproduce-then-fix regression test (`test_investment_detector.py`: raises `varchar = integer` pre-fix, passes post-fix). **PR #21** (`fix/investment-detector-cast`) — 4 CI checks green, squash-merged (`6038f1a`), deployed (`./scripts/deploy.sh bowershub-ai`, health ok, no migrations). Prod backfill flagged **29** previously-leaked investment rows (`is_investment` 26→55, `scripts/backfill_investments_full.py`). Re-validation (`scripts/revalidate_shadow.py`): work-set 39→33, leak gone (7→1; the 1 = an immaterial **−$0.54 HealthEquity HSA "Investment Admin Fee"**, not an investment *flow*, so out of the detector's regex).
+
+**Flip shadow→cascade (step 5, `scripts/flip_to_cascade.py`):** live pass = 33 found → **24 auto-applied, 9 queued, 0 errors**; SAFETY assert **0 investment-pattern rows auto-categorized**. Applied: Income×6, Shopping×5, Travel×3, House_Maintenance×3, Food_Dining×2, Food_Groceries×2, Trans_Gas×1, Transit×1, Other×1. Engine confirmed `cascade`; nightly 02:30 categorizer now runs the cascade live. **Fully reversible:** `set_engine('shadow'|'legacy')` + per-row reverse from `categorization_decision.prior_category_id`; per-tier kill switches in `tiers_enabled`.
+
+**Known immaterial residuals (live, reversible, not blockers):** the −$0.54 HSA fee labeled Income; the vague Shopping cluster (5 applied); one "Other" label.
+
+- [Next] Eyeball the 9-item review queue at `/finance/review`; spot-check the 24 auto-applied. Optional cleanups: recategorize/patternize the HealthEquity HSA fee; tighten the ingest investment window (14d misses backdated imports — the cast bug masked it). `flip_to_cascade.py` left uncommitted (one-shot); commit if you want it as repeatable tooling.
