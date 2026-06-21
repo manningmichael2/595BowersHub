@@ -75,7 +75,7 @@ async def flag_investments_in_db(window_days: int = 90) -> dict:
                 UPDATE finance.transactions
                 SET is_investment = true,
                     updated_at = now()
-                WHERE id = ANY($1::int[])
+                WHERE id = ANY($1::text[])
             """, ids_to_flag)
         
         return {
