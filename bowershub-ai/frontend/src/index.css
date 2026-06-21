@@ -119,12 +119,21 @@ body {
 }
 
 /* Native form controls otherwise render on the browser's default white control
-   while inheriting the dark theme's light text → white-on-white. Pin theme
-   colors globally so every <select>/<option> (and friends) stays readable. */
+   while inheriting the dark theme's light text → white-on-white / grey-on-white.
+   Pin theme colors globally so every dropdown and text input stays readable.
+   Low element-specificity so any component that sets its own input styling
+   (Tailwind classes / inline styles) still wins. Checkboxes/radios/etc. excluded
+   so their native rendering is untouched. */
 select,
-option {
+option,
+textarea,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]) {
   background-color: var(--color-surface);
   color: var(--color-text);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
 }
 
 /* Scrollbar styling */
