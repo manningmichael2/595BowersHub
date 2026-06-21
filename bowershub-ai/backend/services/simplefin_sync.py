@@ -123,6 +123,13 @@ async def sync_simplefin(window_days: int = 14) -> dict:
             """, acc["id"], acc["org_name"], acc["account_name"], acc["currency"],
                 acc["last_balance"], acc["last_balance_date"])
 
+        # Persist a balance-history snapshot per account (R3.5) — net-worth-over-time.
+        try:
+            from backend.services.accounting.snapshots import snapshot_all_accounts
+            await snapshot_all_accounts(conn)
+        except Exception as e:
+            logger.warning(f"Balance snapshot after sync failed: {e}")
+
         # Insert transactions
         for t in transactions:
             result = await conn.fetchval("""

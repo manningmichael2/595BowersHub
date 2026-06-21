@@ -471,36 +471,28 @@ async def finance_balances(
     pool = get_pool()
 
     try:
+        # Consolidated, account_type-driven net worth (R3.4). Exclusions are now
+        # DB-driven via include_in_net_worth (R3.3) — no hardcoded org list.
+        from backend.services.accounting.networth import compute_net_worth
         async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT id, org_name, account_name, last_balance
-                FROM finance.accounts
-                WHERE last_balance IS NOT NULL
-                  AND org_name NOT IN ('Email Receipts', 'ADP Redbox', 'Credit Karma')
-                ORDER BY org_name, account_name
-                """
-            )
+            nw = await compute_net_worth(conn)
 
-        # Group accounts by org_name (since there's no 'type' column)
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        net_worth = 0.0
-
-        for row in rows:
-            balance = float(row["last_balance"]) if row["last_balance"] is not None else 0.0
-            org = row["org_name"] or "Other"
-            name = row["account_name"] or row["id"]
-            grouped[org].append({
-                "name": name,
-                "balance": balance,
+        for a in nw["accounts"]:
+            grouped[a["org"] or "Other"].append({
+                "name": a["name"],
+                "balance": a["balance"],
+                "account_type": a["account_type"],
+                "stale": a["stale"],
             })
-            net_worth += balance
 
         return {
             "error": False,
             "data": {
                 "accounts_by_type": dict(grouped),
-                "net_worth": net_worth,
+                "net_worth": nw["net_worth"],
+                "assets": nw["assets"],
+                "liabilities": nw["liabilities"],
             },
         }
 

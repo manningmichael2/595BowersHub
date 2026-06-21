@@ -224,20 +224,21 @@ async def test_finance_summary_table_not_found():
 async def test_finance_balances_success(finance_pool):
     """Balances groups accounts by org_name with a net-worth total.
 
-    Real-DB: the live query groups by org_name (there is no 'type' column),
-    excludes a hard-coded set of bookkeeping orgs ('Email Receipts', …), and
-    orders by org_name, account_name.
+    Real-DB: net worth is now account_type-driven (R3.1) and exclusion is
+    DB-driven via include_in_net_worth (R3.3 — no hardcoded org list). Untyped
+    accounts are excluded; here every counted account is typed and the bookkeeping
+    org is flagged out.
     """
     async with finance_pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO finance.accounts (id, org_name, account_name, last_balance)
+            INSERT INTO finance.accounts (id, org_name, account_name, account_type, last_balance, include_in_net_worth)
             VALUES
-                (gen_random_uuid()::text, 'Chase',          'Checking', 5000),
-                (gen_random_uuid()::text, 'Chase',          'Credit',  -2000),
-                (gen_random_uuid()::text, 'Ally',           'Savings', 15000),
-                (gen_random_uuid()::text, 'Vanguard',       '401k',    50000),
-                (gen_random_uuid()::text, 'Email Receipts', 'noise',     999)
+                (gen_random_uuid()::text, 'Chase',          'Checking', 'checking',    5000, true),
+                (gen_random_uuid()::text, 'Chase',          'Credit',   'credit_card',-2000, true),
+                (gen_random_uuid()::text, 'Ally',           'Savings',  'savings',    15000, true),
+                (gen_random_uuid()::text, 'Vanguard',       '401k',     'brokerage',  50000, true),
+                (gen_random_uuid()::text, 'Email Receipts', 'noise',    NULL,           999, false)
             """
         )
 
@@ -294,10 +295,10 @@ async def test_finance_balances_null_balance(finance_pool):
     async with finance_pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO finance.accounts (id, org_name, account_name, last_balance)
+            INSERT INTO finance.accounts (id, org_name, account_name, account_type, last_balance)
             VALUES
-                (gen_random_uuid()::text, 'Chase', 'Checking', NULL),
-                (gen_random_uuid()::text, 'Ally',  'Savings',  100)
+                (gen_random_uuid()::text, 'Chase', 'Checking', 'checking', NULL),
+                (gen_random_uuid()::text, 'Ally',  'Savings',  'savings',  100)
             """
         )
 
