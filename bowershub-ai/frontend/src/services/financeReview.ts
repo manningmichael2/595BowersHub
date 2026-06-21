@@ -102,4 +102,15 @@ export const financeReview = {
     )
     return data as ApplyMerchantResult
   },
+
+  async splitTransaction(
+    transactionId: string,
+    allocations: { category_id: number | null; amount: number }[],
+  ): Promise<void> {
+    await api.post(`/api/finance/transactions/${encodeURIComponent(transactionId)}/split`, { allocations })
+  },
+
+  async unsplitTransaction(transactionId: string): Promise<void> {
+    await api.post(`/api/finance/transactions/${encodeURIComponent(transactionId)}/unsplit`)
+  },
 }

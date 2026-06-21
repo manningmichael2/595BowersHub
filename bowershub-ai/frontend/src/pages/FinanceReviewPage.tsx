@@ -107,6 +107,16 @@ export default function FinanceReviewPage() {
     }
   }
 
+  const split = async (item: ReviewQueueItem, allocations: { category_id: number | null; amount: number }[]) => {
+    try {
+      await financeReview.splitTransaction(item.id, allocations)
+      toast.success(`Split into ${allocations.length}`)
+      await loadQueue()
+    } catch (e) {
+      toast.error(errorMessage(e))
+    }
+  }
+
   const applyBulk = async () => {
     if (bulkCategory === '' || selected.size === 0) return
     try {
@@ -170,6 +180,7 @@ export default function FinanceReviewPage() {
                   checked={selected.has(item.id)}
                   onToggle={() => toggleSelect(item.id)}
                   onCorrect={correct}
+                  onSplit={split}
                 />
               ))}
             </ul>
@@ -205,65 +216,114 @@ interface RowProps {
   checked: boolean
   onToggle: () => void
   onCorrect: (item: ReviewQueueItem, categoryId: number, applyToMerchant: boolean) => void
+  onSplit: (item: ReviewQueueItem, allocations: { category_id: number | null; amount: number }[]) => void
 }
 
-function QueueRow({ item, categories, categoryName, checked, onToggle, onCorrect }: RowProps) {
+function QueueRow({ item, categories, categoryName, checked, onToggle, onCorrect, onSplit }: RowProps) {
   const [choice, setChoice] = useState<number | ''>('')
   const [applyMerchant, setApplyMerchant] = useState(false)
+  const [splitting, setSplitting] = useState(false)
 
   return (
     <li
       data-testid="queue-row"
       style={{
-        display: 'flex', gap: 12, alignItems: 'center', padding: 10,
+        display: 'flex', flexDirection: 'column', gap: 8, padding: 10,
         border: '1px solid var(--color-border, #333)', borderRadius: 8,
       }}
     >
-      <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${item.description ?? item.id}`} />
-      <MerchantLogo merchantKey={item.merchant_key} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {item.description ?? item.merchant_key ?? '(no description)'}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${item.description ?? item.id}`} />
+        <MerchantLogo merchantKey={item.merchant_key} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {item.description ?? item.merchant_key ?? '(no description)'}
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4, fontSize: 12 }}>
+            {item.transfer_suspected && (
+              <span data-testid="transfer-chip" style={chip('#7a4')}>transfer?</span>
+            )}
+            {item.predicted_category_id != null && (
+              <span data-testid="prediction-chip" style={chip('#468')}>
+                {item.predicted_category_name ?? categoryName(item.predicted_category_id)} · {confidencePct(item.confidence)}
+              </span>
+            )}
+            {item.tier && <span style={chip('#555')}>{item.tier}</span>}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4, fontSize: 12 }}>
-          {item.transfer_suspected && (
-            <span data-testid="transfer-chip" style={chip('#7a4')}>transfer?</span>
+        <div style={{ textAlign: 'right', minWidth: 84 }}>{money(item.amount)}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <select
+            aria-label={`Category for ${item.description ?? item.id}`}
+            style={selectStyle}
+            value={choice}
+            onChange={(e) => setChoice(e.target.value === '' ? '' : Number(e.target.value))}
+          >
+            <option style={optionStyle} value="">Correct…</option>
+            {categories.map((c) => (
+              <option style={optionStyle} key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          {item.merchant_key && (
+            <label style={{ fontSize: 11 }}>
+              <input type="checkbox" checked={applyMerchant} onChange={(e) => setApplyMerchant(e.target.checked)} />{' '}
+              all {item.merchant_key}
+            </label>
           )}
-          {item.predicted_category_id != null && (
-            <span data-testid="prediction-chip" style={chip('#468')}>
-              {item.predicted_category_name ?? categoryName(item.predicted_category_id)} · {confidencePct(item.confidence)}
-            </span>
-          )}
-          {item.tier && <span style={chip('#555')}>{item.tier}</span>}
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button disabled={choice === ''} onClick={() => choice !== '' && onCorrect(item, choice, applyMerchant)}>Save</button>
+            <button onClick={() => setSplitting((s) => !s)} style={{ fontSize: 12 }}>Split</button>
+          </div>
         </div>
       </div>
-      <div style={{ textAlign: 'right', minWidth: 84 }}>{money(item.amount)}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <select
-          aria-label={`Category for ${item.description ?? item.id}`}
-          style={selectStyle}
-          value={choice}
-          onChange={(e) => setChoice(e.target.value === '' ? '' : Number(e.target.value))}
-        >
-          <option style={optionStyle} value="">Correct…</option>
-          {categories.map((c) => (
-            <option style={optionStyle} key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        {item.merchant_key && (
-          <label style={{ fontSize: 11 }}>
-            <input type="checkbox" checked={applyMerchant} onChange={(e) => setApplyMerchant(e.target.checked)} />{' '}
-            all {item.merchant_key}
-          </label>
-        )}
-        <button
-          disabled={choice === ''}
-          onClick={() => choice !== '' && onCorrect(item, choice, applyMerchant)}
-        >
-          Save
-        </button>
-      </div>
+      {splitting && (
+        <SplitEditor item={item} categories={categories}
+          onCancel={() => setSplitting(false)}
+          onSave={(allocs) => { onSplit(item, allocs); setSplitting(false) }} />
+      )}
     </li>
+  )
+}
+
+function SplitEditor({ item, categories, onSave, onCancel }: {
+  item: ReviewQueueItem
+  categories: CategoryOption[]
+  onSave: (allocations: { category_id: number | null; amount: number }[]) => void
+  onCancel: () => void
+}) {
+  const [lines, setLines] = useState<{ category_id: number | ''; amount: string }[]>([
+    { category_id: '', amount: '' }, { category_id: '', amount: '' },
+  ])
+  const sum = lines.reduce((a, l) => a + (Number(l.amount) || 0), 0)
+  const balanced = Math.abs(sum - item.amount) < 0.005 && lines.every((l) => l.amount !== '')
+  const set = (i: number, patch: Partial<{ category_id: number | ''; amount: string }>) =>
+    setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)))
+
+  return (
+    <div data-testid="split-editor" style={{ borderTop: '1px dashed var(--color-border,#333)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+        Split {money(item.amount)} — remaining {money(item.amount - sum)}
+      </div>
+      {lines.map((l, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6 }}>
+          <select style={selectStyle} aria-label={`Split category ${i + 1}`} value={l.category_id}
+            onChange={(e) => set(i, { category_id: e.target.value === '' ? '' : Number(e.target.value) })}>
+            <option style={optionStyle} value="">Category…</option>
+            {categories.map((c) => <option style={optionStyle} key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <input aria-label={`Split amount ${i + 1}`} placeholder="amount" value={l.amount} style={{ width: 90 }}
+            onChange={(e) => set(i, { amount: e.target.value })} />
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button style={{ fontSize: 12 }} onClick={() => setLines((ls) => [...ls, { category_id: '', amount: '' }])}>+ line</button>
+        <button style={{ fontSize: 12 }} disabled={!balanced}
+          onClick={() => onSave(lines.map((l) => ({ category_id: l.category_id === '' ? null : l.category_id, amount: Number(l.amount) })))}>
+          Save split
+        </button>
+        <button style={{ fontSize: 12 }} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
   )
 }
 
