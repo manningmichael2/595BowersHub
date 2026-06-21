@@ -804,3 +804,70 @@ Walked `docs/finance-categorization-cutover.md` end-to-end against prod. The cas
 **Known immaterial residuals (live, reversible, not blockers):** the −$0.54 HSA fee labeled Income; the vague Shopping cluster (5 applied); one "Other" label.
 
 - [Next] Eyeball the 9-item review queue at `/finance/review`; spot-check the 24 auto-applied. Optional cleanups: recategorize/patternize the HealthEquity HSA fee; tighten the ingest investment window (14d misses backdated imports — the cast bug masked it). `flip_to_cascade.py` left uncommitted (one-shot); commit if you want it as repeatable tooling.
+
+---
+
+## [2026-06-20] AudioBookBay ISP Block Bypass (Tor) � Gemini IDE
+
+Discovered that the user's ISP drops all connections to AudioBookBay domains (.nl, .is, .se, .lu) before Cloudflare is even reached. 
+Since Hotspot Shield router configurations were unavailable in the user's dashboard, we pivoted to using a Tor proxy.
+
+**What landed:**
+- Added dockage/tor-privoxy container to prowlarr/docker-compose.yml.
+- Configured laresolverr to route through Tor via PROXY=http://tor-proxy:8118 so it can solve Cloudflare challenges over the Tor network.
+- Jackett UI needs to be configured to route through http://tor-proxy:8118.
+- Updated the walkthrough guide with the new Tor proxy instructions.
+
+---
+
+## [2026-06-20] finance-categorization post-cutover residual fixes — Claude Code
+
+Cleaned up the immaterial mislabels from the first live cascade pass (`scripts/fix_cascade_residuals.py`). Added **regex `user_rules`** (the deterministic tier 1) so recurring merchants self-correct going forward, plus sticky `user_category_override=true` on the already-applied rows: `ANTHROPIC`→Subscriptions, `GOOGLE.*GOOGLE ONE`→Subscriptions, `UBER TRIP`→Trans_Public_Transit, `INVESTMENT ADMIN FEE.*HEALTHEQUITY`→Medical (all 3 monthly HSA fees now consistent; reverted my initial is_investment call — a fee is a real cost, not a wealth flow). `ZEL FROM MANON NITTA` (+$762 incoming Zelle) → **Income** per owner. The −$1.12 "Refund of Interest Earned on Excess Contribution" left as Income (legit negative income adjustment, not from this run). Income column now has no erroneous expense rows.
+
+**Non-obvious finding worth carrying forward:** the merchant normalizer is producing **near-useless merchant_keys** — essentially the full uppercased description (e.g. `INVESTMENT ADMIN FEE MAY 2026. AVERAGE HEALTHEQUITY INVESTMENTS OF $1,790.98 AT 0.0300%`), so each month's charge gets a *distinct* key. That's why merchant-memory learning and merchant-level kNN won't generalize for these, and why description-regex rules were the right fix here. **The normalization rule set (`finance.normalization_rules`, 4 seed rows) is too thin for real-world descriptors** — expanding it (strip trailing amounts/dates/ref numbers, collapse `SQ */TST*/GOOGLE *` prefixes) is the highest-leverage categorization-quality followup, ahead of any model work.
+
+Commit `678481e` (local; push pending owner decision — classifier blocked direct-to-main).
+
+- [Next] (1) Expand `normalization_rules` so merchant_keys are stable → unlocks merchant-memory + kNN tiers. (2) Glance at the 9-item review queue `/finance/review`. (3) Widen the ingest investment-detection window (14d misses backdated imports; the int[]-cast bug had been masking this). (4) Monitor tonight's 02:30 cascade run.
+
+---
+
+## [2026-06-20] Livrarr Deployment (Audiobooks Hybrid Setup) � Gemini IDE
+
+Readarr was deprecated in 2025. Pivoted to deploying Livrarr (ghcr.io/kkodecs/livrarr:0.1.0-alpha5) as the modern automation engine for audiobooks.
+Configured a hybrid Windows/Linux deployment over the Z:\ drive:
+- Livrarr runs on Linux (100.106.180.101:8789).
+- qBittorrent runs on Windows, saving directly to Z:\Downloads\Audiobooks.
+- Livrarr uses a Remote Path Mapping (Z:\Downloads\Audiobooks -> /downloads/Audiobooks) to process completed downloads and move them to /audiobooks.
+
+---
+
+## [2026-06-20] Merchant normalization expansion (0027) + re-key — Claude Code
+
+The categorization quality follow-up flagged after the cutover. `merchant_key` was ≈ the full uppercased descriptor (4 seed rules only), so the same merchant fragmented across many keys (~30 `AMAZON MKTPL*<code>` keys), starving the merchant-memory + kNN tiers (2 of 5 cascade tiers key on merchant_key).
+
+**0027** (PR #24, `8085690`): 13 data-driven rules, derived + validated against live descriptors via `scripts/normalization_dryrun.py` (read-only, reports merge groups to catch wrong merges). Generic trailing-junk strippers (processor `~Future Amount~Tran` tails, phone numbers, trailing 2-letter state, dangling separators) run BEFORE anchored whole-merchant collapses (Amazon, Google Fi/One/YouTube TV, Whole Foods, Walmart+, interest-income, investment-admin-fee, internet-transfer) — ordering matters so a collapse output like `GOOGLE FI`/`YOUTUBE TV` isn't re-stripped by the state rule. The interest-income collapse deliberately EXCLUDES `Interest Charge on Purchases` (a CC interest expense) so it never folds in with interest earned (opposite category). Fixture test per rule + the negative case.
+
+**Re-key on prod** (`scripts/rekey_merchants.py`, idempotent): re-derived all 414 txn keys → **209→160 keys, 138→86 singletons, no wrong merges**. merchant_memory re-keyed (AMAZON.COM→AMAZON, INTEREST PAID/PAYMENT→INTEREST); dropped the stale INTEREST→Transfer mislearn (Income@5 dominates). Cleaned 89 orphaned merchant directory rows (old keys w/ embeddings = kNN noise). Final: merchants dir=160, all embedded; merchant_memory=17. Deploy applied 0027 via migrator; health ok.
+
+Net: the merchant-memory + kNN tiers are now functional (keys are stable), so corrections generalize across a merchant and the cascade leans less on the LLM tier.
+
+- [Next] Watch tonight's 02:30 cascade run with the richer keys. Remaining north-star pieces: accounting model (transfer matching/reconciliation/net-worth), budgets, splits. Smaller: ADMIN_ONLY_SKILLS → DB-driven min_role.
+
+---
+
+## [2026-06-20] NO-HARDCODING tail: per-skill min_role (0028) + accounting spec handoff — Claude Code
+
+Shipped the `ADMIN_ONLY_SKILLS` → DB-driven `min_role` task (PR #25, `0943040`, deployed). `bh_skills.min_role` (NULL=unrestricted, member<admin, unknown-required-role fails closed); executor compares caller role rank; settable via the skills API. `0028` gates `ask-db` (the only real SQL skill — `finance-query` in the old hardcoded set was a dead entry, registered nowhere; documented). Verified migrator can ALTER the app-owned `public.bh_skills` (dry-run, no C7 gotcha); prod shows `ask-db|admin`. 3 tests + suites green.
+
+**Owner asked to proceed with the finance north-star: (1) accounting model — transfer matching/reconciliation/net-worth, (2) budgets/splits, (3) min_role.** #3 done above. #1 and #2 are spec-sized (financial correctness), so the next step is the `/spec` workflow, not ad-hoc implementation. **`/spec finance-accounting` must be launched by the owner** (the skill is human-gated + wasn't in this session's invocable list). Scope: transfer *matching* (link the two legs into one logical movement — `is_transfer` + counterpart detection already exist), reconciliation, net-worth (now has `account_type` + balances). **Budgets/splits (#2) sequenced after** — splits change the categorization data model; budgets read #1's rollups.
+
+- [Next] Owner: run `/spec finance-accounting`. Then implement task-by-task, then `/spec finance-budgets-splits`.
+
+---
+
+## [2026-06-20] Livrarr Teardown � Gemini IDE
+
+User abandoned the Livrarr automation pipeline due to alpha-stage bugs (specifically the root folder 1 duplication bug).
+Tore down the livrarr docker stack and deleted the associated directories and documentation to keep the server clean.
+User will proceed with a manual workflow: Prowlarr -> Windows qBittorrent (Z:\Downloads\Audiobooks) -> Manual Move to Z:\audiobooks -> Audiobookshelf.

@@ -1,0 +1,22 @@
+services:
+  calibre-web:
+    image: linuxserver/calibre-web:latest
+    container_name: calibre-web
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    ports:
+      - "8083:8083"
+    volumes:
+      - /home/michael/calibre/config:/config
+      - /home/michael/calibre/library:/books
+      - /home/michael/audiobooks:/audiobooks
+      - /home/michael/Downloads:/downloads
+    networks:
+      - ai-services_ai-network
+
+networks:
+  ai-services_ai-network:
+    external: true

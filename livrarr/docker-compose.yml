@@ -1,0 +1,21 @@
+services:
+  livrarr:
+    image: ghcr.io/kkodecs/livrarr:0.1.0-alpha5
+    container_name: livrarr
+    restart: unless-stopped
+    ports:
+      - "8789:8789"
+    volumes:
+      - /home/michael/livrarr/config:/config
+      - /home/michael/Downloads:/downloads
+      - /home/michael/audiobooks:/audiobooks
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    networks:
+      - ai-services_ai-network
+
+networks:
+  ai-services_ai-network:
+    external: true
