@@ -497,6 +497,25 @@ async def finance_balances(
         return _finance_error_response(e)
 
 
+@router.get("/finance/budgets")
+async def finance_budgets_widget(user: dict = Depends(get_current_user)) -> dict[str, Any]:
+    """Current-month budget-vs-actual for the dashboard budget-progress widget.
+    Allocation-aware (reuses services/budgets)."""
+    await _validate_finance_columns()
+    try:
+        from datetime import date
+        from backend.services.budgets import budget_vs_actual
+        month = date.today().replace(day=1)
+        async with get_pool().acquire() as conn:
+            rows = await budget_vs_actual(conn, month)
+        # only categories with a budget set (the widget is about budget progress)
+        budgeted = [r for r in rows if r["budgeted"]]
+        return {"error": False, "data": {"month": month.isoformat(), "categories": budgeted}}
+    except Exception as e:
+        logger.error(f"Finance budgets widget query failed: {e}")
+        return _finance_error_response(e)
+
+
 @router.get("/finance/recent-transactions")
 async def finance_recent_transactions(
     user: dict = Depends(get_current_user),

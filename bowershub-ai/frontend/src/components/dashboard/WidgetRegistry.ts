@@ -23,6 +23,7 @@ const WIDGET_COMPONENTS: Record<string, WidgetDefinition> = {
   'finance_summary':      { component: lazy(() => import('./widgets/FinanceSummaryWidget')) },
   'finance_balances':     { component: lazy(() => import('./widgets/BalancesWidget')) },
   'recent_transactions':  { component: lazy(() => import('./widgets/RecentTransactionsWidget')) },
+  'budget_progress':      { component: lazy(() => import('./widgets/BudgetProgressWidget')) },
   'system_health':        { component: lazy(() => import('./widgets/SystemHealthWidget')) },
   'containers':           { component: lazy(() => import('./widgets/ContainersWidget')) },
   'inventory':            { component: lazy(() => import('./widgets/InventoryWidget')) },
