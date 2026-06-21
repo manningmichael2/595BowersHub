@@ -19,8 +19,8 @@ import TopNav from './components/TopNav'
 
 // Lazy-loaded DB Browser — code-split to avoid impacting chat page load
 const DbBrowserPage = lazy(() => import('./pages/DbBrowserPage'))
-// Lazy-loaded Finance Review — code-split, only loaded when visited
-const FinanceReviewPage = lazy(() => import('./pages/FinanceReviewPage'))
+// Lazy-loaded Recurring (finance) — code-split, only loaded when visited
+const RecurringPage = lazy(() => import('./pages/RecurringPage'))
 // Lazy-loaded Net Worth (accounting) — code-split, only loaded when visited
 const NetWorthPage = lazy(() => import('./pages/NetWorthPage'))
 // Lazy-loaded Budgets — code-split, only loaded when visited
@@ -185,7 +185,8 @@ function App() {
         <Route path="/finance" element={<FinanceLayout />}>
           <Route index element={<Navigate to="/finance/transactions" replace />} />
           <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
-          <Route path="review" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceReviewPage /></Suspense>} />
+          <Route path="review" element={<Navigate to="/finance/transactions" replace />} />
+          <Route path="recurring" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RecurringPage /></Suspense>} />
           <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
           <Route path="budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
         </Route>
