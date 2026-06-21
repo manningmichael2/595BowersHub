@@ -378,28 +378,25 @@ async def finance_summary(
 
     try:
         async with pool.acquire() as conn:
-            # MTD total spending (negative amounts = spending, exclude transfers)
+            # MTD total spending — allocation-aware via public.real_activity
+            # (splits counted per child category; transfers + investments excluded).
             mtd_row = await conn.fetchrow(
                 """
                 SELECT COALESCE(SUM(ABS(amount)), 0) AS mtd_spending
-                FROM finance.transactions
+                FROM public.real_activity
                 WHERE posted_date >= date_trunc('month', CURRENT_DATE)
                   AND amount < 0
-                  AND is_transfer = false
-                  AND is_investment = false
                 """
             )
             mtd_spending = float(mtd_row["mtd_spending"])
 
-            # MTD income (positive amounts, exclude transfers and investments)
+            # MTD income
             mtd_income_row = await conn.fetchrow(
                 """
                 SELECT COALESCE(SUM(amount), 0) AS mtd_income
-                FROM finance.transactions
+                FROM public.real_activity
                 WHERE posted_date >= date_trunc('month', CURRENT_DATE)
                   AND amount > 0
-                  AND is_transfer = false
-                  AND is_investment = false
                 """
             )
             mtd_income = float(mtd_income_row["mtd_income"])
@@ -407,12 +404,11 @@ async def finance_summary(
             # Top 5 categories by spend this month
             top_categories_rows = await conn.fetch(
                 """
-                SELECT c.name as category, COALESCE(SUM(ABS(t.amount)), 0) AS total
-                FROM finance.transactions t
-                JOIN finance.categories c ON c.id = t.category_id
-                WHERE t.posted_date >= date_trunc('month', CURRENT_DATE)
-                  AND t.amount < 0
-                  AND t.is_transfer = false
+                SELECT c.name as category, COALESCE(SUM(ABS(ra.amount)), 0) AS total
+                FROM public.real_activity ra
+                JOIN finance.categories c ON c.id = ra.category_id
+                WHERE ra.posted_date >= date_trunc('month', CURRENT_DATE)
+                  AND ra.amount < 0
                 GROUP BY c.name
                 ORDER BY total DESC
                 LIMIT 5
@@ -427,9 +423,9 @@ async def finance_summary(
             prev_row = await conn.fetchrow(
                 """
                 SELECT
-                  COALESCE(SUM(ABS(amount)) FILTER (WHERE amount < 0 AND is_transfer = false AND is_investment = false), 0) AS prev_month_spending,
-                  COALESCE(SUM(amount) FILTER (WHERE amount > 0 AND is_transfer = false AND is_investment = false), 0) AS prev_month_income
-                FROM finance.transactions
+                  COALESCE(SUM(ABS(amount)) FILTER (WHERE amount < 0), 0) AS prev_month_spending,
+                  COALESCE(SUM(amount) FILTER (WHERE amount > 0), 0) AS prev_month_income
+                FROM public.real_activity
                 WHERE posted_date >= date_trunc('month', CURRENT_DATE - INTERVAL '1 month')
                   AND posted_date < date_trunc('month', CURRENT_DATE)
                 """
