@@ -142,12 +142,13 @@ export default function FinanceReviewPage() {
               <span>{selected.size} selected</span>
               <select
                 aria-label="Bulk category"
+                style={selectStyle}
                 value={bulkCategory}
                 onChange={(e) => setBulkCategory(e.target.value === '' ? '' : Number(e.target.value))}
               >
-                <option value="">Choose category…</option>
+                <option style={optionStyle} value="">Choose category…</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option style={optionStyle} key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
               <button onClick={applyBulk} disabled={bulkCategory === ''}>Apply to selected</button>
@@ -240,12 +241,13 @@ function QueueRow({ item, categories, categoryName, checked, onToggle, onCorrect
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <select
           aria-label={`Category for ${item.description ?? item.id}`}
+          style={selectStyle}
           value={choice}
           onChange={(e) => setChoice(e.target.value === '' ? '' : Number(e.target.value))}
         >
-          <option value="">Correct…</option>
+          <option style={optionStyle} value="">Correct…</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option style={optionStyle} key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
         {item.merchant_key && (
@@ -267,4 +269,18 @@ function QueueRow({ item, categories, categoryName, checked, onToggle, onCorrect
 
 function chip(bg: string): React.CSSProperties {
   return { background: bg, color: '#fff', borderRadius: 10, padding: '2px 8px', whiteSpace: 'nowrap' }
+}
+
+// Native <select> otherwise renders on the browser's default white control while
+// inheriting the dark theme's light text → white-on-white. Pin theme colors.
+const selectStyle: React.CSSProperties = {
+  background: 'var(--color-surface)',
+  color: 'var(--color-text)',
+  border: '1px solid var(--color-border, #374151)',
+  borderRadius: 6,
+  padding: '4px 8px',
+}
+const optionStyle: React.CSSProperties = {
+  background: 'var(--color-surface)',
+  color: 'var(--color-text)',
 }
