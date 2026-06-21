@@ -944,3 +944,18 @@ Finance → Transactions is now the Monarch/Origin-style surface: search · date
 **Deliberately NOT done (owner decision pending):** the **Review** tab is retained — it still owns bulk-categorize, user-rules, and recurring, which aren't in the explorer yet. Dropping it would regress those. Open question for next session: port bulk/rules/recurring into the explorer and fully retire Review (true single surface), or keep Review as the "advanced" tab.
 
 - [Next] Owner's call on fully retiring Review (port bulk/rules/recurring). Other deferred finance follow-ups unchanged (manual transfer-link UI, split-a-transfer, budget rollover, reconcile-vs-snapshot). Finance trio (categorization + accounting + budgets/splits) is complete and live.
+
+---
+
+## [2026-06-21] Finish finance UX: unified explorer + bulk + dashboard budget widget — Claude Code
+
+Owner chose "finish finance UX" as the next focus; delivered in slices (all merged + deployed):
+
+- **Bug fixes (owner report):** explorer was mislabeling `is_transfer`/`is_investment` rows (category_id NULL) as editable "Uncategorized". Verified on prod: of 7 NULL-category rows, 1 transfer + 6 investments, **0 genuinely uncategorized** (so the Review queue was correctly empty). Now they render read-only as **Transfer**/**Investment** (Split hidden); the explorer's `uncategorized` filter now also excludes investments → matches the Review queue exactly.
+- **Slice 1 — bulk:** multi-select checkboxes + bulk-categorize bar in the explorer.
+- **Slice 2 — retire Review (unify):** the explorer now covers the whole review workflow (uncategorized filter + inline categorize/split + bulk; apply-to-merchant via search+bulk; learning loop auto-handles future same-merchant). Relocated **Recurring** to its own hub tab; **deleted FinanceReviewPage** + test; `/finance/review` redirects to `/finance/transactions`. Finance hub tabs: **Transactions · Budgets · Net Worth · Recurring**.
+- **Slice 3 — dashboard surfacing:** net worth (finance_balances, now account_type-driven) + spending (finance_summary, allocation-aware) widgets already existed; added the missing **Budget Progress** widget — `GET /api/dashboard/finance/budgets` (current-month budget-vs-actual, allocation-aware) + `0033` registers it in the DB-driven `bh_dashboard_widgets` registry + `BudgetProgressWidget` (budgetTone ok/warn/over bars). Add via the dashboard's Add-Widget modal.
+
+Net: Finance is now one cohesive Monarch/Origin-style surface — a single **Transactions** explorer (search · date-range presets+slicer · category/status filters · sortable · subtotals/totals · inline categorize/split/bulk) plus Budgets/Net Worth/Recurring tabs, and budgets/net-worth/spending all surface as dashboard widgets. tsc clean throughout; 230 frontend tests + backend explorer/budgets/splits green.
+
+- [Next] Deferred finance follow-ups (all optional, owner's call): a dedicated user-rules management UI (backend CRUD exists, no frontend); manual transfer-link UI; split-a-transfer; budget rollover/income-budgeting; reconcile-vs-snapshot drift. No further finance work queued.
