@@ -378,6 +378,9 @@ app.include_router(db_browser_router)
 from backend.routers.finance_review import router as finance_review_router
 app.include_router(finance_review_router)
 
+from backend.routers.finance_accounting import router as finance_accounting_router
+app.include_router(finance_accounting_router)
+
 
 # --- Slash commands endpoint (used by frontend autocomplete) ---
 
