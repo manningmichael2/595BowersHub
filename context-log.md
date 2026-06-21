@@ -911,3 +911,36 @@ Built and deployed the whole `finance-accounting` spec (transfer matching · rec
 - **Service Restart:** Bounced the `calibre-web` container to flush its cache and apply the metadata changes.
 
 - [Next] Wait for user to confirm if any other authors or series need metadata QA/QC.
+---
+
+## [2026-06-21] finance-budgets-splits spec IMPLEMENTED end-to-end (Tasks 1–8) — Claude Code
+
+Built and deployed the final north-star finance spec (transaction splits + budgets), task-by-task, CI-gated PRs:
+
+- **Task 1 (#34)** `0031`/`0032`: `transactions += parent_id` self-FK (ON DELETE CASCADE) + `is_split`; `public.transactions` view recreated with both; new **`public.real_activity` view** = `is_split=false AND is_transfer=false AND is_investment=false` — the single allocation-aware rollup source baking all three exclusions in one place. Budget alert thresholds → `accounting_config` (`budget_warn_ratio`/`budget_over_ratio`); `categories.budget_monthly` deprecated.
+- **Tasks 2/3/5 (#35)** splits backend: `services/splits.py` (child-subtransaction model — sum-to-total + same-sign integrity in one tx; parent→container category NULL/`is_split`/override; children inherit date+account; rejects splitting a transfer); cascade Writer `is_split=false` guard; **all rollups repointed at `real_activity`** (finance.py, dashboard.py, briefing.py); split/unsplit/allocations API. **Validated:** a split leaves `real_activity`'s total unchanged (parent out, children in) — no double-count.
+- **Tasks 4/6 (budgets PR)** budgets backend: `services/budgets.py` (reuse `finance.budgets`; allocation-aware `budget_vs_actual`; thresholds from config); `alerts.py check_budgets` made allocation-aware + DB-driven thresholds (hardcoded 80/100 gone); `routers/finance_budgets.py` (GET /budgets, /budgets/actual; PUT /budgets).
+- **Tasks 7/8 (#37)** frontend: per-row **split editor** in FinanceReviewPage (running-sum-equals-total guard); **BudgetsPage** (`/finance/budgets`, 🎯 nav) Budgeted/Spent/Remaining with `lib/budget.ts` tone; typed clients.
+
+**Model:** child-subtransaction splits (Actual Budget); single `real_activity` view serves the category breakdown, budget actual, AND the live hourly Pushover alert — no special-casing. Validator 21/21. All deployed; health ok; `/api/finance/net-worth` + `/budgets` live (401 auth-gated). **Subagent note:** spec critiques ran inline (subagents hit session limits); grounding research completed (3 researchers).
+
+**This completes the finance north-star trio: categorization + accounting + budgets/splits.**
+
+- [Next] Optional follow-ups: a manual transfer-link UI; split a transfer (deferred boundary); budget rollover/income-budgeting (deferred, DB-config when wanted); reconcile drift vs nearest snapshot once history accrues. No further finance specs planned.
+
+---
+
+## [2026-06-21] Finance frontend: hub + transactions explorer + unify + polish — Claude Code
+
+Owner feedback after using the deployed finance pages drove a frontend round (all merged + deployed, PRs #39–#42):
+
+- **Input/select contrast (PRs ~#39):** the global white-on-white fix only covered `<select>`; extended `index.css` to theme bare `<input>`/`<textarea>` (the reconcile `stmt $` field, budget limit, split amount were grey-on-white) with a themed placeholder. Low element-specificity so component-styled inputs still win; checkboxes/radios excluded.
+- **Cut-off bug + Finance hub (PR #40):** finance pages had no offset for the fixed `TopNav` (h-11) → headings clipped. New `components/FinanceLayout.tsx` wraps all finance tools in one `sm:pt-11` + scroll container (fixes it once) with sub-tabs. Consolidated nav: single **💵 Finance** entry in `TopNav` + Sidebar (three finance icons → one); `/finance` is now a layout route (nested review/budgets/net-worth).
+- **Transactions explorer (PR #41):** `services/transactions_query.py` + `routers/finance_transactions.py` (`GET /api/finance/transactions`) — parameterized text/category/month/account/status filters, sort, pagination, with **allocation-aware** by-category subtotals + in/out totals from `public.real_activity` (whitelisted sort cols, int limit/offset — no value interpolation). Frontend `TransactionsPage` (default Finance tab): filter bar, sortable columns, subtotals/totals.
+- **Unify + date filter (PR #42):** extracted shared `components/finance/SplitEditor.tsx`; the explorer gained **inline categorize** (per-row category select) + **Split/Unsplit** (expandable editor) — day-to-day review now happens in Transactions. Added a **date filter**: presets (This year / Last 30 days / Last 7 days / All time) + custom start–end slicer (start/end params on the endpoint, applied to list AND subtotals); defaults to this-year-to-date.
+
+Finance → Transactions is now the Monarch/Origin-style surface: search · date range · category/status filters · sortable columns · subtotals + totals · inline categorize/split. tsc clean; 236 frontend tests; backend explorer/splits tests green throughout.
+
+**Deliberately NOT done (owner decision pending):** the **Review** tab is retained — it still owns bulk-categorize, user-rules, and recurring, which aren't in the explorer yet. Dropping it would regress those. Open question for next session: port bulk/rules/recurring into the explorer and fully retire Review (true single surface), or keep Review as the "advanced" tab.
+
+- [Next] Owner's call on fully retiring Review (port bulk/rules/recurring). Other deferred finance follow-ups unchanged (manual transfer-link UI, split-a-transfer, budget rollover, reconcile-vs-snapshot). Finance trio (categorization + accounting + budgets/splits) is complete and live.
