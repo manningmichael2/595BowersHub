@@ -83,8 +83,8 @@ Typed endpoints expose current net worth (with asset/liability breakdown by acco
 
 ## Feature 4: Schema Reproducibility & Config (cross-cutting)
 
-### R4.1 — Seed account_type for reproducibility
-`account_type` was set ad-hoc on prod and is **not** seeded by any migration, so a from-empty rebuild has all-NULL types (breaks C2 reproducibility and silently disables liability detection + net-worth classification). A migration seeds/backfills `account_type` idempotently for the known accounts, dry-run against the populated prod DB first.
+### R4.1 — account_type is operational metadata (reproducibility)
+**Reframed during implementation:** `finance.accounts` rows come from the SimpleFin sync, not migrations, so a static seed can't reproduce `account_type` on a fresh DB (no account rows exist until a sync). The *column* is reproducible (migration); the *values* are operational metadata set via the **admin set-type API** (`PUT /accounts/{id}/type`), and net worth **excludes + flags** untyped accounts as "needs type" (R3.1) so nothing is silently mis-counted. The `0030` seed still types known prod accounts (e.g. the mortgage) as a one-time correction (no-op on fresh DB).
 
 ### R4.2 — Migrator-owned DDL + read view
 All new `finance.*` objects (columns, `transfer_links`/`reconciliations`/`balance_snapshots`) are created in forward-only migrations authored under the `bowershub_migrator` role (C7). New columns surfaced to `ask-db`/`finance_reader` are added to the `public.transactions` view, recreated under the migrator with `GRANT SELECT ... finance_reader` re-applied (mirrors `0022:125-156`).
