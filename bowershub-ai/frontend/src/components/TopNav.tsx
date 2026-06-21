@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 const NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/chat', label: 'Chat', icon: '💬' },
+  { path: '/finance', label: 'Finance', icon: '💵' },
   { path: '/db', label: 'Database', icon: '🗄️' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ]

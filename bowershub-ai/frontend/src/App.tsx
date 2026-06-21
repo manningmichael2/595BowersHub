@@ -25,6 +25,7 @@ const FinanceReviewPage = lazy(() => import('./pages/FinanceReviewPage'))
 const NetWorthPage = lazy(() => import('./pages/NetWorthPage'))
 // Lazy-loaded Budgets — code-split, only loaded when visited
 const BudgetsPage = lazy(() => import('./pages/BudgetsPage'))
+import FinanceLayout from './components/FinanceLayout'
 
 /**
  * Theme tokens we apply as CSS custom properties on `:root`.
@@ -180,9 +181,12 @@ function App() {
         <Route path="/quick-capture" element={<QuickCapturePage />} />
         <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/finance/review" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceReviewPage /></Suspense>} />
-        <Route path="/finance/net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
-        <Route path="/finance/budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
+        <Route path="/finance" element={<FinanceLayout />}>
+          <Route index element={<Navigate to="/finance/review" replace />} />
+          <Route path="review" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceReviewPage /></Suspense>} />
+          <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
+          <Route path="budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
+        </Route>
         <Route path="/tools/:toolId" element={<ToolFramePage />} />
         <Route path="/db/*" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><DbBrowserPage /></Suspense>} />
         <Route path="/chat/*" element={<AppShell />} />

@@ -92,9 +92,7 @@ export default function Sidebar() {
         {/* Navigation links */}
         <div className="flex gap-1 mb-2">
           <Link to="/dashboard" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Dashboard" onClick={() => setSidebarOpen(false)}>📊</Link>
-          <Link to="/finance/review" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Finance Review" onClick={() => setSidebarOpen(false)}>💰</Link>
-          <Link to="/finance/net-worth" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Net Worth" onClick={() => setSidebarOpen(false)}>📈</Link>
-          <Link to="/finance/budgets" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Budgets" onClick={() => setSidebarOpen(false)}>🎯</Link>
+          <Link to="/finance" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Finance" onClick={() => setSidebarOpen(false)}>💵</Link>
           <Link to="/chat" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Chat" onClick={() => setSidebarOpen(false)}>💬</Link>
           <a href="http://100.106.180.101:5002" target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="DB Admin">🗄️</a>
           <a href="http://100.106.180.101:5678" target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="n8n">⚡</a>
