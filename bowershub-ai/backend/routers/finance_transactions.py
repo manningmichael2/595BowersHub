@@ -29,6 +29,8 @@ async def list_transactions(
     q: Optional[str] = None,
     category_id: Optional[int] = None,
     month: Optional[date] = None,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
     account_id: Optional[str] = None,
     status: str = "all",
     sort: str = "date",
@@ -44,6 +46,7 @@ async def list_transactions(
             return await search_transactions(
                 conn, q=q, category_id=category_id,
                 month=month.replace(day=1) if month else None,
+                start=start, end=end,
                 account_id=account_id, status=status, sort=sort, order=order,
                 limit=limit, offset=offset)
     except (asyncpg.PostgresError, OSError, RuntimeError) as e:

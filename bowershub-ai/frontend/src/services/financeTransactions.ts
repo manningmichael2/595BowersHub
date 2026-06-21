@@ -35,6 +35,8 @@ export interface TxnQuery {
   q?: string
   category_id?: number
   month?: string          // YYYY-MM-01
+  start?: string          // YYYY-MM-DD (inclusive)
+  end?: string            // YYYY-MM-DD (inclusive)
   status?: TxnStatus
   sort?: 'date' | 'amount' | 'category' | 'description'
   order?: 'asc' | 'desc'
@@ -48,6 +50,8 @@ export const financeTransactions = {
     if (query.q) p.set('q', query.q)
     if (query.category_id != null) p.set('category_id', String(query.category_id))
     if (query.month) p.set('month', query.month)
+    if (query.start) p.set('start', query.start)
+    if (query.end) p.set('end', query.end)
     if (query.status && query.status !== 'all') p.set('status', query.status)
     if (query.sort) p.set('sort', query.sort)
     if (query.order) p.set('order', query.order)

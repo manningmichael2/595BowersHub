@@ -58,3 +58,25 @@ async def test_search_filters_sort_and_subtotals(fresh_db, db_settings):
             assert "t1" in ids and after["count"] == 5   # split parent stays top-level; children hidden (not extra rows)
     finally:
         await close_pool()
+
+
+@pytest.mark.asyncio
+async def test_date_range_filter(fresh_db, db_settings):
+    """start/end bound the result inclusively (presets compute these ranges)."""
+    pool = await apply_migrations(fresh_db, db_settings)
+    try:
+        async with pool.acquire() as conn:
+            acct = await conn.fetchval(
+                "INSERT INTO finance.accounts (id, org_name, account_name) "
+                "VALUES ('A1','Bank','Chk') RETURNING id")
+            await conn.execute(
+                "INSERT INTO finance.transactions (id, account_id, posted_date, amount, description) VALUES "
+                "('old', $1, DATE '2026-01-15', -10, 'old'),"
+                "('mid', $1, DATE '2026-03-15', -20, 'mid'),"
+                "('new', $1, DATE '2026-06-15', -30, 'new')", acct)
+            r = await search_transactions(conn, start=date(2026, 3, 1), end=date(2026, 5, 31))
+            assert [i["id"] for i in r["items"]] == ["mid"]
+            # subtotals respect the same range
+            assert r["totals"]["spending"] == 20.0
+    finally:
+        await close_pool()
