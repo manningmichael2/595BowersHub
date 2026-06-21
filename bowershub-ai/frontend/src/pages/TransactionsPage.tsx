@@ -1,0 +1,162 @@
+/**
+ * TransactionsPage — the unified Monarch/Origin-style transactions explorer
+ * (Finance → Transactions). Search + filter (category/month/status), sortable
+ * columns, by-category subtotals + in/out totals. Allocation-aware (splits count
+ * per child category; split parents shown once). Inline categorize/split folds in
+ * next so this becomes the single finance transactions surface.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from '../stores/toast'
+import { financeReview, type CategoryOption } from '../services/financeReview'
+import {
+  financeTransactions,
+  type TxnQuery,
+  type TxnSearchResult,
+  type TxnStatus,
+} from '../services/financeTransactions'
+
+function money(n: number): string {
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n)
+}
+function errorMessage(e: unknown): string {
+  const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+  return d ?? 'Something went wrong'
+}
+
+const STATUSES: TxnStatus[] = ['all', 'uncategorized', 'spending', 'income', 'transfers']
+const inputStyle: React.CSSProperties = {
+  background: 'var(--color-surface)', color: 'var(--color-text)',
+  border: '1px solid var(--color-border, #374151)', borderRadius: 6, padding: '4px 8px',
+}
+
+function thisMonth(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+export default function TransactionsPage() {
+  const [categories, setCategories] = useState<CategoryOption[]>([])
+  const [result, setResult] = useState<TxnSearchResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
+  const [categoryId, setCategoryId] = useState<number | ''>('')
+  const [month, setMonth] = useState('')   // '' = all time
+  const [status, setStatus] = useState<TxnStatus>('all')
+  const [sort, setSort] = useState<NonNullable<TxnQuery['sort']>>('date')
+  const [order, setOrder] = useState<NonNullable<TxnQuery['order']>>('desc')
+
+  useEffect(() => { financeReview.getCategories().then(setCategories).catch(() => {}) }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setResult(await financeTransactions.search({
+        q: q || undefined,
+        category_id: categoryId === '' ? undefined : categoryId,
+        month: month || undefined,
+        status, sort, order, limit: 200,
+      }))
+    } catch (e) {
+      toast.error(errorMessage(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [q, categoryId, month, status, sort, order])
+
+  useEffect(() => {
+    const t = setTimeout(() => void load(), 250)  // debounce text input
+    return () => clearTimeout(t)
+  }, [load])
+
+  const toggleSort = (col: NonNullable<TxnQuery['sort']>) => {
+    if (sort === col) setOrder((o) => (o === 'asc' ? 'desc' : 'asc'))
+    else { setSort(col); setOrder('desc') }
+  }
+  const arrow = (col: string) => (sort === col ? (order === 'asc' ? ' ▲' : ' ▼') : '')
+
+  const net = useMemo(() => result ? result.totals.income - result.totals.spending : 0, [result])
+
+  return (
+    <div style={{ padding: 16, maxWidth: 1100, margin: '0 auto' }}>
+      {/* Filter bar */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} placeholder="Search description / merchant…"
+          value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search transactions" />
+        <select style={inputStyle} value={categoryId} aria-label="Filter category"
+          onChange={(e) => setCategoryId(e.target.value === '' ? '' : Number(e.target.value))}>
+          <option value="">All categories</option>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <input style={inputStyle} type="month" aria-label="Filter month"
+          value={month ? month.slice(0, 7) : ''}
+          onChange={(e) => setMonth(e.target.value ? `${e.target.value}-01` : '')} />
+        <select style={inputStyle} value={status} aria-label="Filter status"
+          onChange={(e) => setStatus(e.target.value as TxnStatus)}>
+          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <button style={{ fontSize: 12 }} onClick={() => { setQ(''); setCategoryId(''); setMonth(''); setStatus('all') }}>Clear</button>
+      </div>
+
+      {/* Totals summary */}
+      {result && (
+        <div style={{ display: 'flex', gap: 20, marginBottom: 10, fontSize: 13 }}>
+          <span>Income <b style={{ color: '#4a4' }}>{money(result.totals.income)}</b></span>
+          <span>Spending <b style={{ color: '#c66' }}>{money(result.totals.spending)}</b></span>
+          <span>Net <b>{money(net)}</b></span>
+          <span style={{ color: 'var(--color-text-muted)' }}>{result.count} transactions</span>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        {/* Table */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {loading ? <p>Loading…</p> : !result || result.items.length === 0 ? (
+            <p data-testid="empty">No transactions match.</p>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border,#333)' }}>
+                  <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
+                  <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('description')}>Description{arrow('description')}</th>
+                  <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('category')}>Category{arrow('category')}</th>
+                  <th style={{ cursor: 'pointer', padding: 6, textAlign: 'right' }} onClick={() => toggleSort('amount')}>Amount{arrow('amount')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.items.map((t) => (
+                  <tr key={t.id} data-testid="txn-row" style={{ borderBottom: '1px solid var(--color-border,#222)' }}>
+                    <td style={{ padding: 6, whiteSpace: 'nowrap' }}>{t.posted_date}</td>
+                    <td style={{ padding: 6 }}>
+                      {t.description ?? t.merchant_key ?? '—'}
+                      {t.is_split && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--color-text-muted)' }}>· split</span>}
+                      {t.is_transfer && <span style={{ marginLeft: 6, fontSize: 11, color: '#7a4' }}>· transfer</span>}
+                    </td>
+                    <td style={{ padding: 6, color: t.category_name ? 'inherit' : 'var(--color-text-muted)' }}>
+                      {t.category_name ?? (t.is_split ? '(split)' : 'Uncategorized')}
+                    </td>
+                    <td style={{ padding: 6, textAlign: 'right', color: t.amount < 0 ? 'inherit' : '#4a4' }}>{money(t.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* By-category subtotals */}
+        {result && result.subtotals.length > 0 && (
+          <div style={{ width: 240, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 6 }}>By category</div>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {result.subtotals.map((s) => (
+                <li key={s.category} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span>{s.category}</span>
+                  <span style={{ color: s.total < 0 ? 'inherit' : '#4a4' }}>{money(s.total)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

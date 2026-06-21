@@ -7,6 +7,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 
 const TABS = [
+  { to: '/finance/transactions', label: 'Transactions' },
   { to: '/finance/review', label: 'Review' },
   { to: '/finance/budgets', label: 'Budgets' },
   { to: '/finance/net-worth', label: 'Net Worth' },

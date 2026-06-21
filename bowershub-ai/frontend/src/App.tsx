@@ -26,6 +26,7 @@ const NetWorthPage = lazy(() => import('./pages/NetWorthPage'))
 // Lazy-loaded Budgets — code-split, only loaded when visited
 const BudgetsPage = lazy(() => import('./pages/BudgetsPage'))
 import FinanceLayout from './components/FinanceLayout'
+const TransactionsPage = lazy(() => import('./pages/TransactionsPage'))
 
 /**
  * Theme tokens we apply as CSS custom properties on `:root`.
@@ -182,7 +183,8 @@ function App() {
         <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/finance" element={<FinanceLayout />}>
-          <Route index element={<Navigate to="/finance/review" replace />} />
+          <Route index element={<Navigate to="/finance/transactions" replace />} />
+          <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
           <Route path="review" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceReviewPage /></Suspense>} />
           <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
           <Route path="budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
