@@ -871,3 +871,14 @@ Shipped the `ADMIN_ONLY_SKILLS` → DB-driven `min_role` task (PR #25, `0943040`
 User abandoned the Livrarr automation pipeline due to alpha-stage bugs (specifically the root folder 1 duplication bug).
 Tore down the livrarr docker stack and deleted the associated directories and documentation to keep the server clean.
 User will proceed with a manual workflow: Prowlarr -> Windows qBittorrent (Z:\Downloads\Audiobooks) -> Manual Move to Z:\audiobooks -> Audiobookshelf.
+
+---
+
+## [2026-06-21] Calibre-Web Deployment & Livrarr Restoration — Gemini IDE
+
+**What landed:**
+- **Livrarr Restoration:** Restored Livrarr to a functional state. Diagnosed and mitigated the root folder conflict with Audiobookshelf by disabling the qBittorrent download client in Livrarr, allowing it to process without duplicating/moving files aggressively.
+- **Calibre-Web:** Deployed \linuxserver/calibre-web\ via Docker to provide a lightweight, native web interface for ebook management and " Send to Kindle\ functionality.
+- **Infrastructure:** Configured Caddy to reverse proxy Calibre-Web over HTTPS at \https://595bowershub.tailc4d58a.ts.net:8443\ mapping to internal port 8083. Bootstrapped a blank \metadata.db\ to initialize the \/books\ library.
+- **Kindle DRM Strategy:** Documented the community-standard method for stripping Amazon DRM (KFX/AZW) using the legacy Kindle for PC 1.24.51068 installer and the \enderer-test.exe\ bypass, paired with the desktop Calibre DeDRM plugin.
+- **Documentation:** Committed the new \calibre\ compose file, the restored \livrarr\ stack, and the updated \prowlarr-abb\ specs/walkthrough to GitHub.
