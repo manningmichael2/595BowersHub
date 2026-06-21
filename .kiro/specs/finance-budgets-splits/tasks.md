@@ -1,5 +1,7 @@
 # Finance Budgets & Splits — Tasks
 
+> **STATUS: COMPLETE (2026-06-21).** All 8 tasks implemented, merged, and deployed. Validator 21/21. See context-log 2026-06-21.
+
 > Each task traces to one or more requirements. Work top-to-bottom; respect dependencies. Each task is verified against its Definition of Done before the next.
 
 ## Task 1: Schema + config migrations (0031, 0032)
