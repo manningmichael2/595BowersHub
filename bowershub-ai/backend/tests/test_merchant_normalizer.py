@@ -26,6 +26,22 @@ FIXTURES = [
     ("KROGER #123",                       "Kroger"),
     ("SHELL OIL 12345",                   "Shell Oil"),
     ("RANDOM LOCAL SHOP",                 "Random Local Shop"),  # unmatched → cleaned fallthrough
+    # --- 0027 expansion: fold fragmented merchants to one stable key ---
+    ("AMAZON MKTPL*4V4IE6IB3",            "Amazon"),
+    ("Amazon.com*B47FR8XH3",              "Amazon"),
+    ("GOOGLE *FI QTWJNS G.CO/HELPPAY# CA", "Google Fi"),
+    ("GOOGLE*YOUTUBE TV GOCC GOOGLE.COM", "Youtube Tv"),
+    ("GOOGLE *GOOGLE ONE G.CO/HELPPAY# CA", "Google One"),
+    ("WHOLEFDS BIR #10641",               "Whole Foods"),
+    ("Walmart+ Member 04/28009666546 AR", "Walmart+ Member"),
+    ("Investment Admin Fee May 2026. Average HealthEquity investments of $1,790.98", "Investment Admin Fee"),
+    ("ROBINHOOD DEBITS~ Future Amount: 120 ~ Tran: ACHDW", "Robinhood Debits"),
+    ("ALLIANZ TRAVEL INS 866-884-3556 VA", "Allianz Travel Ins"),  # phone + state stripped
+    # Interest INCOME variants collapse...
+    ("Interest for Apr-26",               "Interest"),
+    ("INTEREST PAID",                     "Interest"),
+    # ...but the credit-card interest EXPENSE must stay separate (opposite category).
+    ("Interest Charge on Purchases",      "Interest Charge On Purchases"),
 ]
 
 
