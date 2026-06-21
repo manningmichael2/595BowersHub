@@ -15,6 +15,7 @@ export interface TxnRow {
   category_id: number | null
   category_name: string | null
   is_transfer: boolean
+  is_investment: boolean
   is_split: boolean
   cleared: boolean
 }

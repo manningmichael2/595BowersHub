@@ -43,7 +43,8 @@ def _list_filters(f: dict) -> tuple[list[str], list]:
 
     status = f.get("status") or "all"
     if status == "uncategorized":
-        where.append("t.category_id IS NULL AND t.is_transfer = false AND t.is_split = false")
+        where.append("t.category_id IS NULL AND t.is_transfer = false "
+                     "AND t.is_investment = false AND t.is_split = false")
     elif status == "spending":
         where.append("t.amount < 0 AND t.is_transfer = false")
     elif status == "income":
@@ -68,7 +69,7 @@ async def search_transactions(conn, *, q=None, category_id=None, month=None,
         f"""
         SELECT t.id, t.posted_date::text AS posted_date, t.description, t.merchant_key,
                t.amount, t.account_id, a.account_name, t.category_id, c.name AS category_name,
-               t.is_transfer, t.is_split, t.cleared
+               t.is_transfer, t.is_investment, t.is_split, t.cleared
         FROM finance.transactions t
         LEFT JOIN finance.categories c ON c.id = t.category_id
         LEFT JOIN finance.accounts a ON a.id = t.account_id

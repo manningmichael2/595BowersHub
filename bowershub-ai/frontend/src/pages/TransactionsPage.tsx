@@ -56,6 +56,8 @@ export default function TransactionsPage() {
   const [sort, setSort] = useState<NonNullable<TxnQuery['sort']>>('date')
   const [order, setOrder] = useState<NonNullable<TxnQuery['order']>>('desc')
   const [splittingId, setSplittingId] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkCat, setBulkCat] = useState<number | ''>('')
 
   useEffect(() => { financeReview.getCategories().then(setCategories).catch(() => {}) }, [])
 
@@ -100,6 +102,20 @@ export default function TransactionsPage() {
     try {
       await financeReview.unsplitTransaction(id)
       toast.success('Unsplit')
+      await load()
+    } catch (e) { toast.error(errorMessage(e)) }
+  }
+  const toggleSel = (id: string) => setSelected((prev) => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const applyBulk = async () => {
+    if (bulkCat === '' || selected.size === 0) return
+    try {
+      const n = await financeReview.bulkCategorize([...selected], bulkCat)
+      toast.success(`Categorized ${n}`)
+      setBulkCat(''); setSelected(new Set())
       await load()
     } catch (e) { toast.error(errorMessage(e)) }
   }
@@ -148,6 +164,20 @@ export default function TransactionsPage() {
           value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div data-testid="bulk-bar" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontSize: 13 }}>{selected.size} selected</span>
+          <select style={{ ...inputStyle, fontSize: 12 }} aria-label="Bulk category" value={bulkCat}
+            onChange={(e) => setBulkCat(e.target.value === '' ? '' : Number(e.target.value))}>
+            <option value="">Choose category…</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button style={{ fontSize: 12 }} disabled={bulkCat === ''} onClick={applyBulk}>Apply to selected</button>
+          <button style={{ fontSize: 12 }} onClick={() => setSelected(new Set())}>Clear</button>
+        </div>
+      )}
+
       {/* Totals summary */}
       {result && (
         <div style={{ display: 'flex', gap: 20, marginBottom: 10, fontSize: 13 }}>
@@ -167,6 +197,11 @@ export default function TransactionsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border,#333)' }}>
+                  <th style={{ padding: 6 }}>
+                    <input type="checkbox" aria-label="Select all"
+                      checked={result.items.length > 0 && result.items.every((t) => selected.has(t.id))}
+                      onChange={(e) => setSelected(e.target.checked ? new Set(result.items.map((t) => t.id)) : new Set())} />
+                  </th>
                   <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
                   <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('description')}>Description{arrow('description')}</th>
                   <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('category')}>Category{arrow('category')}</th>
@@ -178,14 +213,19 @@ export default function TransactionsPage() {
                 {result.items.map((t) => (
                   <Fragment key={t.id}>
                     <tr data-testid="txn-row" style={{ borderBottom: '1px solid var(--color-border,#222)' }}>
-                      <td style={{ padding: 6, whiteSpace: 'nowrap' }}>{t.posted_date}</td>
                       <td style={{ padding: 6 }}>
-                        {t.description ?? t.merchant_key ?? '—'}
-                        {t.is_transfer && <span style={{ marginLeft: 6, fontSize: 11, color: '#7a4' }}>· transfer</span>}
+                        <input type="checkbox" aria-label={`Select ${t.description ?? t.id}`}
+                          checked={selected.has(t.id)} onChange={() => toggleSel(t.id)} />
                       </td>
+                      <td style={{ padding: 6, whiteSpace: 'nowrap' }}>{t.posted_date}</td>
+                      <td style={{ padding: 6 }}>{t.description ?? t.merchant_key ?? '—'}</td>
                       <td style={{ padding: 6 }}>
                         {t.is_split ? (
                           <span style={{ color: 'var(--color-text-muted)' }}>(split)</span>
+                        ) : t.is_transfer ? (
+                          <span style={{ color: '#7a4' }}>Transfer</span>
+                        ) : t.is_investment ? (
+                          <span style={{ color: 'var(--color-text-muted)' }}>Investment</span>
                         ) : (
                           <select aria-label={`Category for ${t.description ?? t.id}`} style={{ ...inputStyle, fontSize: 12 }}
                             value={t.category_id ?? ''}
@@ -199,14 +239,14 @@ export default function TransactionsPage() {
                       <td style={{ padding: 6, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {t.is_split ? (
                           <button style={{ fontSize: 11 }} onClick={() => doUnsplit(t.id)}>Unsplit</button>
-                        ) : !t.is_transfer ? (
+                        ) : !t.is_transfer && !t.is_investment ? (
                           <button style={{ fontSize: 11 }} onClick={() => setSplittingId((id) => (id === t.id ? null : t.id))}>Split</button>
                         ) : null}
                       </td>
                     </tr>
                     {splittingId === t.id && (
                       <tr>
-                        <td colSpan={5} style={{ padding: '0 6px 8px' }}>
+                        <td colSpan={6} style={{ padding: '0 6px 8px' }}>
                           <SplitEditor amount={t.amount} categories={categories}
                             onCancel={() => setSplittingId(null)}
                             onSave={(allocs) => doSplit(t.id, allocs)} />

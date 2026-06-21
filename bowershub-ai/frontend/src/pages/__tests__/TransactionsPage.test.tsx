@@ -15,7 +15,7 @@ import { financeTransactions, type TxnSearchResult } from '../../services/financ
 
 const RESULT: TxnSearchResult = {
   items: [
-    { id: 't1', posted_date: '2026-06-01', description: 'COSTCO', merchant_key: 'COSTCO', amount: -40, account_id: 'a', account_name: 'Chk', category_id: 1, category_name: 'Groceries', is_transfer: false, is_split: false, cleared: false },
+    { id: 't1', posted_date: '2026-06-01', description: 'COSTCO', merchant_key: 'COSTCO', amount: -40, account_id: 'a', account_name: 'Chk', category_id: 1, category_name: 'Groceries', is_transfer: false, is_investment: false, is_split: false, cleared: false },
   ],
   count: 1,
   subtotals: [{ category: 'Groceries', total: -40, count: 1 }],
