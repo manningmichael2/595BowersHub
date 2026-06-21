@@ -173,6 +173,24 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
+    async def _scheduled_transfer_link():
+        # Link the two legs of transfers the categorizer just flagged (R1.9: runs
+        # AFTER the 2:30 categorizer; writes only transfer_id, never is_transfer).
+        # Idempotent; own connection so a failure never blocks anything.
+        try:
+            from backend.services.accounting.transfer_link_backfill import backfill_transfer_links
+            await backfill_transfer_links()
+        except Exception:
+            logger.exception("Scheduled transfer-link pass failed")
+
+    scheduler.add_job(
+        _scheduled_transfer_link,
+        CronTrigger(hour=2, minute=45),
+        id="transfer_link",
+        name="Transfer link pass (pairs transfer legs via transfer_id)",
+        replace_existing=True,
+    )
+
     # Run embedding worker every 2 minutes to keep semantic memory fresh (eventual consistency)
     scheduler.add_job(
         run_embedding_worker,
