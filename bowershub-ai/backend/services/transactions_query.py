@@ -34,6 +34,10 @@ def _list_filters(f: dict) -> tuple[list[str], list]:
         where.append(f"t.category_id = {p(f['category_id'])}")
     if f.get("month"):
         where.append(f"date_trunc('month', t.posted_date) = {p(f['month'])}")
+    if f.get("start"):
+        where.append(f"t.posted_date >= {p(f['start'])}")
+    if f.get("end"):
+        where.append(f"t.posted_date <= {p(f['end'])}")
     if f.get("account_id"):
         where.append(f"t.account_id = {p(f['account_id'])}")
 
@@ -50,10 +54,10 @@ def _list_filters(f: dict) -> tuple[list[str], list]:
 
 
 async def search_transactions(conn, *, q=None, category_id=None, month=None,
-                              account_id=None, status="all", sort="date",
-                              order="desc", limit=100, offset=0) -> dict:
-    f = {"q": q, "category_id": category_id, "month": month,
-         "account_id": account_id, "status": status}
+                              start=None, end=None, account_id=None, status="all",
+                              sort="date", order="desc", limit=100, offset=0) -> dict:
+    f = {"q": q, "category_id": category_id, "month": month, "start": start,
+         "end": end, "account_id": account_id, "status": status}
     where, params = _list_filters(f)
     where_sql = " AND ".join(where)
     sort_col = _SORTS.get(sort, "t.posted_date")
@@ -104,6 +108,10 @@ async def _aggregates(conn, f: dict) -> tuple[list[dict], dict]:
         where.append(f"ra.category_id = {p(f['category_id'])}")
     if f.get("month"):
         where.append(f"date_trunc('month', ra.posted_date) = {p(f['month'])}")
+    if f.get("start"):
+        where.append(f"ra.posted_date >= {p(f['start'])}")
+    if f.get("end"):
+        where.append(f"ra.posted_date <= {p(f['end'])}")
     if f.get("account_id"):
         where.append(f"ra.account_id = {p(f['account_id'])}")
     if f.get("status") == "income":

@@ -5,8 +5,9 @@
  * per child category; split parents shown once). Inline categorize/split folds in
  * next so this becomes the single finance transactions surface.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../stores/toast'
+import SplitEditor from '../components/finance/SplitEditor'
 import { financeReview, type CategoryOption } from '../services/financeReview'
 import {
   financeTransactions,
@@ -29,10 +30,19 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--color-border, #374151)', borderRadius: 6, padding: '4px 8px',
 }
 
-function thisMonth(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+function fmtDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+function daysAgo(n: number): string { const d = new Date(); d.setDate(d.getDate() - n); return fmtDate(d) }
+function yearStart(): string { return `${new Date().getFullYear()}-01-01` }
+function todayStr(): string { return fmtDate(new Date()) }
+
+const DATE_PRESETS: { label: string; range: () => [string, string] }[] = [
+  { label: 'This year', range: () => [yearStart(), todayStr()] },
+  { label: 'Last 30 days', range: () => [daysAgo(30), todayStr()] },
+  { label: 'Last 7 days', range: () => [daysAgo(7), todayStr()] },
+  { label: 'All time', range: () => ['', ''] },
+]
 
 export default function TransactionsPage() {
   const [categories, setCategories] = useState<CategoryOption[]>([])
@@ -40,10 +50,12 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [categoryId, setCategoryId] = useState<number | ''>('')
-  const [month, setMonth] = useState('')   // '' = all time
+  const [start, setStart] = useState(yearStart())   // default: this year to date
+  const [end, setEnd] = useState(todayStr())
   const [status, setStatus] = useState<TxnStatus>('all')
   const [sort, setSort] = useState<NonNullable<TxnQuery['sort']>>('date')
   const [order, setOrder] = useState<NonNullable<TxnQuery['order']>>('desc')
+  const [splittingId, setSplittingId] = useState<string | null>(null)
 
   useEffect(() => { financeReview.getCategories().then(setCategories).catch(() => {}) }, [])
 
@@ -53,7 +65,8 @@ export default function TransactionsPage() {
       setResult(await financeTransactions.search({
         q: q || undefined,
         category_id: categoryId === '' ? undefined : categoryId,
-        month: month || undefined,
+        start: start || undefined,
+        end: end || undefined,
         status, sort, order, limit: 200,
       }))
     } catch (e) {
@@ -61,12 +74,35 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [q, categoryId, month, status, sort, order])
+  }, [q, categoryId, start, end, status, sort, order])
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 250)  // debounce text input
     return () => clearTimeout(t)
   }, [load])
+
+  const categorize = async (id: string, categoryId: number) => {
+    try {
+      await financeReview.categorize(id, categoryId)
+      toast.success('Categorized')
+      await load()
+    } catch (e) { toast.error(errorMessage(e)) }
+  }
+  const doSplit = async (id: string, allocations: { category_id: number | null; amount: number }[]) => {
+    try {
+      await financeReview.splitTransaction(id, allocations)
+      toast.success(`Split into ${allocations.length}`)
+      setSplittingId(null)
+      await load()
+    } catch (e) { toast.error(errorMessage(e)) }
+  }
+  const doUnsplit = async (id: string) => {
+    try {
+      await financeReview.unsplitTransaction(id)
+      toast.success('Unsplit')
+      await load()
+    } catch (e) { toast.error(errorMessage(e)) }
+  }
 
   const toggleSort = (col: NonNullable<TxnQuery['sort']>) => {
     if (sort === col) setOrder((o) => (o === 'asc' ? 'desc' : 'asc'))
@@ -87,14 +123,29 @@ export default function TransactionsPage() {
           <option value="">All categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <input style={inputStyle} type="month" aria-label="Filter month"
-          value={month ? month.slice(0, 7) : ''}
-          onChange={(e) => setMonth(e.target.value ? `${e.target.value}-01` : '')} />
         <select style={inputStyle} value={status} aria-label="Filter status"
           onChange={(e) => setStatus(e.target.value as TxnStatus)}>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button style={{ fontSize: 12 }} onClick={() => { setQ(''); setCategoryId(''); setMonth(''); setStatus('all') }}>Clear</button>
+        <button style={{ fontSize: 12 }} onClick={() => { setQ(''); setCategoryId(''); setStart(''); setEnd(''); setStatus('all') }}>Clear</button>
+      </div>
+
+      {/* Date range: presets + custom start/end slicer */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        {DATE_PRESETS.map((preset) => {
+          const [ps, pe] = preset.range()
+          const active = start === ps && end === pe
+          return (
+            <button key={preset.label} style={{ fontSize: 12, fontWeight: active ? 700 : 400, opacity: active ? 1 : 0.7 }}
+              onClick={() => { setStart(ps); setEnd(pe) }}>{preset.label}</button>
+          )
+        })}
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>·</span>
+        <input style={{ ...inputStyle, fontSize: 12 }} type="date" aria-label="Start date"
+          value={start} max={end || undefined} onChange={(e) => setStart(e.target.value)} />
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>to</span>
+        <input style={{ ...inputStyle, fontSize: 12 }} type="date" aria-label="End date"
+          value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
       </div>
 
       {/* Totals summary */}
@@ -120,22 +171,49 @@ export default function TransactionsPage() {
                   <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('description')}>Description{arrow('description')}</th>
                   <th style={{ cursor: 'pointer', padding: 6 }} onClick={() => toggleSort('category')}>Category{arrow('category')}</th>
                   <th style={{ cursor: 'pointer', padding: 6, textAlign: 'right' }} onClick={() => toggleSort('amount')}>Amount{arrow('amount')}</th>
+                  <th style={{ padding: 6 }} />
                 </tr>
               </thead>
               <tbody>
                 {result.items.map((t) => (
-                  <tr key={t.id} data-testid="txn-row" style={{ borderBottom: '1px solid var(--color-border,#222)' }}>
-                    <td style={{ padding: 6, whiteSpace: 'nowrap' }}>{t.posted_date}</td>
-                    <td style={{ padding: 6 }}>
-                      {t.description ?? t.merchant_key ?? '—'}
-                      {t.is_split && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--color-text-muted)' }}>· split</span>}
-                      {t.is_transfer && <span style={{ marginLeft: 6, fontSize: 11, color: '#7a4' }}>· transfer</span>}
-                    </td>
-                    <td style={{ padding: 6, color: t.category_name ? 'inherit' : 'var(--color-text-muted)' }}>
-                      {t.category_name ?? (t.is_split ? '(split)' : 'Uncategorized')}
-                    </td>
-                    <td style={{ padding: 6, textAlign: 'right', color: t.amount < 0 ? 'inherit' : '#4a4' }}>{money(t.amount)}</td>
-                  </tr>
+                  <Fragment key={t.id}>
+                    <tr data-testid="txn-row" style={{ borderBottom: '1px solid var(--color-border,#222)' }}>
+                      <td style={{ padding: 6, whiteSpace: 'nowrap' }}>{t.posted_date}</td>
+                      <td style={{ padding: 6 }}>
+                        {t.description ?? t.merchant_key ?? '—'}
+                        {t.is_transfer && <span style={{ marginLeft: 6, fontSize: 11, color: '#7a4' }}>· transfer</span>}
+                      </td>
+                      <td style={{ padding: 6 }}>
+                        {t.is_split ? (
+                          <span style={{ color: 'var(--color-text-muted)' }}>(split)</span>
+                        ) : (
+                          <select aria-label={`Category for ${t.description ?? t.id}`} style={{ ...inputStyle, fontSize: 12 }}
+                            value={t.category_id ?? ''}
+                            onChange={(e) => e.target.value && categorize(t.id, Number(e.target.value))}>
+                            <option value="">{t.category_name ? t.category_name : 'Uncategorized…'}</option>
+                            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        )}
+                      </td>
+                      <td style={{ padding: 6, textAlign: 'right', color: t.amount < 0 ? 'inherit' : '#4a4' }}>{money(t.amount)}</td>
+                      <td style={{ padding: 6, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {t.is_split ? (
+                          <button style={{ fontSize: 11 }} onClick={() => doUnsplit(t.id)}>Unsplit</button>
+                        ) : !t.is_transfer ? (
+                          <button style={{ fontSize: 11 }} onClick={() => setSplittingId((id) => (id === t.id ? null : t.id))}>Split</button>
+                        ) : null}
+                      </td>
+                    </tr>
+                    {splittingId === t.id && (
+                      <tr>
+                        <td colSpan={5} style={{ padding: '0 6px 8px' }}>
+                          <SplitEditor amount={t.amount} categories={categories}
+                            onCancel={() => setSplittingId(null)}
+                            onSave={(allocs) => doSplit(t.id, allocs)} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
