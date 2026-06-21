@@ -35,32 +35,35 @@ async def check_budgets():
 
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Get budgets with their MTD spend
+        from backend.services.budgets import alert_thresholds
+        warn_ratio, over_ratio = await alert_thresholds(conn)  # DB-driven (R3.5)
+        # Allocation-aware MTD spend via public.real_activity (split children
+        # counted, transfers + investments excluded) — R2.1/R3.5.
         rows = await conn.fetch("""
-            SELECT 
+            SELECT
                 b.id,
                 c.name as category,
                 b.limit_amount as budget_amount,
-                COALESCE(SUM(ABS(t.amount)), 0) as mtd_spend
+                COALESCE(SUM(ABS(ra.amount)), 0) as mtd_spend
             FROM finance.budgets b
             JOIN finance.categories c ON c.id = b.category_id
-            LEFT JOIN finance.transactions t ON t.category_id = b.category_id
-                AND t.posted_date >= date_trunc('month', CURRENT_DATE)
-                AND t.amount < 0
-                AND t.is_transfer = false
+            LEFT JOIN public.real_activity ra ON ra.category_id = b.category_id
+                AND ra.posted_date >= date_trunc('month', CURRENT_DATE)
+                AND ra.amount < 0
             WHERE b.month = date_trunc('month', CURRENT_DATE)::date
             GROUP BY b.id, c.name, b.limit_amount
             HAVING b.limit_amount > 0
         """)
 
+    warn_pct, over_pct = warn_ratio * 100, over_ratio * 100
     for row in rows:
         category = row["category"]
         budget = float(row["budget_amount"])
         spent = float(row["mtd_spend"])
         pct = (spent / budget) * 100 if budget > 0 else 0
 
-        # 100% alert
-        if pct >= 100:
+        # over-budget alert
+        if pct >= over_pct:
             key = f"{category}:100"
             if key not in _budget_alerts_fired_today:
                 _budget_alerts_fired_today.add(key)
@@ -71,8 +74,8 @@ async def check_budgets():
                 )
                 logger.info(f"Budget alert fired: {category} at {pct:.0f}%")
 
-        # 80% alert (only if 100% hasn't already fired)
-        elif pct >= 80:
+        # warn alert (only if over hasn't already fired)
+        elif pct >= warn_pct:
             key = f"{category}:80"
             if key not in _budget_alerts_fired_today:
                 _budget_alerts_fired_today.add(key)
