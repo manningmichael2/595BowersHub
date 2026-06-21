@@ -1,5 +1,7 @@
 # Finance Accounting — Tasks
 
+> **STATUS: COMPLETE (2026-06-21).** All 9 tasks implemented, merged (PRs #27–#31), and deployed. Validator 24/24. See context-log 2026-06-21.
+
 > Each task traces to one or more requirements. Work top-to-bottom; respect dependencies. Each task is verified against its Definition of Done before the next.
 
 ## Task 1: Schema + seed migrations (0029, 0030)
