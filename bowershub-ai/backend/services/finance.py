@@ -26,38 +26,23 @@ logger = logging.getLogger(__name__)
 # =========================================================================
 
 async def get_balances() -> dict:
-    """Return all account balances grouped by org with assets/liabilities/net worth."""
+    """Return all account balances grouped by org with assets/liabilities/net worth.
+
+    Net worth is computed by the consolidated account_type-driven service
+    (services/accounting/networth.py) — this preserves the skill's response
+    contract while fixing classification (R3.1/R3.4)."""
+    from backend.services.accounting.networth import compute_net_worth
     pool = get_pool()
     async with pool.acquire() as conn:
-        rows = await conn.fetch("""
-            SELECT id, org_name, account_name, currency,
-                   last_balance, last_balance_date
-            FROM finance.accounts
-            ORDER BY org_name, account_name
-        """)
-    
-    if not rows:
+        nw = await compute_net_worth(conn)
+
+    accounts = nw["accounts"]
+    if not accounts:
         return {"_display": "No accounts found.", "accounts": []}
 
-    accounts = []
-    assets = Decimal(0)
-    liabilities = Decimal(0)
-    
-    for r in rows:
-        balance = r["last_balance"] or Decimal(0)
-        accounts.append({
-            "name": r["account_name"],
-            "org": r["org_name"],
-            "balance": float(balance),
-            "currency": r["currency"] or "USD",
-            "as_of": r["last_balance_date"].isoformat() if r["last_balance_date"] else None,
-        })
-        if balance >= 0:
-            assets += balance
-        else:
-            liabilities += balance  # already negative
-
-    net_worth = assets + liabilities
+    assets = nw["assets"]
+    liabilities = nw["liabilities"]
+    net_worth = nw["net_worth"]
 
     # Build display
     lines = ["**💰 Account Balances**\n"]
