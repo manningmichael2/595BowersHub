@@ -882,3 +882,32 @@ User will proceed with a manual workflow: Prowlarr -> Windows qBittorrent (Z:\Do
 - **Infrastructure:** Configured Caddy to reverse proxy Calibre-Web over HTTPS at \https://595bowershub.tailc4d58a.ts.net:8443\ mapping to internal port 8083. Bootstrapped a blank \metadata.db\ to initialize the \/books\ library.
 - **Kindle DRM Strategy:** Documented the community-standard method for stripping Amazon DRM (KFX/AZW) using the legacy Kindle for PC 1.24.51068 installer and the \enderer-test.exe\ bypass, paired with the desktop Calibre DeDRM plugin.
 - **Documentation:** Committed the new \calibre\ compose file, the restored \livrarr\ stack, and the updated \prowlarr-abb\ specs/walkthrough to GitHub.
+
+---
+
+## [2026-06-21] finance-accounting spec IMPLEMENTED end-to-end (Tasks 1–9, PRs #27–#31) — Claude Code
+
+Built and deployed the whole `finance-accounting` spec (transfer matching · reconciliation · net worth), task-by-task, each its own PR (CI-gated, merged, deployed):
+
+- **Task 1 (#27)** `0029`/`0030`: additive schema (transactions `transfer_id` self-FK + `transfer_link_manual` + `cleared`; accounts `reconciled_through_date` + `include_in_net_worth`; tables `reconciliations`/`balance_snapshots`/`accounting_config`; `public.transactions` view recreated under migrator). Seed types the −160k mortgage + sets net-worth exclusions + config defaults.
+- **Tasks 2–4 (#28)** `services/accounting/` transfer matching: `TransferLinker` (reuses `_find_counterpart`; **mutually-unique** matching — a directional-ambiguity bug the tests caught; auto path writes only `transfer_id`, detector stays sole nightly `is_transfer` writer); manual link/unlink (sticky); idempotent backfill; nightly 02:45 link job. **Prod backfill linked 18 legs (9 pairs), 0 ambiguous.**
+- **Tasks 5–6 (#29)** net worth + snapshots: consolidated `networth.py` (account_type-driven, NULL excluded+flagged, `include_in_net_worth` replaces the hardcoded org list, stale flag, history from snapshots); `snapshots.py` hooked into SimpleFin sync. Repointed the `balances` skill + dashboard at it (contract preserved). **Verified on prod: net worth −$112,067 (assets $75,422 − liabilities $187,489), liabilities correctly subtract (R3.2).**
+- **Tasks 7–8 (#30)** `reconciliation.py` (drift vs synced + cleared tally + audit row + reconciled_through_date) + typed `routers/finance_accounting.py` (net-worth/history/status/reconciliations reads; link/unlink/reconcile/set-type writes, RBAC admin).
+- **Task 9 (#31)** `NetWorthPage.tsx` (`/finance/net-worth`, 📈 nav) + `financeAccounting.ts`: net worth + asset/liability breakdown, as-of/stale flags, inline set-type, per-account reconcile, trend sparkline.
+
+**Model:** single-entry + `transfer_id` link (Actual Budget's model), not double-entry. **R4.1 reframed** (found in impl): account_type can't be migration-seeded (accounts come from sync) → it's operational metadata via the set-type API + net-worth "needs type" flag. Validator 24/24. All deployed; health ok; `/api/finance/net-worth` live (401 auth-gated).
+
+**Subagent note:** spec critiques ran **inline** (the `spec-critic`/researcher subagents repeatedly hit session limits this session); grounding research did complete (3 researchers).
+
+- [Next] Budgets/splits = the separate `/spec finance-budgets-splits` (#2), sequenced after this. Optional follow-ups: a manual transfer-link UI (API exists; nightly auto-linker covers the common case); compare reconcile drift against the nearest snapshot once history accrues; set-type UI is on NetWorthPage but a dedicated accounts-management page could consolidate.
+---
+
+## [2026-06-21] Calibre Library Migration & Metadata QA/QC — Gemini IDE
+
+**What landed:**
+- **Library Transfer:** Transferred the entire local Windows Calibre library (`C:\Users\manni\Calibre Library`) to the Linux server at `/home/michael/calibre/library/`. Re-chowned files to `michael:michael` to give `calibre-web` Docker container native read/write access.
+- **Tolkien Metadata QA/QC:** Calibre's folder structure and database had massively fragmented Tolkien's metadata (e.g. `J. R. R. Tolkien [editor]`, `Christopher Tolkien`). Wrote a Python automation script inside the `linuxserver/calibre` image utilizing the `calibredb` engine to merge all variations into the primary author `J. R. R. Tolkien`, while mapping co-authors (Christopher Tolkien, Verlyn Flieger, etc.) as secondary contributors. This successfully reorganized the physical filesystem into a single master author folder.
+- **The Expanse Reading Order:** Fixed the `series_index` for James S. A. Corey's "The Expanse". Novellas like *Gods of Risk* (2.5), *Drive* (0.1), and *Memory's Legion* (10.0) were manually corrected using `calibredb set_metadata` to reflect the correct chronological reading order.
+- **Service Restart:** Bounced the `calibre-web` container to flush its cache and apply the metadata changes.
+
+- [Next] Wait for user to confirm if any other authors or series need metadata QA/QC.
