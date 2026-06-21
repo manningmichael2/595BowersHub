@@ -118,6 +118,15 @@ body {
   height: 100%;
 }
 
+/* Native form controls otherwise render on the browser's default white control
+   while inheriting the dark theme's light text → white-on-white. Pin theme
+   colors globally so every <select>/<option> (and friends) stays readable. */
+select,
+option {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
