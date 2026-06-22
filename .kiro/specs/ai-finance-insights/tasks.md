@@ -137,8 +137,8 @@
 - **Effort:** S
 - **Dependencies:** Task 3, Task 13, Task 15
 - **Requirements:** R4.5
-- [ ] Wire the deterministic keyword classifier (config keyword set) into `POST /api/finance/qa`: retirement intent → engine facts → `narrate`; else `ask_db`; ambiguity defaults to `ask_db`. No-inputs → "inputs needed".
-- [ ] **Tests:** retirement question → engine path; spending question → ask_db path (misclassification asserted); no-inputs → asks for inputs (no fabricated projection).
+- [x] Wire the deterministic keyword classifier (config keyword set) into `POST /api/finance/qa`: retirement intent → engine facts → `narrate`; else `ask_db`; ambiguity defaults to `ask_db`. No-inputs → "inputs needed".
+- [x] **Tests:** retirement question → engine path; spending question → ask_db path (misclassification asserted); no-inputs → asks for inputs (no fabricated projection).
 
 ## Phase 4 — Tailwind migration (Feature 5; independent)
 

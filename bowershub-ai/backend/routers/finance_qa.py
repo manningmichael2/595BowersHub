@@ -42,6 +42,36 @@ class QARequest(BaseModel):
     question: str
 
 
+def _is_retirement_question(question: str, keywords: list[str]) -> bool:
+    """Deterministic intent match (R4.5): a DB-config keyword set, no LLM call.
+    Ambiguity (no keyword) defaults to the ask_db data path."""
+    q = question.lower()
+    return any(kw and kw.lower() in q for kw in keywords)
+
+
+def _retirement_facts(projection: dict) -> dict:
+    """Compact, figure-only facts for narration (drop the long series array)."""
+    return {k: v for k, v in projection.items() if k != "series"}
+
+
+async def _answer_retirement(conn, provider, question: str) -> dict:
+    from backend.services import retirement as ret
+
+    if not await ret.has_inputs(conn):
+        # No fabricated projection (R4.8) — ask for the inputs instead.
+        return {
+            "answer": "I need your retirement inputs first — set your age, balance, "
+                      "contribution, and expected spend on the Retirement tab.",
+            "sql": None, "figures": [], "scope": "needs_inputs",
+        }
+    projection = await ret.project(conn, {})
+    facts = _retirement_facts(projection)
+    answer = await FinanceNarrator(provider).narrate(
+        facts=facts, question=question, scope="in_scope"
+    )
+    return {"answer": answer, "sql": None, "figures": [facts], "scope": "retirement"}
+
+
 @router.post("/qa")
 async def finance_qa(
     body: QARequest,
@@ -55,6 +85,14 @@ async def finance_qa(
     provider = getattr(request.app.state, "model_provider", None)
     if provider is None:
         raise HTTPException(status_code=503, detail="Model provider unavailable.")
+
+    # Retirement-intent branch (R4.5): deterministic classify → engine facts;
+    # otherwise the ask_db data path.
+    from backend.services.finance_insights.config import load_insight_config
+    async with get_pool().acquire() as conn:
+        keywords = (await load_insight_config(conn)).retirement_keywords
+        if _is_retirement_question(question, keywords):
+            return await _answer_retirement(conn, provider, question)
 
     result = await ask_db(question, provider=provider)
     scope = result.get("scope")
