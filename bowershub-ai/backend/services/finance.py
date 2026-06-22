@@ -329,7 +329,15 @@ AVAILABLE TABLES AND COLUMNS:
 
 CRITICAL COLUMN NAMES:
 - finance.category_examples has a column named `description_pattern`. It does NOT have a column named `pattern`.
-- public.bh_patterns has a column named `rule`. It does NOT have a column named `pattern`.
+
+CANONICAL SPENDING/INCOME SOURCE — use this for ANY spending or income question:
+- public.real_activity(id, account_id, category_id, posted_date, amount) — a view
+  over finance.transactions that ALREADY excludes transfers, investments, and
+  split parents (split children are counted once; no double-counting). Spending is
+  amount < 0, income is amount > 0. Do NOT add is_transfer / is_investment /
+  is_split filters — they are baked in.
+  - For category names, join finance.categories: `JOIN finance.categories c ON c.id = ra.category_id`.
+  - For descriptions / memos / merchant text, join finance.transactions: `JOIN finance.transactions t ON t.id = ra.id`.
 
 LEAF CATEGORIES (use these exact names): {cat_list}
 
@@ -347,10 +355,10 @@ CATEGORY MAPPING (natural language → leaf category):
 
 RULES:
 1. Generate ONLY a single SELECT query. No INSERT, UPDATE, DELETE, DROP, etc.
-2. Use schema-qualified table names: finance.transactions, inventory.tools, etc.
+2. Use schema-qualified table names: public.real_activity, finance.transactions, inventory.tools, etc.
 3. Prefer aggregation (GROUP BY, SUM, COUNT) over raw row dumps.
-4. Always exclude transfers from spending: WHERE is_transfer = false
-5. For "spending" use ABS(amount) and filter amount < 0.
+4. For spending/income questions, query public.real_activity — transfers, investments, and split parents are already excluded, so do NOT re-filter them. Only query finance.transactions directly for non-spending lookups, and there exclude transfers with WHERE is_transfer = false.
+5. For "spending" filter amount < 0 (use ABS(amount) for a positive total); for "income" filter amount > 0.
 6. For "income" filter amount > 0.
 7. Add LIMIT 100 unless the question asks for a count/sum/total.
 8. Return ONLY the SQL — no markdown fences, no explanation.

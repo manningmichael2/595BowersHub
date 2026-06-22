@@ -79,6 +79,43 @@ async def test_non_scope_execution_error_is_generic_not_out_of_scope(fresh_db, d
 
 
 @pytest.mark.asyncio
+async def test_schema_prompt_steers_spending_to_allocation_aware_real_activity(
+    fresh_db, db_settings
+):
+    """The SQL-gen prompt must point spending/income at the allocation-aware
+    public.real_activity view (not raw finance.transactions), and must not
+    advertise public.bh_patterns (finance_reader can't read it)."""
+    from backend.services.finance import _SCHEMA_CACHE, _build_schema_prompt
+
+    await apply_migrations(fresh_db, db_settings)
+    try:
+        _SCHEMA_CACHE["text"] = None  # bypass the 5-min cache
+        prompt = await _build_schema_prompt()
+        assert "public.real_activity" in prompt
+        assert "already excluded" in prompt.lower() or "baked in" in prompt.lower()
+        assert "bh_patterns" not in prompt
+    finally:
+        await close_pool()
+
+
+@pytest.mark.asyncio
+async def test_real_activity_is_reachable_through_the_sandbox(fresh_db, db_settings):
+    """A spending aggregate over public.real_activity executes in-scope as
+    finance_reader (the steer above is reachable, not an out_of_scope trap)."""
+    await apply_migrations(fresh_db, db_settings)
+    try:
+        result = await ask_db(
+            "total spending",
+            provider=CannedSQLProvider(
+                "SELECT sum(amount) AS spent FROM public.real_activity WHERE amount < 0"
+            ),
+        )
+        assert result["scope"] == "in_scope"  # one row (sum is NULL on empty data)
+    finally:
+        await close_pool()
+
+
+@pytest.mark.asyncio
 async def test_in_scope_rows_and_cost_logged(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
     try:
