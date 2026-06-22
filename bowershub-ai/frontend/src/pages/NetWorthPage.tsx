@@ -26,7 +26,7 @@ function errorMessage(e: unknown): string {
 }
 
 function Sparkline({ points }: { points: NetWorthPoint[] }) {
-  if (points.length < 2) return <span style={{ color: 'var(--color-text-muted)' }}>Not enough history yet</span>
+  if (points.length < 2) return <span className="text-text-muted text-xs">Not enough history yet</span>
   const vals = points.map((p) => p.net_worth)
   const min = Math.min(...vals), max = Math.max(...vals)
   const range = max - min || 1
@@ -37,8 +37,8 @@ function Sparkline({ points }: { points: NetWorthPoint[] }) {
     return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`
   }).join(' ')
   return (
-    <svg width={w} height={h} style={{ display: 'block' }}>
-      <path d={d} fill="none" stroke="var(--color-primary, #468)" strokeWidth={2} />
+    <svg width={w} height={h} className="block">
+      <path d={d} fill="none" stroke="var(--color-primary)" strokeWidth={2} />
     </svg>
   )
 }
@@ -93,23 +93,23 @@ export default function NetWorthPage() {
   }, [nw])
 
   return (
-    <div style={{ padding: 24, maxWidth: 880, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Net Worth</h1>
-        <button onClick={() => navigate('/dashboard')} style={{ fontSize: 13 }}>← Dashboard</button>
+    <div className="max-w-[880px] mx-auto p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-text">Net Worth</h1>
+        <button onClick={() => navigate('/dashboard')} className="text-xs text-text-muted hover:text-text">← Dashboard</button>
       </div>
 
-      {loading || !nw ? <p>Loading…</p> : (
+      {loading || !nw ? <p className="text-text-muted">Loading…</p> : (
         <>
-          <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end', marginBottom: 8, flexWrap: 'wrap' }}>
+          <div className="flex flex-wrap items-end gap-6 mb-2">
             <div>
-              <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>Net Worth</div>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>{money(nw.net_worth)}</div>
+              <div className="text-xs text-text-muted">Net Worth</div>
+              <div className="text-3xl font-bold text-text">{money(nw.net_worth)}</div>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+            <div className="text-xs text-text-muted">
               Assets {money(nw.assets)} · Liabilities {money(nw.liabilities)}
             </div>
-            <div style={{ marginLeft: 'auto' }}><Sparkline points={history} /></div>
+            <div className="ml-auto"><Sparkline points={history} /></div>
           </div>
 
           {needsType.length > 0 && (
@@ -140,29 +140,26 @@ export default function NetWorthPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginTop: 16 }}>
-      <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 6 }}>{title}</h2>
-      <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>{children}</ul>
+    <div className="mt-4">
+      <h2 className="text-sm font-semibold text-text-muted mb-1.5">{title}</h2>
+      <ul className="list-none p-0 flex flex-col gap-1.5">{children}</ul>
     </div>
   )
 }
 
 function Row({ acc, children }: { acc: AccountBalance; children?: React.ReactNode }) {
   return (
-    <li data-testid="account-row" style={{
-      display: 'flex', gap: 12, alignItems: 'center', padding: 10,
-      border: '1px solid var(--color-border, #333)', borderRadius: 8,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600 }}>{acc.name}</div>
-        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', display: 'flex', gap: 8 }}>
+    <li data-testid="account-row" className="flex flex-wrap items-center gap-x-3 gap-y-1 p-2.5 rounded-lg border border-border">
+      <div className="flex-1 min-w-[10rem]">
+        <div className="font-semibold text-text break-words">{acc.name}</div>
+        <div className="text-xs text-text-muted flex flex-wrap gap-2">
           <span>{acc.org}</span>
           {acc.account_type && <span>· {acc.account_type}</span>}
           {acc.as_of && <span>· as of {acc.as_of}</span>}
-          {acc.stale && <span data-testid="stale" style={{ color: '#c84' }}>· stale</span>}
+          {acc.stale && <span data-testid="stale" className="text-[#c84]">· stale</span>}
         </div>
       </div>
-      <div style={{ textAlign: 'right', minWidth: 100, fontWeight: 600 }}>{money(acc.balance)}</div>
+      <div className="text-right min-w-[100px] font-semibold text-text">{money(acc.balance)}</div>
       {children}
     </li>
   )
@@ -171,10 +168,15 @@ function Row({ acc, children }: { acc: AccountBalance; children?: React.ReactNod
 function ReconcileInline({ onReconcile }: { onReconcile: (v: string) => void }) {
   const [val, setVal] = useState('')
   return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      <input aria-label="Statement balance" placeholder="stmt $" value={val}
-             onChange={(e) => setVal(e.target.value)} style={{ width: 80, fontSize: 12 }} />
-      <button disabled={val === ''} onClick={() => onReconcile(val)} style={{ fontSize: 12 }}>Reconcile</button>
+    <div className="flex gap-1">
+      <input
+        aria-label="Statement balance"
+        placeholder="stmt $"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        className="w-20 text-xs rounded border border-border bg-surface px-2 py-1 text-text"
+      />
+      <button disabled={val === ''} onClick={() => onReconcile(val)} className="text-xs rounded border border-border px-2 py-1 text-text disabled:opacity-50">Reconcile</button>
     </div>
   )
 }

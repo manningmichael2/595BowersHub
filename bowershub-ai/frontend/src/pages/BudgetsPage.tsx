@@ -55,36 +55,41 @@ export default function BudgetsPage() {
   }
 
   return (
-    <div style={{ padding: 24, maxWidth: 820, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Budgets — {month.slice(0, 7)}</h1>
-        <button onClick={() => navigate('/dashboard')} style={{ fontSize: 13 }}>← Dashboard</button>
+    <div className="max-w-[820px] mx-auto p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-text">Budgets — {month.slice(0, 7)}</h1>
+        <button onClick={() => navigate('/dashboard')} className="text-xs text-text-muted hover:text-text">← Dashboard</button>
       </div>
 
-      {loading ? <p>Loading…</p> : rows.length === 0 ? (
-        <p data-testid="empty">No budgets or spending this month yet.</p>
+      {loading ? <p className="text-text-muted">Loading…</p> : rows.length === 0 ? (
+        <p data-testid="empty" className="text-text-muted">No budgets or spending this month yet.</p>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <ul className="list-none p-0 flex flex-col gap-1.5">
           {rows.map((r) => {
             const tone = r.budgeted ? budgetTone(r.actual, r.budgeted) : 'ok'
             return (
-              <li key={r.category_id} data-testid="budget-row" style={{
-                display: 'flex', gap: 12, alignItems: 'center', padding: 10,
-                border: '1px solid var(--color-border, #333)', borderRadius: 8,
-              }}>
-                <div style={{ flex: 1, fontWeight: 600 }}>{r.category}</div>
-                <div style={{ minWidth: 90, textAlign: 'right', color: TONE_COLOR[tone] }} data-testid={`tone-${tone}`}>
+              <li
+                key={r.category_id}
+                data-testid="budget-row"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 p-2.5 rounded-lg border border-border"
+              >
+                <div className="flex-1 min-w-[8rem] font-semibold text-text break-words">{r.category}</div>
+                <div className="min-w-[90px] text-right font-medium" data-testid={`tone-${tone}`} style={{ color: TONE_COLOR[tone] }}>
                   {money(r.actual)}
                 </div>
-                <div style={{ minWidth: 70, textAlign: 'right', color: 'var(--color-text-muted)' }}>
+                <div className="min-w-[70px] text-right text-text-muted">
                   / {r.budgeted ? money(r.budgeted) : '—'}
                 </div>
-                <div style={{ minWidth: 90, textAlign: 'right' }}>
+                <div className="min-w-[90px] text-right text-text-muted">
                   {r.remaining != null ? `${money(r.remaining)} left` : ''}
                 </div>
-                <input aria-label={`Budget for ${r.category}`} placeholder="set $"
-                  defaultValue={r.budgeted || ''} style={{ width: 80, fontSize: 12 }}
-                  onBlur={(e) => { if (e.target.value !== String(r.budgeted || '')) edit(r.category_id, e.target.value) }} />
+                <input
+                  aria-label={`Budget for ${r.category}`}
+                  placeholder="set $"
+                  defaultValue={r.budgeted || ''}
+                  className="w-20 text-xs rounded border border-border bg-surface px-2 py-1 text-text"
+                  onBlur={(e) => { if (e.target.value !== String(r.budgeted || '')) edit(r.category_id, e.target.value) }}
+                />
               </li>
             )
           })}

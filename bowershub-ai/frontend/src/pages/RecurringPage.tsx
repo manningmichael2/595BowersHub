@@ -23,22 +23,23 @@ export default function RecurringPage() {
   }, [])
 
   return (
-    <div style={{ padding: 16, maxWidth: 820, margin: '0 auto' }}>
-      <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Recurring charges</h2>
-      {loading ? <p>Loading…</p> : recurring.length === 0 ? (
-        <p data-testid="empty-recurring">No recurring charges detected.</p>
+    <div className="max-w-[820px] mx-auto p-4">
+      <h2 className="text-base font-semibold mb-3 text-text">Recurring charges</h2>
+      {loading ? <p className="text-text-muted">Loading…</p> : recurring.length === 0 ? (
+        <p data-testid="empty-recurring" className="text-text-muted">No recurring charges detected.</p>
       ) : (
-        <ul style={{ listStyle: 'none', padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <ul className="list-none p-0 flex flex-col gap-1.5">
           {recurring.map((r) => (
-            <li key={r.merchant_key} data-testid="recurring-row" style={{
-              display: 'flex', gap: 12, alignItems: 'center', padding: 10,
-              border: '1px solid var(--color-border, #333)', borderRadius: 8,
-            }}>
+            <li
+              key={r.merchant_key}
+              data-testid="recurring-row"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 p-2.5 rounded-lg border border-border"
+            >
               <MerchantLogo merchantKey={r.merchant_key} />
-              <span style={{ flex: 1, fontWeight: 600 }}>{r.merchant_key}</span>
-              <span style={{ color: 'var(--color-text-muted)' }}>{r.occurrences}×</span>
-              <span>{money(r.avg_amount)}</span>
-              {r.avg_interval_days != null && <span style={{ color: 'var(--color-text-muted)' }}>~{Math.round(r.avg_interval_days)}d</span>}
+              <span className="flex-1 min-w-0 font-semibold text-text break-words">{r.merchant_key}</span>
+              <span className="text-text-muted">{r.occurrences}×</span>
+              <span className="text-text">{money(r.avg_amount)}</span>
+              {r.avg_interval_days != null && <span className="text-text-muted">~{Math.round(r.avg_interval_days)}d</span>}
             </li>
           ))}
         </ul>

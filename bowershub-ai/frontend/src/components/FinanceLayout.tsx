@@ -18,21 +18,19 @@ const TABS = [
 
 export default function FinanceLayout() {
   return (
-    <div
-      className="flex flex-col h-full overflow-y-auto overflow-x-hidden pb-14 sm:pb-0 sm:pt-11"
-      style={{ backgroundColor: 'var(--color-background)' }}
-    >
-      <div className="flex items-center gap-1 px-4 py-2 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <span className="text-sm font-semibold mr-3" style={{ color: 'var(--color-text)' }}>Finance</span>
+    <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden pb-14 sm:pb-0 sm:pt-11 bg-background">
+      {/* Sub-nav scrolls horizontally on mobile so all tabs stay reachable. */}
+      <div className="flex items-center gap-1 px-4 py-2 shrink-0 border-b border-border overflow-x-auto whitespace-nowrap">
+        <span className="text-sm font-semibold mr-3 text-text hidden sm:inline">Finance</span>
         {TABS.map((t) => (
           <NavLink
             key={t.to}
             to={t.to}
-            className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-            style={({ isActive }) => ({
-              backgroundColor: isActive ? 'color-mix(in srgb, var(--color-primary) 20%, transparent)' : 'transparent',
-              color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
-            })}
+            className={({ isActive }) =>
+              `shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                isActive ? 'bg-surface text-primary' : 'text-text-muted hover:text-text'
+              }`
+            }
           >
             {t.label}
           </NavLink>

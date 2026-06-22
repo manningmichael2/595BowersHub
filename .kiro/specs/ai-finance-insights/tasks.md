@@ -146,8 +146,8 @@
 - **Effort:** L
 - **Dependencies:** none
 - **Requirements:** R5.1, R5.3
-- [ ] Convert `TransactionsPage`, `BudgetsPage`, `NetWorthPage`, `RecurringPage`, `FinanceLayout` from inline `style={{}}` (~117 sites) to tokenized Tailwind classes; collapse `useIsMobile` → `sm:` where declarative; keep the JS branch only for `TransactionsPage`'s table↔cards swap (R5.3).
-- [ ] **Tests:** Playwright screenshot baseline per page at 390px + ≥1024px captured before, compared after (no visual regression); 0 inline `style={{}}` (documented dynamic exceptions aside); `tsc --noEmit` clean; existing frontend suite green.
+- [x] Convert `TransactionsPage`, `BudgetsPage`, `NetWorthPage`, `RecurringPage`, `FinanceLayout` from inline `style={{}}` (~117 sites) to tokenized Tailwind classes; collapse `useIsMobile` → `sm:` where declarative; keep the JS branch only for `TransactionsPage`'s table↔cards swap (R5.3).
+- [x] **Tests:** Playwright screenshot baseline per page at 390px + ≥1024px captured before, compared after (no visual regression); 0 inline `style={{}}` (documented dynamic exceptions aside); `tsc --noEmit` clean; existing frontend suite green.
 
 ## Definition of Done
 

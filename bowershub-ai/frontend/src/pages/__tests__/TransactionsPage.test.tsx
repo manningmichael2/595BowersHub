@@ -43,4 +43,22 @@ describe('TransactionsPage', () => {
     await waitFor(() => expect(financeTransactions.search).toHaveBeenCalledWith(
       expect.objectContaining({ sort: 'amount' })))
   })
+
+  it('renders the stacked-card view on a mobile viewport', async () => {
+    // Mobile media query matches → the JS branch renders cards, not the table.
+    window.matchMedia = ((q: string) => ({
+      matches: true, media: q, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {},
+      addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+    vi.mocked(financeTransactions.search).mockResolvedValue(RESULT)
+    render(<TransactionsPage />)
+    await waitFor(() => expect(screen.getByTestId('txn-row')).toBeTruthy())
+    // No table header in card mode; the row is a <li>, not a <tr>.
+    expect(screen.queryByText(/^Date/)).toBeNull()
+    expect(screen.getByTestId('txn-row').tagName).toBe('LI')
+    expect(screen.getByText('COSTCO')).toBeTruthy()
+    // @ts-expect-error reset for other tests
+    delete window.matchMedia
+  })
 })
