@@ -43,8 +43,8 @@
 - **Effort:** S
 - **Dependencies:** Task 4
 - **Requirements:** R2.1
-- [ ] Insert a `finance.job_runs` `completed` row at the successful end of the 02:30 categorizer (`services/categorizer.py`) — the only in-process nightly finance job (SimpleFin sync runs externally via n8n, so no in-process watermark for it; the categorizer is the correct "data categorized" signal).
-- [ ] **Tests:** the categorizer writes its watermark row on success; the failure path does not (testable in-process).
+- [x] Insert a `finance.job_runs` `completed` row at the successful end of the 02:30 categorizer (`services/categorizer.py`) — the only in-process nightly finance job (SimpleFin sync runs externally via n8n, so no in-process watermark for it; the categorizer is the correct "data categorized" signal).
+- [x] **Tests:** the categorizer writes its watermark row on success; the failure path does not (testable in-process).
 
 ## Task 6: Insight config table + loader (DB-driven thresholds)
 - **Effort:** S

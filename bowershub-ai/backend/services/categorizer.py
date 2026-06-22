@@ -48,8 +48,33 @@ async def run_categorizer() -> dict:
         cfg = await load_config(conn)
     if cfg.engine in ("shadow", "cascade"):
         from backend.services.categorization.orchestrator import run_cascade
-        return await run_cascade(pool, config=cfg)
-    return await _run_legacy()
+        result = await run_cascade(pool, config=cfg)
+    else:
+        result = await _run_legacy()
+    # Readiness watermark (R2.1): the categorizer is the only in-process nightly
+    # finance job (SimpleFin sync runs externally via n8n), so its successful
+    # completion is the "data is categorized for this window" signal the insight
+    # runner gates on. Only reached when the run did NOT raise (failure → no row).
+    await _write_categorizer_watermark(pool)
+    return result
+
+
+_CATEGORIZER_JOB = "categorizer"
+
+
+async def _write_categorizer_watermark(pool) -> None:
+    """Record a finance.job_runs 'completed' row for today's window. Best-effort:
+    a watermark write must never fail the categorizer (a missing watermark just
+    makes the insight runner conservatively skip-not-ready)."""
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO finance.job_runs (job_name, status, ran_for, completed_at) "
+                "VALUES ($1, 'completed', CURRENT_DATE, now())",
+                _CATEGORIZER_JOB,
+            )
+    except Exception as e:  # pragma: no cover - defensive
+        logger.warning(f"Categorizer watermark write failed: {e}")
 
 
 async def _run_legacy() -> dict:
