@@ -90,9 +90,9 @@
 - **Effort:** M
 - **Dependencies:** none
 - **Requirements:** R3.2
-- [ ] Extract `count_matching(conn, candidate)` from `apply_rule_to_existing` (`services/categorization/rules.py:105`) so an **unsaved** candidate can be scored without persisting; refactor `apply_rule_to_existing` to call it.
-- [ ] **Override-guard parity:** `apply_rule_to_existing` skips manually-overridden / Writer-choke-protected rows. `count_matching` must replicate the *same* predicate **including that guard** so the preview count equals the actual apply count (R3.2 success metric) — not the raw predicate-match count.
-- [ ] **Tests:** `count_matching` equals the actual apply count **on a fixture that includes a manually-overridden transaction** (proves guard parity); existing rule-apply behavior unchanged.
+- [x] Extract `count_matching(conn, candidate)` from `apply_rule_to_existing` (`services/categorization/rules.py:105`) so an **unsaved** candidate can be scored without persisting; refactor `apply_rule_to_existing` to call it.
+- [x] **Override-guard parity:** `apply_rule_to_existing` skips manually-overridden / Writer-choke-protected rows. `count_matching` must replicate the *same* predicate **including that guard** so the preview count equals the actual apply count (R3.2 success metric) — not the raw predicate-match count.
+- [x] **Tests:** `count_matching` equals the actual apply count **on a fixture that includes a manually-overridden transaction** (proves guard parity); existing rule-apply behavior unchanged.
 
 ## Task 12: NL→rule parse, validate, preview, commit (+ insight→rule action)
 - **Effort:** M

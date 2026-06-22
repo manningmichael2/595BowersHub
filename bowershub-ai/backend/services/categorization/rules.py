@@ -102,13 +102,47 @@ async def build_rule_engine(conn) -> RuleEngine:
     return RuleEngine(await load_rules(conn))
 
 
+async def _matching_txns(conn, rule: UserRule):
+    """Yield (txn_id, user_category_override) for every non-transfer transaction
+    matching the rule predicate. Rows are materialized up front, so the caller may
+    safely issue UPDATEs while iterating. Shared by the preview scorer and the
+    apply path so the two can never drift."""
+    rows = await conn.fetch(
+        "SELECT id, description, amount, account_id, merchant_key, user_category_override "
+        "FROM finance.transactions WHERE is_transfer = false"
+    )
+    for t in rows:
+        ctx = TxnContext(
+            txn_id=t["id"], description=t["description"] or "", amount=float(t["amount"]),
+            account_id=t["account_id"], merchant_key=t["merchant_key"],
+        )
+        if rule.matches(ctx):
+            yield t["id"], t["user_category_override"]
+
+
+async def count_matching(conn, candidate: UserRule) -> int:
+    """Count the transactions a (possibly UNSAVED) rule candidate would actually
+    re-categorize — predicate match AND not manually overridden / Writer-choke
+    protected — so a preview equals the real apply count (R3.2). This replicates
+    apply_rule_to_existing's guard, not the raw predicate-match count."""
+    if not candidate.has_conditions():
+        return 0
+    count = 0
+    async for _txn_id, override in _matching_txns(conn, candidate):
+        if not override:
+            count += 1
+    return count
+
+
 async def apply_rule_to_existing(conn, rule_id: int) -> dict:
     """Re-run one rule's predicate over history (R2.1/R3.3). Guarded so a manual
     override is never clobbered. Returns {"matched": n, "updated": m}.
 
     Bulk re-categorization via the API goes through the Writer choke point with
     provenance + RBAC (Task 11); this is the deterministic predicate apply the
-    service layer calls."""
+    service layer calls. `updated` equals count_matching() for the same rule (both
+    apply the override guard); `matched` is the raw predicate count, so the guard's
+    effect is observable as matched > updated."""
     row = await conn.fetchrow(
         "SELECT id, priority, category_id, merchant_key, description_regex, "
         "amount_min, amount_max, account_id FROM finance.user_rules WHERE id = $1",
@@ -127,28 +161,17 @@ async def apply_rule_to_existing(conn, rule_id: int) -> dict:
     if not rule.has_conditions():
         return {"matched": 0, "updated": 0, "error": "rule has no conditions"}
 
-    # Fetch all non-transfer rows so `matched` reflects the predicate itself; the
-    # guarded UPDATE below is what skips manual overrides (so the guard's effect
-    # is observable as matched > updated).
-    txns = await conn.fetch(
-        "SELECT id, description, amount, account_id, merchant_key "
-        "FROM finance.transactions WHERE is_transfer = false"
-    )
     matched = 0
     updated = 0
-    for t in txns:
-        ctx = TxnContext(
-            txn_id=t["id"], description=t["description"] or "", amount=float(t["amount"]),
-            account_id=t["account_id"], merchant_key=t["merchant_key"],
-        )
-        if not rule.matches(ctx):
-            continue
+    async for txn_id, override in _matching_txns(conn, rule):
         matched += 1
+        if override:
+            continue
         result = await conn.execute(
             "UPDATE finance.transactions SET category_id = $1, categorized_by_tier = 'rule', "
             "categorization_confidence = 1.0, updated_at = now() "
             "WHERE id = $2 AND user_category_override = false",
-            rule.category_id, t["id"],
+            rule.category_id, txn_id,
         )
         if result.endswith(" 1"):
             updated += 1
