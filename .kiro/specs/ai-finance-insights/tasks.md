@@ -36,8 +36,8 @@
 - **Effort:** M
 - **Dependencies:** none
 - **Requirements:** R2.1, R2.4, R2.7, R2.8
-- [ ] **Migration:** `bowershub-ai/backend/migrations/0034_finance_insights_schema.sql` — `finance.insights` (incl. `period text` YYYY-MM, status enum, dollar_impact, figures jsonb, reason, cooldown_until, dismissed_at; **UNIQUE (insight_type, merchant_key, period)**), `finance.insight_runs` (R2.8), `finance.job_runs` (readiness watermark). Explicit `GRANT SELECT` on insights/insight_runs → `finance_reader`.
-- [ ] **Tests:** **positive** grant test (SELECT under `SET LOCAL ROLE finance_reader` returns rows) + negative (`bh_users` denied); `fresh_db` builds from empty; re-apply is a no-op.
+- [x] **Migration:** `bowershub-ai/backend/migrations/0034_finance_insights_schema.sql` — `finance.insights` (incl. `period text` YYYY-MM, status enum, dollar_impact, figures jsonb, reason, cooldown_until, dismissed_at; **UNIQUE (insight_type, merchant_key, period)**), `finance.insight_runs` (R2.8), `finance.job_runs` (readiness watermark). Explicit `GRANT SELECT` on insights/insight_runs → `finance_reader`.
+- [x] **Tests:** **positive** grant test (SELECT under `SET LOCAL ROLE finance_reader` returns rows) + negative (`bh_users` denied); `fresh_db` builds from empty; re-apply is a no-op.
 
 ## Task 5: Completion watermark write in the categorizer
 - **Effort:** S
