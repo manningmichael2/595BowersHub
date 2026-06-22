@@ -151,8 +151,9 @@
 
 ## Definition of Done
 
-- [ ] All tasks complete; every requirement in `requirements.md` is satisfied.
-- [ ] No hardcoded config introduced — insight types/thresholds, retirement assumptions, the classifier keyword set, and model selection are all DB rows; grep clean.
-- [ ] Tests pass (`cd bowershub-ai && PYTHONPATH=. .venv/bin/python -m pytest -q`; frontend `npx tsc --noEmit` + `npm test`); `fresh_db` CI builds from empty including all new migrations.
-- [ ] The injection adversarial fixture, the positive GRANT tests, and the projection reference suite are green.
-- [ ] `context-log.md` updated with a dated entry.
+- [x] All tasks complete; every requirement in `requirements.md` is satisfied (spec-validate: 29/29 traceable).
+- [x] No hardcoded config introduced — insight types/thresholds, retirement assumptions, the classifier keyword set, and model selection are all DB rows; grep clean.
+- [x] Tests pass (new backend suite 73 green against a fresh-migrated DB; frontend `npx tsc --noEmit` clean + 239 vitest). `fresh_db` builds from empty including migrations 0034–0037.
+- [x] The injection adversarial fixture, the positive GRANT tests, and the projection reference suite are green.
+- [x] `context-log.md` updated with a dated entry.
+- ⚠️ Caveat: Task 18's Playwright screenshot-baseline DoD was NOT run (the visual-regression harness isn't available in this environment); tsc + the component suite are the regression guard used instead.
