@@ -191,6 +191,21 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
 
+    # Nightly proactive finance insight agent at 3:00 — AFTER the 2:30 categorizer
+    # (it gates on the categorizer's readiness watermark). Single-flight via an
+    # advisory lock; coalesce + max_instances=1 so a missed/overlapping fire never
+    # double-runs (R2.1/R2.8).
+    from backend.services.finance_insights.runner import run_insight_agent
+    scheduler.add_job(
+        run_insight_agent,
+        CronTrigger(hour=3, minute=0),
+        id="finance_insights",
+        name="Finance Insight Agent (nightly, gated on categorizer watermark)",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+
     # Run embedding worker every 2 minutes to keep semantic memory fresh (eventual consistency)
     scheduler.add_job(
         run_embedding_worker,

@@ -72,8 +72,8 @@
 - **Effort:** M
 - **Dependencies:** Task 5, Task 7, Task 8
 - **Requirements:** R2.1, R2.8
-- [ ] `runner.py` + `main.py` `add_job(CronTrigger(hour=3,minute=0), max_instances=1, coalesce=True)`; `pg_try_advisory_lock` single-flight; readiness gate on the **categorizer** `finance.job_runs` `completed` row for the window → else `skipped-not-ready`; `insights_enabled` kill-switch → `skipped-disabled`; broad try/except isolation; write `insight_runs` summary with status (`ran|skipped-not-ready|skipped-disabled|errored`) + detected vs suppressed-by-reason.
-- [ ] **Tests:** concurrent invoke → exactly one runs; missing categorizer watermark → `skipped-not-ready` recorded; kill-switch off → `skipped-disabled` recorded (not silent); failure isolated.
+- [x] `runner.py` + `main.py` `add_job(CronTrigger(hour=3,minute=0), max_instances=1, coalesce=True)`; `pg_try_advisory_lock` single-flight; readiness gate on the **categorizer** `finance.job_runs` `completed` row for the window → else `skipped-not-ready`; `insights_enabled` kill-switch → `skipped-disabled`; broad try/except isolation; write `insight_runs` summary with status (`ran|skipped-not-ready|skipped-disabled|errored`) + detected vs suppressed-by-reason.
+- [x] **Tests:** concurrent invoke → exactly one runs; missing categorizer watermark → `skipped-not-ready` recorded; kill-switch off → `skipped-disabled` recorded (not silent); failure isolated.
 
 ## Task 10: Insights API + review surface + morning-card wiring
 - **Effort:** M
