@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS finance.insight_config (
 INSERT INTO finance.insight_config (key, value) VALUES
     -- Global kill-switch (R2 — a single row disables the whole nightly agent).
     ('insights_enabled',                          'true'::jsonb),
+    -- Cooldown: an un-actioned insight is not re-notified for this many days.
+    ('insights_cooldown_days',                    '7'::jsonb),
 
     -- duplicate-charge: same merchant + (near-)equal amount within N days.
     ('detector.duplicate_charge.enabled',         'true'::jsonb),

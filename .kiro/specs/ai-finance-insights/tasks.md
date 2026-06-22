@@ -65,8 +65,8 @@
 - **Effort:** M
 - **Dependencies:** Task 4, Task 7
 - **Requirements:** R2.4, R2.7
-- [ ] `store.py`: upsert on `(insight_type, merchant_key, period)`; `period` = YYYY-MM of triggering activity; cooldown for un-actioned; dismissal permanently resolves a `(type,merchant,period)`; un-dismiss reopens; dollar-impact ranking.
-- [ ] **Tests:** full re-run → no duplicates (idempotent); dismiss → not re-raised next run; reopen → visible; new month → new period legitimately re-raises; **surfaced insights are returned ordered by dollar impact** (R2.4 ranking).
+- [x] `store.py`: upsert on `(insight_type, merchant_key, period)`; `period` = YYYY-MM of triggering activity; cooldown for un-actioned; dismissal permanently resolves a `(type,merchant,period)`; un-dismiss reopens; dollar-impact ranking.
+- [x] **Tests:** full re-run → no duplicates (idempotent); dismiss → not re-raised next run; reopen → visible; new month → new period legitimately re-raises; **surfaced insights are returned ordered by dollar impact** (R2.4 ranking).
 
 ## Task 9: Nightly runner + scheduler registration
 - **Effort:** M

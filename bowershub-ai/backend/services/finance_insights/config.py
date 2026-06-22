@@ -16,6 +16,7 @@ from typing import Any, Dict
 # functioning rather than KeyError-ing at 3am.
 _DEFAULTS: Dict[str, Any] = {
     "insights_enabled": True,
+    "insights_cooldown_days": 7,
     "detector.duplicate_charge.enabled": True,
     "detector.duplicate_charge.window_days": 3,
     "detector.duplicate_charge.amount_tolerance": 0.0,
