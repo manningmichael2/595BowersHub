@@ -85,6 +85,40 @@ PROPOSE_SYSTEM_PROMPT = (
 _PROPOSE_TOOL_NAME = "propose_candidate"
 
 
+async def complete_tracked(
+    provider: ModelProvider,
+    role: str,
+    *,
+    system: Optional[str] = None,
+    messages: list,
+    tools: Optional[list] = None,
+    max_tokens: int = _MAX_TOKENS,
+    cost_tracker: Optional[CostTracker] = None,
+    layer: str = _ROUTING_LAYER,
+):
+    """The ONE governed model-call path (R1.5): resolve a logical role to a
+    concrete model, call ``ModelProvider.complete``, price the usage with
+    ``cost_for`` (never silently zero for an unknown hosted model), and log a
+    row to ``api_usage_log`` via ``CostTracker``. Returns the ``CompletionResult``.
+
+    Used by both the ``FinanceNarrator`` boundary and ``ask_db``'s SQL-generation
+    call, so CostTracker is wired exactly once. ``role`` ``"local"`` is billed as
+    the on-box Ollama provider."""
+    model = resolve_role(role)
+    result = await provider.complete(model, messages, max_tokens, tools=tools, system=system)
+    billed_model = result.model or model
+    cost = cost_for(billed_model, result.input_tokens, result.output_tokens)
+    await (cost_tracker or CostTracker()).log_usage(
+        model=billed_model,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        cost_usd=cost,
+        routing_layer=layer,
+        provider="ollama" if role == "local" else "anthropic",
+    )
+    return result
+
+
 def _json_default(value: Any) -> Any:
     """Serialize the value types that reach ``facts`` (ask_db already converts
     Decimal→float / date→iso, but engine facts may pass them raw)."""
@@ -122,32 +156,17 @@ class FinanceNarrator:
         # (privacy + cost, R1.5).
         return "fast" if interactive else "local"
 
-    async def _complete_tracked(
-        self,
-        *,
-        role: str,
-        system: str,
-        messages: list,
-        tools: Optional[list] = None,
-    ):
-        """The single resolve_role → complete → cost_for → log_usage path."""
-        model = resolve_role(role)
-        result = await self._provider.complete(
-            model, messages, _MAX_TOKENS, tools=tools, system=system
+    async def _complete_tracked(self, *, role: str, system: str, messages: list, tools=None):
+        """Delegate to the shared governed path, billing the narrator's layer."""
+        return await complete_tracked(
+            self._provider,
+            role,
+            system=system,
+            messages=messages,
+            tools=tools,
+            cost_tracker=self._cost,
+            layer=_ROUTING_LAYER,
         )
-        # Prefer the model the provider actually used; fall back to the resolved
-        # id (some providers may not echo it back).
-        billed_model = result.model or model
-        cost = cost_for(billed_model, result.input_tokens, result.output_tokens)
-        await self._cost.log_usage(
-            model=billed_model,
-            input_tokens=result.input_tokens,
-            output_tokens=result.output_tokens,
-            cost_usd=cost,
-            routing_layer=_ROUTING_LAYER,
-            provider="ollama" if role == "local" else "anthropic",
-        )
-        return result
 
     async def narrate(
         self,

@@ -5,15 +5,11 @@ spending-summary, and ask-db (NL→SQL).
 All return dict with optional '_display' key containing pre-formatted markdown.
 """
 import json
-from backend.services.model_catalog import resolve_role
 import logging
 import re
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-
-import httpx
-from backend.http_client import get_http_client
 
 from backend.database import get_pool
 from backend.services.sql_guard import validate_select
@@ -373,60 +369,63 @@ Today is {date.today().isoformat()}.
 _ASK_DB_MAX_ROWS = 100
 
 
-async def ask_db(question: str) -> dict:
+# asyncpg sqlstates that mean "the generated SQL reached outside what
+# finance_reader can see" (a scope boundary, R1.4) — distinct from a genuine
+# SQL error. 42501 insufficient_privilege, 42P01 undefined_table (e.g. a public
+# bh_* table not on the search_path), 3F000 invalid_schema_name, 3D000
+# invalid_catalog_name. Anything else (syntax, type, division) is a real error.
+_OUT_OF_SCOPE_SQLSTATES = {"42501", "42P01", "3F000", "3D000"}
+
+
+async def ask_db(question: str, provider=None, cost_tracker=None) -> dict:
     """
-    Natural-language question → Haiku-generated SQL → executed against Postgres.
-    Returns the SQL, row count, and results.
+    Natural-language question → model-generated SQL → executed against Postgres
+    under the least-privilege ``finance_reader`` sandbox (R1.1, unchanged).
+
+    The model *invocation* runs through ``ModelProvider`` + ``CostTracker`` (R1.5);
+    pass the shared ``request.app.state.model_provider`` when available, else a
+    provider is constructed from ``Config`` (skill-path fallback).
+
+    Returns ``{sql_generated, results, scope, ...}`` where ``scope`` is
+    ``in_scope`` (rows), ``empty`` (valid but no rows, R1.6), or ``out_of_scope``
+    (the query reached a table/schema outside the reader's grants, R1.4) — a
+    distinction made from the asyncpg sqlstate, never by the model.
     """
     if not question or not question.strip():
         return {"error": "No question provided", "_display": "⚠️ Please provide a question."}
-    
-    import os
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        return {"error": "Anthropic API key not configured"}
-    
+
+    if provider is None:
+        from backend.config import Config
+        from backend.services.model_provider import ModelProvider
+        provider = ModelProvider(Config())
+
     schema_prompt = await _build_schema_prompt()
-    
-    # Call Haiku to generate SQL
+
+    # Generate SQL through the governed, cost-tracked model path (R1.5). The
+    # SQL-execution sandbox below is unchanged (R1.1).
+    from backend.services.finance_narration import complete_tracked
     try:
-        client = get_http_client()
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": resolve_role("fast"),
-                "max_tokens": 1024,
-                "system": schema_prompt,
-                "messages": [{"role": "user", "content": question}],
-            },
+        result = await complete_tracked(
+            provider,
+            "fast",
+            system=schema_prompt,
+            messages=[{"role": "user", "content": question}],
+            max_tokens=1024,
+            cost_tracker=cost_tracker,
+            layer="finance_ask_db",
         )
-        resp.raise_for_status()
-        api_data = resp.json()
-    except httpx.HTTPStatusError as e:
-        return {"error": f"Anthropic API error: {e.response.status_code} {e.response.text[:200]}"}
     except Exception as e:
-        return {"error": f"Failed to call Anthropic: {e}"}
-    
-    # Extract SQL from response
-    content = api_data.get("content", [])
-    sql = ""
-    for block in content:
-        if block.get("type") == "text":
-            sql = block.get("text", "").strip()
-            break
-    
-    # Strip markdown fences if Haiku added them despite instructions
+        return {"error": f"Failed to generate SQL: {e}"}
+
+    sql = (result.content or "").strip()
+
+    # Strip markdown fences if the model added them despite instructions
     sql = re.sub(r'^```\w*\s*', '', sql)
     sql = re.sub(r'\s*```$', '', sql)
     sql = sql.strip().rstrip(";").strip()
     
     if not sql:
-        return {"error": "Haiku returned empty SQL"}
+        return {"error": "Model returned empty SQL"}
 
     # Safety layer 1: parse and require a single read-only SELECT (sqlglot).
     ok, reason = validate_select(sql)
@@ -467,18 +466,33 @@ async def ask_db(question: str) -> dict:
         truncated = len(fetched) > _ASK_DB_MAX_ROWS
         rows = fetched[:_ASK_DB_MAX_ROWS]
     except Exception as e:
+        # A privilege/undefined-table/schema error means the generated SQL
+        # reached outside finance_reader's grants — a scope boundary (R1.4),
+        # not a genuine failure. Everything else is a real error.
+        if getattr(e, "sqlstate", None) in _OUT_OF_SCOPE_SQLSTATES:
+            return {
+                "sql_generated": sql,
+                "results": [],
+                "scope": "out_of_scope",
+                "_display": (
+                    "⚠️ That's outside what I can see — the finance reader can't "
+                    f"access those tables.\n\n```sql\n{sql}\n```"
+                ),
+            }
         return {
             "error": f"SQL execution failed: {e}",
             "sql_generated": sql,
+            "scope": "error",
             "_display": f"⚠️ SQL execution failed: {e}\n\n```sql\n{sql}\n```",
         }
-    
+
     # Format results
     if not rows:
         return {
             "sql_generated": sql,
             "row_count": 0,
             "results": [],
+            "scope": "empty",
             "_display": f"No results.\n\n```sql\n{sql}\n```",
         }
     
@@ -544,6 +558,7 @@ async def ask_db(question: str) -> dict:
         "row_count": len(rows),
         "truncated": truncated,
         "results": results,
+        "scope": "in_scope",
         "_display": display,
     }
 

@@ -18,9 +18,9 @@
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R1.1, R1.4, R1.5, R1.6
-- [ ] Replace the raw-httpx SQL-generation call (`services/finance.py:393-409`) with `ModelProvider.complete` (cost-tracked), keeping `validate_select` + `finance_reader` + READ ONLY + timeouts + cursor cap unchanged.
-- [ ] Upgrade the error handler (`finance.py:470`) to classify by asyncpg sqlstate: `42501`/`42P01`/`3F000`/`3D000` → `out_of_scope`; other failures → genuine error. Return `{sql_generated, results, scope: in_scope|empty|out_of_scope}`.
-- [ ] **Tests:** non-granted table → `out_of_scope`; 0-row valid query → `empty`; syntax error → generic error (not `out_of_scope`); cost logged.
+- [x] Replace the raw-httpx SQL-generation call (`services/finance.py:393-409`) with `ModelProvider.complete` (cost-tracked), keeping `validate_select` + `finance_reader` + READ ONLY + timeouts + cursor cap unchanged.
+- [x] Upgrade the error handler (`finance.py:470`) to classify by asyncpg sqlstate: `42501`/`42P01`/`3F000`/`3D000` → `out_of_scope`; other failures → genuine error. Return `{sql_generated, results, scope: in_scope|empty|out_of_scope}`.
+- [x] **Tests:** non-granted table → `out_of_scope`; 0-row valid query → `empty`; syntax error → generic error (not `out_of_scope`); cost logged.
 
 ## Task 3: Q&A endpoint + FinanceQA surface
 - **Effort:** M
