@@ -23,6 +23,7 @@ from backend.middleware.auth import get_current_user, require_admin
 from backend.services.categorization.config import load_config
 from backend.services.categorization.learning import record_correction
 from backend.services.categorization.rules import apply_rule_to_existing
+from backend.services.finance_insights.recurring import recurring_charges
 
 logger = logging.getLogger(__name__)
 
@@ -193,29 +194,10 @@ async def get_recurring(user: dict = Depends(get_current_user)) -> RecurringResp
         async with pool.acquire() as conn:
             cfg = await load_config(conn)
             rec = cfg.recurring
-            rows = await conn.fetch(
-                """
-                WITH per_merchant AS (
-                    SELECT merchant_key,
-                           count(*) AS occurrences,
-                           avg(amount) AS avg_amount,
-                           stddev_pop(abs(amount)) AS amt_sd,
-                           avg(abs(amount)) AS avg_abs,
-                           max(posted_date)::text AS last_seen,
-                           (max(posted_date) - min(posted_date))::float
-                               / NULLIF(count(*) - 1, 0) AS avg_interval_days
-                    FROM finance.transactions
-                    WHERE merchant_key IS NOT NULL AND is_transfer = false AND amount < 0
-                    GROUP BY merchant_key
-                )
-                SELECT merchant_key, occurrences, avg_amount, last_seen, avg_interval_days
-                FROM per_merchant
-                WHERE occurrences >= $1
-                  AND (avg_abs = 0 OR COALESCE(amt_sd, 0) / NULLIF(avg_abs, 0) <= $2)
-                ORDER BY occurrences DESC, merchant_key
-                """,
-                int(rec.get("min_occurrences", 3)),
-                float(rec.get("amount_tolerance_pct", 15)) / 100.0,
+            rows = await recurring_charges(
+                conn,
+                min_occurrences=int(rec.get("min_occurrences", 3)),
+                amount_tolerance_frac=float(rec.get("amount_tolerance_pct", 15)) / 100.0,
             )
     except (asyncpg.PostgresError, OSError, RuntimeError) as e:
         raise _db_error(e)

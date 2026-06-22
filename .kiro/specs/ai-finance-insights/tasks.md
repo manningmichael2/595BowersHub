@@ -57,9 +57,9 @@
 - **Effort:** L
 - **Dependencies:** Task 6
 - **Requirements:** R2.2, R2.3
-- [ ] `services/finance_insights/detectors.py`: duplicate-charge, price-creep, free-trial-conversion, unusual-spend, bill-higher-than-usual, low-balance-before-payday — each parameterized SQL over `public.real_activity` + `/recurring`, grouping on `merchant_key`, median/MAD or IQR, min-history guard; each emits figures + reason. Detectors registered as a light `(type, config_key, fn)` list.
-- [ ] Reuse `/recurring`'s detection **at the query/service level**, not via the HTTP route — verify the recurring SQL is callable from the detector layer (`routers/finance_review.py:186`), extracting a shared query helper if it's currently route-bound (don't reinvent the detection).
-- [ ] **Tests:** planted duplicate + price hike each → exactly one candidate; below-min-history merchant → no unusual-spend; each candidate carries figures + reason.
+- [x] `services/finance_insights/detectors.py`: duplicate-charge, price-creep, free-trial-conversion, unusual-spend, bill-higher-than-usual, low-balance-before-payday — each parameterized SQL over `public.real_activity` + `/recurring`, grouping on `merchant_key`, median/MAD or IQR, min-history guard; each emits figures + reason. Detectors registered as a light `(type, config_key, fn)` list.
+- [x] Reuse `/recurring`'s detection **at the query/service level**, not via the HTTP route — verify the recurring SQL is callable from the detector layer (`routers/finance_review.py:186`), extracting a shared query helper if it's currently route-bound (don't reinvent the detection).
+- [x] **Tests:** planted duplicate + price hike each → exactly one candidate; below-min-history merchant → no unusual-spend; each candidate carries figures + reason.
 
 ## Task 8: Insight store — upsert, period, dedupe, cooldown, dismissal lifecycle
 - **Effort:** M
