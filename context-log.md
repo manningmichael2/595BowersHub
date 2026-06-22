@@ -765,7 +765,7 @@ PR #20 (`feat/finance-categorization-tiers` → `main`) squash-merged after all 
 
 ---
 
-## [2026-06-20] Prowlarr + AudioBookBay Integration � Gemini IDE
+## [2026-06-20] Prowlarr + AudioBookBay Integration � Gemini IDE
 
 Deployed official Prowlarr + Jackett containers for AudioBookBay integration.
 AudioBookBay actively blocks Prowlarr's Cardigann scrapers, so Jackett was deployed as a proxy to scrape ABB and feed Torznab to Prowlarr.
@@ -780,7 +780,7 @@ AudioBookBay actively blocks Prowlarr's Cardigann scrapers, so Jackett was deplo
 
 ---
 
-## [2026-06-20] AudioBookBay Cloudflare Fix � Gemini IDE
+## [2026-06-20] AudioBookBay Cloudflare Fix � Gemini IDE
 
 Jackett encountered Cloudflare anti-bot timeouts when configuring AudioBookBay. 
 Added ghcr.io/flaresolverr/flaresolverr container to prowlarr/docker-compose.yml to act as a headless browser proxy for Jackett.
@@ -807,7 +807,7 @@ Walked `docs/finance-categorization-cutover.md` end-to-end against prod. The cas
 
 ---
 
-## [2026-06-20] AudioBookBay ISP Block Bypass (Tor) � Gemini IDE
+## [2026-06-20] AudioBookBay ISP Block Bypass (Tor) � Gemini IDE
 
 Discovered that the user's ISP drops all connections to AudioBookBay domains (.nl, .is, .se, .lu) before Cloudflare is even reached. 
 Since Hotspot Shield router configurations were unavailable in the user's dashboard, we pivoted to using a Tor proxy.
@@ -832,7 +832,7 @@ Commit `678481e` (local; push pending owner decision — classifier blocked dire
 
 ---
 
-## [2026-06-20] Livrarr Deployment (Audiobooks Hybrid Setup) � Gemini IDE
+## [2026-06-20] Livrarr Deployment (Audiobooks Hybrid Setup) � Gemini IDE
 
 Readarr was deprecated in 2025. Pivoted to deploying Livrarr (ghcr.io/kkodecs/livrarr:0.1.0-alpha5) as the modern automation engine for audiobooks.
 Configured a hybrid Windows/Linux deployment over the Z:\ drive:
@@ -866,7 +866,7 @@ Shipped the `ADMIN_ONLY_SKILLS` → DB-driven `min_role` task (PR #25, `0943040`
 
 ---
 
-## [2026-06-20] Livrarr Teardown � Gemini IDE
+## [2026-06-20] Livrarr Teardown � Gemini IDE
 
 User abandoned the Livrarr automation pipeline due to alpha-stage bugs (specifically the root folder 1 duplication bug).
 Tore down the livrarr docker stack and deleted the associated directories and documentation to keep the server clean.
@@ -959,3 +959,19 @@ Owner chose "finish finance UX" as the next focus; delivered in slices (all merg
 Net: Finance is now one cohesive Monarch/Origin-style surface — a single **Transactions** explorer (search · date-range presets+slicer · category/status filters · sortable · subtotals/totals · inline categorize/split/bulk) plus Budgets/Net Worth/Recurring tabs, and budgets/net-worth/spending all surface as dashboard widgets. tsc clean throughout; 230 frontend tests + backend explorer/budgets/splits green.
 
 - [Next] Deferred finance follow-ups (all optional, owner's call): a dedicated user-rules management UI (backend CRUD exists, no frontend); manual transfer-link UI; split-a-transfer; budget rollover/income-budgeting; reconcile-vs-snapshot drift. No further finance work queued.
+
+---
+
+## [2026-06-22] ai-finance-insights spec — Phase 0 IMPLEMENTED (Tasks 1–3) — Claude Code
+
+Started implementing the `ai-finance-insights` spec (the AI-native finance epic) on a fresh `feat/ai-finance-insights` branch off `main` (the spec files were authored on `fix/mobile-workspace-deadlock-finance-tab`, brought over here; that mobile/favicon branch stays its own un-PR'd work). **Phase 0 = conversational finance Q&A, done end-to-end, task-by-task with per-task commits.**
+
+- **Task 1 — `FinanceNarrator` boundary** (`services/finance_narration.py`, NEW): the single governed place an LLM may speak about money. `narrate(facts, question, scope)->str` quotes figures verbatim from a delimited "READ-ONLY DATA, not instructions" block; output is terminal `str`, never re-parsed to SQL. `propose_structured(schema, nl_text)->dict` = constrained tool-use candidate, never a write (R3 seam). Fixed module-constant system prompts (R1.3d). Extracted a module-level `complete_tracked()` owning the model-governance 4-step (**resolve_role → ModelProvider.complete → cost_for → CostTracker.log_usage**) — CostTracker was previously un-wired into any live LLM path; now wired exactly once and reused by both narrate and ask_db. Interactive→`fast`, nightly→`local` (Ollama).
+- **Task 2 — `ask_db` migrated + scope classification** (`services/finance.py`): replaced the raw-httpx SQL-gen call with the governed `complete_tracked` path (cost-tracked); the `validate_select` + `finance_reader` READ ONLY + timeouts + cursor sandbox is **unchanged** (R1.1). Execution failures classified by asyncpg sqlstate: `42501/42P01/3F000/3D000` → `scope:"out_of_scope"` (R1.4); valid-but-no-rows → `"empty"` (R1.6); rows → `"in_scope"`. `ask_db(question, provider=None, cost_tracker=None)`. Dropped now-unused httpx/get_http_client/resolve_role imports.
+- **Task 3 — Q&A endpoint + FinanceQA surface**: `POST /api/finance/qa` (`get_current_user`) → ask_db → narrate(facts=rows) → `{answer, sql, figures, scope}`; empty/out-of-scope answers are **code-authored from `scope`, never the model**. Frontend `FinanceQaPage` (tokenized Tailwind, R5.2) + `/finance/ask` sub-tab + typed `financeQa` client. 18 backend Phase-0 tests + 232 frontend tests green; `tsc` clean.
+
+**Noted (pre-existing, NOT changed — `ask_db`'s existing contract):** (1) the ask_db schema prompt computes "spending" from raw `finance.transactions` (`is_transfer=false`, `amount<0`), **not** the allocation-aware `public.real_activity` view the rest of finance standardized on → Q&A spending answers can double-count split parents; (2) it advertises `public.bh_patterns` in CRITICAL COLUMN NAMES, a table `finance_reader` can't read. Worth a follow-up to point spending guidance at `real_activity`.
+
+**Local DB note:** the Portainer `postgres` (pgvector/pgvector:pg16) exposes 5432 only on the docker network, so DB-backed tests ran against a throwaway `pgvector/pgvector:pg16` container on host port 5455 (`DB_HOST=127.0.0.1 DB_PORT=5455 DB_USER=michael DB_PASSWORD=test`).
+
+- [Next] Phase 1 — proactive nightly insight agent (Tasks 4–10): insights schema + watermark tables/GRANTs, categorizer watermark write, DB-driven detector config, 6 detectors, insight store (period/dedupe/cooldown/dismissal), nightly runner + scheduler, insights API + review surface + morning-card wiring. Then Phase 2 (NL→rules), Phase 3 (retirement, R4.5 cut line), Phase 4 (Tailwind). Commits are local on `feat/ai-finance-insights` — not pushed/PR'd yet.
