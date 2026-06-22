@@ -123,8 +123,8 @@
 - **Effort:** M
 - **Dependencies:** Task 13, Task 14
 - **Requirements:** R4.1, R4.3, R4.4, R4.6, R4.8
-- [ ] `services/retirement.py` + `routers/retirement.py`: inputs CRUD (PUT upserts singleton; prefill from `compute_net_worth`, editable); `POST /project` (merge `retirement_config` + overrides → engine → series+stats + **non-nullable `disclaimer` field**); `POST /scenarios/compare` (R4.4); `has_inputs()` cold-start (R4.8).
-- [ ] **Tests:** "can I retire at 60?" surplus/gap matches reference; every projection response carries the disclaimer; no-inputs → cold-start signal; what-if recompute correct; **`/scenarios/compare` returns both scenarios (retire-at-60 vs 65) with distinct projections** (R4.4).
+- [x] `services/retirement.py` + `routers/retirement.py`: inputs CRUD (PUT upserts singleton; prefill from `compute_net_worth`, editable); `POST /project` (merge `retirement_config` + overrides → engine → series+stats + **non-nullable `disclaimer` field**); `POST /scenarios/compare` (R4.4); `has_inputs()` cold-start (R4.8).
+- [x] **Tests:** "can I retire at 60?" surplus/gap matches reference; every projection response carries the disclaimer; no-inputs → cold-start signal; what-if recompute correct; **`/scenarios/compare` returns both scenarios (retire-at-60 vs 65) with distinct projections** (R4.4).
 
 ## Task 16: RetirementPlanner frontend
 - **Effort:** M
