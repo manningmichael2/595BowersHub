@@ -21,6 +21,17 @@ interface AuthState {
 
 const BASE_URL = ''
 
+// Single-flight refresh. The refresh token ROTATES on every /api/auth/refresh
+// (the response carries a new refresh_token that replaces the old one), so the
+// old token is single-use. On app load many requests fire at once (workspaces,
+// conversations, settings, dashboard…); if the access token is stale they all
+// 401 together. Without de-duping, each would POST /refresh with the same
+// rotating token — the first consumes it, the rest fail and trigger a spurious
+// logout, leaving stores with swallowed 401s and empty data (blank sidebar).
+// Holding one shared promise means concurrent callers await the SAME refresh
+// and then retry with the single freshly-rotated token.
+let inFlightRefresh: Promise<boolean> | null = null
+
 async function rawFetch(path: string, options: RequestInit) {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
@@ -97,57 +108,58 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   refreshAuth: async () => {
-    // Prevent concurrent refresh attempts
-    if (get().isRefreshing) {
-      // Wait for ongoing refresh
-      await new Promise(resolve => setTimeout(resolve, 100))
-      return !!get().accessToken
-    }
+    // Concurrent callers share the one in-flight refresh (see inFlightRefresh).
+    if (inFlightRefresh) return inFlightRefresh
 
-    const refreshToken = get().refreshToken || localStorage.getItem('refreshToken')
-    if (!refreshToken) return false
+    const run = async (): Promise<boolean> => {
+      const refreshToken = get().refreshToken || localStorage.getItem('refreshToken')
+      if (!refreshToken) return false
 
-    set({ isRefreshing: true })
-    try {
-      const data = await rawFetch('/api/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      })
-      const { access_token, refresh_token: new_refresh_token } = parseLoose(
-        RefreshResponseSchema,
-        data,
-        'POST /api/auth/refresh'
-      )
-      set({
-        accessToken: access_token,
-        refreshToken: new_refresh_token,
-        isRefreshing: false,
-      })
-      localStorage.setItem('refreshToken', new_refresh_token)
-      return true
-    } catch {
-      // Clean logout on refresh failure. Send the user to the login page
-      // so they get a clear next action instead of staring at a stale
-      // chat that pretends to work — except when we're already there
-      // (e.g. the login form's own initial-state probe failed) so we
-      // don't bounce-loop the route.
-      set({
-        user: null,
-        accessToken: null,
-        refreshToken: null,
-        isRefreshing: false,
-      })
-      localStorage.removeItem('refreshToken')
-      localStorage.removeItem('user')
-      if (
-        typeof window !== 'undefined' &&
-        !window.location.pathname.startsWith('/login') &&
-        !window.location.pathname.startsWith('/register')
-      ) {
-        window.location.href = '/login'
+      set({ isRefreshing: true })
+      try {
+        const data = await rawFetch('/api/auth/refresh', {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        })
+        const { access_token, refresh_token: new_refresh_token } = parseLoose(
+          RefreshResponseSchema,
+          data,
+          'POST /api/auth/refresh'
+        )
+        set({
+          accessToken: access_token,
+          refreshToken: new_refresh_token,
+          isRefreshing: false,
+        })
+        localStorage.setItem('refreshToken', new_refresh_token)
+        return true
+      } catch {
+        // Clean logout on refresh failure. Send the user to the login page
+        // so they get a clear next action instead of staring at a stale
+        // chat that pretends to work — except when we're already there
+        // (e.g. the login form's own initial-state probe failed) so we
+        // don't bounce-loop the route.
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isRefreshing: false,
+        })
+        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('user')
+        if (
+          typeof window !== 'undefined' &&
+          !window.location.pathname.startsWith('/login') &&
+          !window.location.pathname.startsWith('/register')
+        ) {
+          window.location.href = '/login'
+        }
+        return false
       }
-      return false
     }
+
+    inFlightRefresh = run().finally(() => { inFlightRefresh = null })
+    return inFlightRefresh
   },
 
   clearError: () => set({ error: null }),
