@@ -50,8 +50,8 @@
 - **Effort:** S
 - **Dependencies:** none
 - **Requirements:** R2.2
-- [ ] **Migration:** `0035_seed_insight_config.sql` — `finance.insight_config` (key/jsonb), idempotent seeds: per-detector enable flags + all thresholds + `insights_enabled` kill-switch + the retirement-vs-data keyword set. Loader in `services/finance_insights/config.py` (code-side defaults only as missing-key fallback).
-- [ ] **Tests:** loader returns seeded values; missing key falls back; grep shows no hardcoded thresholds.
+- [x] **Migration:** `0035_seed_insight_config.sql` — `finance.insight_config` (key/jsonb), idempotent seeds: per-detector enable flags + all thresholds + `insights_enabled` kill-switch + the retirement-vs-data keyword set. Loader in `services/finance_insights/config.py` (code-side defaults only as missing-key fallback).
+- [x] **Tests:** loader returns seeded values; missing key falls back; grep shows no hardcoded thresholds.
 
 ## Task 7: Detectors (6) — parameterized SQL, robust stats, explainable
 - **Effort:** L
