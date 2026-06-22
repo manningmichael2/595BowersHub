@@ -27,6 +27,7 @@ const NetWorthPage = lazy(() => import('./pages/NetWorthPage'))
 const BudgetsPage = lazy(() => import('./pages/BudgetsPage'))
 import FinanceLayout from './components/FinanceLayout'
 const TransactionsPage = lazy(() => import('./pages/TransactionsPage'))
+const FinanceQaPage = lazy(() => import('./pages/FinanceQaPage'))
 
 /**
  * Theme tokens we apply as CSS custom properties on `:root`.
@@ -185,6 +186,7 @@ function App() {
         <Route path="/finance" element={<FinanceLayout />}>
           <Route index element={<Navigate to="/finance/transactions" replace />} />
           <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
+          <Route path="ask" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceQaPage /></Suspense>} />
           <Route path="review" element={<Navigate to="/finance/transactions" replace />} />
           <Route path="recurring" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RecurringPage /></Suspense>} />
           <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />

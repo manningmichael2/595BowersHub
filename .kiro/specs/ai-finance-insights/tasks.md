@@ -26,9 +26,9 @@
 - **Effort:** M
 - **Dependencies:** Task 1, Task 2
 - **Requirements:** R1.1, R1.2, R1.4, R1.6, R5.2
-- [ ] `POST /api/finance/qa` (`get_current_user`) → data path: `ask_db` → `narrate(facts=results)` → `{answer, sql, figures, scope}`. (Retirement branch added in Task 17.)
-- [ ] `FinanceQA` frontend surface (tokenized Tailwind, R5.2): question box, answer, "reveal query/figures" disclosure; empty vs out-of-scope messaging distinct.
-- [ ] **Tests:** grocery-spend answer equals a direct `real_activity` aggregate and exposes sql+figures; empty vs out-of-scope distinguishable; `tsc` clean.
+- [x] `POST /api/finance/qa` (`get_current_user`) → data path: `ask_db` → `narrate(facts=results)` → `{answer, sql, figures, scope}`. (Retirement branch added in Task 17.)
+- [x] `FinanceQA` frontend surface (tokenized Tailwind, R5.2): question box, answer, "reveal query/figures" disclosure; empty vs out-of-scope messaging distinct.
+- [x] **Tests:** grocery-spend answer equals a direct `real_activity` aggregate and exposes sql+figures; empty vs out-of-scope distinguishable; `tsc` clean.
 
 ## Phase 1 — Proactive insight agent (Feature 2)
 
