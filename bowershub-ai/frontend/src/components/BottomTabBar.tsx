@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 const TABS = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/chat', label: 'Chat', icon: '💬' },
+  { path: '/finance', label: 'Finance', icon: '💵' },
   { path: '/db', label: 'Database', icon: '🗄️' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ]

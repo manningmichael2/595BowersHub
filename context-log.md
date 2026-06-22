@@ -995,3 +995,17 @@ The **proactive nightly insight agent**, end-to-end, task-by-task with per-task 
 **50 backend (Phase 0+1) + 234 frontend tests green; tsc clean.** Detectors run as the internal pool (not the finance_reader Q&A sandbox). **Note:** "non-blocking toast for new insights" is realized via the morning-card surfacing + action toasts; a real-time push for nightly-detected insights (websocket) was not built (it's a nightly job — the card is the surface).
 
 - [Next] Phase 2 — NL→rules (Tasks 11 candidate-scoring refactor incl. override-guard parity, 12 NL→rule parse/validate/preview/commit + the insight→rule action). Then Phase 3 retirement (13 pure projection, 14 schema, 15 service, 16 frontend, 17 retirement Q&A — R4.5 cut line), Phase 4 Tailwind (18). 17 commits local on `feat/ai-finance-insights`, not pushed.
+
+---
+
+## [2026-06-22] Fix chat-page workspace deadlock + mobile finance access — Claude Code
+
+Owner report: chat page default view unusable — no workspace selected, no menu to select one, and the transactions tool unreachable. Diagnosed three standalone bugs in `main` (none touched by the prior visual-changes branch, so they survived its revert):
+
+- **Workspace stuck `null` (root deadlock)** `stores/workspace.ts`: a stale `localStorage.activeWorkspaceId` (deleted/renamed workspace, or other env) resolved to `undefined` with **no fallback to `workspaces[0]`** → `activeWorkspace` null forever (persistent for the affected user, invisible in a fresh session). Now falls back to the first workspace and heals the stale pointer.
+- **Empty state dead-ended mobile** `components/ChatArea.tsx`: the `!activeWorkspace` branch returned before `ChatHeader`, which owns the only mobile hamburger that opens the sidebar (where the workspace switcher lives) → no workspace → no header → no hamburger → no menu. Added a hamburger to the empty state + loading/hint copy.
+- **Transactions unreachable on mobile** `components/BottomTabBar.tsx`: no Finance tab (desktop `TopNav` had it; mobile didn't). Added 💵 Finance → `/finance` → `/finance/transactions`.
+
+tsc clean; 239 frontend tests green. The reverted *visual* changes were not restored (owner confirmed visual work is coming separately); this restores functional access only.
+
+- [Next] Finance visual redesign (owner-flagged, separate). No follow-up owed on these fixes.

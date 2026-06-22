@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react'
 import { useConversationStore } from '../stores/conversation'
 import { useWorkspaceStore } from '../stores/workspace'
+import { useUIStore } from '../stores/ui'
 import ChatHeader from './ChatHeader'
 import MessageList from './MessageList'
 import InputArea from './InputArea'
@@ -8,7 +9,8 @@ import TypingIndicator from './TypingIndicator'
 
 export default function ChatArea() {
   const { activeConversation, messages, isStreaming, streamingContent } = useConversationStore()
-  const { activeWorkspace } = useWorkspaceStore()
+  const { activeWorkspace, isLoading: workspacesLoading } = useWorkspaceStore()
+  const { toggleSidebar } = useUIStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom on new messages
@@ -17,11 +19,33 @@ export default function ChatArea() {
   }, [messages.length, streamingContent])
 
   if (!activeWorkspace) {
+    // Empty state. Crucially this must NOT be a dead-end on mobile: the
+    // workspace switcher lives in the sidebar, which on mobile is closed by
+    // default and only opens via a hamburger. ChatHeader (which owns that
+    // hamburger) isn't rendered here, so we provide our own so the user can
+    // always open the sidebar and pick a workspace.
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-300 mb-2">BowersHub AI</h2>
-          <p>Select a workspace to get started</p>
+      <div className="flex-1 flex flex-col h-full min-h-0">
+        <div className="flex items-center px-4 py-3 border-b border-border bg-background/80 shrink-0 md:hidden">
+          <button
+            onClick={toggleSidebar}
+            className="p-1.5 rounded-lg hover:bg-surface text-text-muted"
+            aria-label="Open menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-text-muted">
+          <div className="text-center px-6">
+            <h2 className="text-2xl font-bold text-text mb-2">BowersHub AI</h2>
+            <p>
+              {workspacesLoading
+                ? 'Loading workspaces…'
+                : 'Select a workspace to get started — open the menu to choose one.'}
+            </p>
+          </div>
         </div>
       </div>
     )

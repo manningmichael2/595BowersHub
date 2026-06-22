@@ -32,12 +32,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       )
       set({ workspaces, isLoading: false })
 
-      // Restore last active workspace or default to first
+      // Restore last active workspace, else fall back to the first one.
+      // The fallback is important: a stale `activeWorkspaceId` (a workspace
+      // that was deleted/renamed, or a different environment) would otherwise
+      // leave `activeWorkspace` null forever — which on mobile is a dead-end
+      // (no header → no hamburger → no way to open the workspace menu).
       const savedId = localStorage.getItem('activeWorkspaceId')
-      const active = savedId
+      const saved = savedId
         ? workspaces.find((w: Workspace) => w.id === parseInt(savedId))
-        : workspaces[0]
-      if (active) set({ activeWorkspace: active })
+        : undefined
+      const active = saved || workspaces[0]
+      if (active) {
+        set({ activeWorkspace: active })
+        // Heal the stale pointer so the next load resolves directly.
+        if (!saved) localStorage.setItem('activeWorkspaceId', String(active.id))
+      }
     } catch {
       set({ isLoading: false })
     }
