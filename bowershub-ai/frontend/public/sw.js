@@ -23,6 +23,12 @@
 // When TODO #36 lands, this file will be replaced with a Workbox-managed
 // service worker that does proper versioned caching.
 
+// Bump SW_VERSION on any change that must reach installed PWAs. The byte
+// change makes the browser detect an updated worker; install() skipWaiting +
+// activate() (cache wipe + clients.claim) then dislodge any older worker still
+// pinning an installed app to a stale bundle.
+const SW_VERSION = '2026-06-22-2';
+
 const SHARE_TARGET_URL = '/quick-capture';
 
 // One-shot share payload slots, keyed by a short token. Populated by the
@@ -41,6 +47,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  console.log('[sw] activated', SW_VERSION);
   event.waitUntil(
     Promise.all([
       caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))),
