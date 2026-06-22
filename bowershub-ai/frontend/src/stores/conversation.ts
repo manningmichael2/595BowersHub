@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { z } from 'zod'
 import { api } from '../services/api'
+import { toast } from './toast'
 import { parseLoose } from '../lib/validate'
 import {
   ConversationSchema,
@@ -18,6 +19,9 @@ interface ConversationState {
   activeConversation: Conversation | null
   messages: Message[]
   isLoading: boolean
+  // Non-null when the last conversation fetch failed (vs. a workspace that
+  // legitimately has no conversations yet). Surfaced in the sidebar.
+  error: string | null
   isStreaming: boolean
   streamingContent: string
   streamingLayer: string | null
@@ -41,13 +45,14 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   activeConversation: null,
   messages: [],
   isLoading: false,
+  error: null,
   isStreaming: false,
   streamingContent: '',
   streamingLayer: null,
   skillStatus: null,
 
   fetchConversations: async (workspaceId) => {
-    set({ isLoading: true })
+    set({ isLoading: true, error: null })
     try {
       const res = await api.get(`/api/conversations?workspace_id=${workspaceId}`)
       const conversations = parseLoose(
@@ -68,7 +73,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         await state.setActive(mostRecent)
       }
     } catch {
-      set({ isLoading: false })
+      set({ isLoading: false, error: 'Could not load conversations.' })
+      toast.error('Could not load conversations.')
     }
   },
 

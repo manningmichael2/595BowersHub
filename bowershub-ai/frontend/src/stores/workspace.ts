@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { z } from 'zod'
 import { api } from '../services/api'
+import { toast } from './toast'
 import { parseLoose } from '../lib/validate'
 import { WorkspaceSchema, type Workspace } from '../schemas/workspace'
 
@@ -10,6 +11,10 @@ interface WorkspaceState {
   workspaces: Workspace[]
   activeWorkspace: Workspace | null
   isLoading: boolean
+  // Non-null when the last fetch *failed* (network/5xx) — distinct from a
+  // successful fetch that simply returned no workspaces. The UI uses this to
+  // show "couldn't load — retry" instead of a silent/misleading empty state.
+  error: string | null
 
   fetchWorkspaces: () => Promise<void>
   setActive: (workspace: Workspace) => void
@@ -20,9 +25,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   workspaces: [],
   activeWorkspace: null,
   isLoading: false,
+  error: null,
 
   fetchWorkspaces: async () => {
-    set({ isLoading: true })
+    set({ isLoading: true, error: null })
     try {
       const res = await api.get('/api/workspaces')
       const workspaces = parseLoose(
@@ -48,7 +54,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         if (!saved) localStorage.setItem('activeWorkspaceId', String(active.id))
       }
     } catch {
-      set({ isLoading: false })
+      // A genuine failure (network/5xx). Don't leave the UI looking like an
+      // empty account — record the error and tell the user.
+      set({ isLoading: false, error: 'Could not load workspaces.' })
+      toast.error('Could not load your workspaces. Check your connection and retry.')
     }
   },
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { z } from 'zod'
 import { api } from '../services/api'
+import { toast } from './toast'
 import { parseLoose } from '../lib/validate'
 import {
   WidgetTypeSchema,
@@ -65,6 +66,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       set({ availableWidgets, layouts, activePage, isLoading: false })
     } catch {
       set({ isLoading: false })
+      toast.error('Could not load your dashboard.')
     }
   },
 
@@ -100,7 +102,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       await api.put('/api/dashboard/layouts', { pages })
     } catch {
       // Revert on failure
-      set({ layouts })
+      set({ layouts });
+      toast.error("Couldn't save dashboard change.")
     }
   },
 
@@ -130,7 +133,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       await api.put('/api/dashboard/layouts', { pages })
     } catch {
       // Revert on failure
-      set({ layouts })
+      set({ layouts });
+      toast.error("Couldn't save dashboard change.")
     }
   },
 
@@ -155,7 +159,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       await api.put('/api/dashboard/layouts', { pages })
     } catch {
       // Revert on failure
-      set({ layouts })
+      set({ layouts });
+      toast.error("Couldn't save dashboard change.")
     }
   },
 }))

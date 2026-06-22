@@ -8,8 +8,8 @@ import { useUIStore } from '../stores/ui'
 import WorkspaceSettingsPanel from './WorkspaceSettingsPanel'
 
 export default function Sidebar() {
-  const { workspaces, activeWorkspace, setActive: setActiveWorkspace } = useWorkspaceStore()
-  const { conversations, activeConversation, setActive: setActiveConv, createConversation } = useConversationStore()
+  const { workspaces, activeWorkspace, error: wsError, fetchWorkspaces, setActive: setActiveWorkspace } = useWorkspaceStore()
+  const { conversations, activeConversation, error: convError, setActive: setActiveConv, createConversation } = useConversationStore()
   const { user, logout } = useAuthStore()
   const { setSidebarOpen } = useUIStore()
   const [wsSettingsOpen, setWsSettingsOpen] = useState(false)
@@ -57,6 +57,19 @@ export default function Sidebar() {
             </button>
           )}
         </div>
+        {/* Distinguish a real load failure from an empty account: only show
+            this when the fetch errored, with a way to recover. */}
+        {wsError && workspaces.length === 0 && (
+          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-danger">
+            <span>{wsError}</span>
+            <button
+              onClick={() => fetchWorkspaces()}
+              className="px-2 py-0.5 rounded border border-border text-text-muted hover:text-text"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       {/* New conversation button */}
@@ -81,9 +94,15 @@ export default function Sidebar() {
           />
         ))}
         {conversations.length === 0 && (
-          <p className="text-center text-gray-500 text-sm py-8">
-            No conversations yet
-          </p>
+          convError ? (
+            <p className="text-center text-danger text-sm py-8">
+              {convError}
+            </p>
+          ) : (
+            <p className="text-center text-gray-500 text-sm py-8">
+              No conversations yet
+            </p>
+          )
         )}
       </div>
 
