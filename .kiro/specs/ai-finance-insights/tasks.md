@@ -116,8 +116,8 @@
 - **Effort:** S
 - **Dependencies:** none
 - **Requirements:** R4.1, R4.3
-- [ ] **Migration:** `0036_finance_retirement_schema.sql` — `finance.retirement_inputs` (**singleton**: fixed id=1 + `CHECK`/partial-unique) + `finance.retirement_scenarios` (many per owner); explicit `GRANT SELECT … finance_reader` on both. `0037_seed_retirement_config.sql` — `finance.retirement_config` (nominal_return/inflation/withdrawal_rate/end_age), idempotent.
-- [ ] **Tests:** positive grant test (ask_db/`finance_reader` can SELECT `retirement_inputs`); singleton constraint prevents a second inputs row; seeds idempotent; `fresh_db` green.
+- [x] **Migration:** `0036_finance_retirement_schema.sql` — `finance.retirement_inputs` (**singleton**: fixed id=1 + `CHECK`/partial-unique) + `finance.retirement_scenarios` (many per owner); explicit `GRANT SELECT … finance_reader` on both. `0037_seed_retirement_config.sql` — `finance.retirement_config` (nominal_return/inflation/withdrawal_rate/end_age), idempotent.
+- [x] **Tests:** positive grant test (ask_db/`finance_reader` can SELECT `retirement_inputs`); singleton constraint prevents a second inputs row; seeds idempotent; `fresh_db` green.
 
 ## Task 15: Retirement service + endpoints
 - **Effort:** M
