@@ -9,10 +9,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 vi.mock('../../services/financeInsights', () => ({
   financeInsights: { list: vi.fn(), dismiss: vi.fn(), reopen: vi.fn(), action: vi.fn() },
 }))
+vi.mock('../../services/financeRules', () => ({
+  financeRules: { parse: vi.fn(), create: vi.fn() },
+}))
+vi.mock('../../services/financeReview', () => ({
+  financeReview: { getCategories: vi.fn() },
+}))
 vi.mock('../../stores/toast', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 
 import InsightsPage from '../InsightsPage'
 import { financeInsights, type Insight } from '../../services/financeInsights'
+import { financeRules } from '../../services/financeRules'
 
 const ROWS: Insight[] = [
   {
@@ -40,5 +47,29 @@ describe('InsightsPage', () => {
     await waitFor(() => expect(screen.getByText('Dismiss')).toBeTruthy())
     fireEvent.click(screen.getByText('Dismiss'))
     await waitFor(() => expect(financeInsights.dismiss).toHaveBeenCalledWith(1))
+  })
+
+  it('NL rule composer previews then commits', async () => {
+    vi.mocked(financeInsights.list).mockResolvedValue([])
+    vi.mocked(financeRules.parse).mockResolvedValue({
+      candidate: {
+        priority: 100, category_id: 3, merchant_key: 'whole foods', description_regex: null,
+        amount_min: -200, amount_max: null, account_id: null, is_active: true,
+      },
+      category_name: 'Groceries', merchant_key: 'whole foods', preview_count: 7,
+    })
+    vi.mocked(financeRules.create).mockResolvedValue()
+    render(<InsightsPage />)
+
+    fireEvent.change(screen.getByTestId('nl-rule-input'), {
+      target: { value: 'Whole Foods as Groceries unless over $200' },
+    })
+    fireEvent.click(screen.getByText('Preview'))
+    await waitFor(() => expect(screen.getByTestId('nl-rule-preview')).toBeTruthy())
+    expect(screen.getByText(/affects/)).toBeTruthy()
+    expect(screen.getByText('7')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Create rule'))
+    await waitFor(() => expect(financeRules.create).toHaveBeenCalled())
   })
 })

@@ -98,10 +98,10 @@
 - **Effort:** M
 - **Dependencies:** Task 1, Task 11 (and Task 10 for the InsightReview action wiring)
 - **Requirements:** R2.6, R3.1, R3.2, R3.3, R3.4
-- [ ] `services/nl_rules.py`: `propose_structured` → candidate; `validate_rule_candidate()` (security control) — category ∈ `finance.categories` (`_category_exists`), merchant resolves to real `merchant_key`, bounds/priority clamped, unbounded-scope rejected.
-- [ ] `POST /api/finance/rules/parse` (read) → candidate + `count_matching` preview; commit via existing `POST /api/finance/user-rules` (`require_admin`). NL-rule UI (tokenized Tailwind).
-- [ ] Add the "always categorize {merchant} as {category}" action to Task 10's `InsightReview` (this is where the rule-create path now exists), satisfying R2.6's actionable half.
-- [ ] **Tests:** "Whole Foods as Groceries unless over $200" → parsed rule + affected-count matching actual apply; abusive NL → rejected/sanitized, never an unbounded write; the insight→rule action creates a `user_rules` row.
+- [x] `services/nl_rules.py`: `propose_structured` → candidate; `validate_rule_candidate()` (security control) — category ∈ `finance.categories` (`_category_exists`), merchant resolves to real `merchant_key`, bounds/priority clamped, unbounded-scope rejected.
+- [x] `POST /api/finance/rules/parse` (read) → candidate + `count_matching` preview; commit via existing `POST /api/finance/user-rules` (`require_admin`). NL-rule UI (tokenized Tailwind).
+- [x] Add the "always categorize {merchant} as {category}" action to Task 10's `InsightReview` (this is where the rule-create path now exists), satisfying R2.6's actionable half.
+- [x] **Tests:** "Whole Foods as Groceries unless over $200" → parsed rule + affected-count matching actual apply; abusive NL → rejected/sanitized, never an unbounded write; the insight→rule action creates a `user_rules` row.
 
 ## Phase 3 — Retirement planner (Feature 4; R4.5 is the cut line)
 

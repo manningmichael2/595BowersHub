@@ -20,6 +20,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.database import get_pool
 from backend.middleware.auth import get_current_user
 from backend.services.finance import ask_db
 from backend.services.finance_narration import FinanceNarrator
@@ -74,3 +75,45 @@ async def finance_qa(
         facts=figures, question=question, scope="in_scope"
     )
     return {"answer": answer, "sql": sql, "figures": figures, "scope": "in_scope"}
+
+
+class RuleParseRequest(BaseModel):
+    text: str
+
+
+@router.post("/rules/parse")
+async def parse_rule(
+    body: RuleParseRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """NL → a VALIDATED categorization-rule candidate + an affected-count preview
+    (R3.1/R3.2/R3.4). Read-only: the candidate is committed separately via the
+    require_admin POST /user-rules. A candidate that fails validation → 422."""
+    from backend.services.categorization.rules import count_matching
+    from backend.services.nl_rules import (
+        RuleValidationError, propose_rule_candidate, validate_rule_candidate,
+    )
+
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+
+    provider = getattr(request.app.state, "model_provider", None)
+    if provider is None:
+        raise HTTPException(status_code=503, detail="Model provider unavailable.")
+
+    raw = await propose_rule_candidate(provider, text)
+    try:
+        async with get_pool().acquire() as conn:
+            validated = await validate_rule_candidate(conn, raw)
+            preview = await count_matching(conn, validated.to_user_rule())
+    except RuleValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return {
+        "candidate": validated.to_commit_payload(),
+        "category_name": validated.category_name,
+        "merchant_key": validated.merchant_key,
+        "preview_count": preview,
+    }
