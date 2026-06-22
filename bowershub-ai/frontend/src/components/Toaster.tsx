@@ -29,6 +29,14 @@ export default function Toaster() {
           className={`flex items-start gap-3 rounded-lg px-4 py-3 shadow-lg ${STYLES[t.type]}`}
         >
           <span className="text-sm flex-1 break-words">{t.message}</span>
+          {t.action && (
+            <button
+              onClick={() => { t.action!.onClick(); dismiss(t.id) }}
+              className="shrink-0 rounded bg-white/20 hover:bg-white/30 px-2 py-0.5 text-xs font-medium"
+            >
+              {t.action.label}
+            </button>
+          )}
           <button
             onClick={() => dismiss(t.id)}
             aria-label="Dismiss notification"

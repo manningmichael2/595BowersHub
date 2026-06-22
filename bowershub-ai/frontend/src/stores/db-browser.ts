@@ -9,6 +9,7 @@
 import { create } from 'zustand'
 import { z } from 'zod'
 import { api } from '../services/api'
+import { toast } from './toast'
 import { parseLoose } from '../lib/validate'
 import {
   SchemaInfoSchema,
@@ -233,6 +234,7 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       set({ schemas, schemasLoading: false })
     } catch {
       set({ schemasLoading: false })
+      toast.error('Could not load database schemas.')
     }
   },
 
@@ -261,6 +263,7 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       set({ columns })
     } catch {
       set({ columns: [] })
+      toast.error('Could not load columns for this table.')
     }
 
     // Load rows
@@ -290,6 +293,7 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       })
     } catch {
       set({ rows: [], totalRows: 0, filteredRows: 0, rowsLoading: false })
+      toast.error('Could not load rows for this table.')
     }
   },
 
@@ -614,6 +618,7 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       set({ views })
     } catch {
       set({ views: [] })
+      toast.error('Could not load saved views.')
     }
   },
 

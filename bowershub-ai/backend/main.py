@@ -411,6 +411,9 @@ app.include_router(finance_insights_router)
 from backend.routers.retirement import router as retirement_router
 app.include_router(retirement_router)
 
+from backend.routers.telemetry import router as telemetry_router
+app.include_router(telemetry_router)
+
 
 # --- Slash commands endpoint (used by frontend autocomplete) ---
 
@@ -649,7 +652,14 @@ if static_dir.exists():
 
     @app.get("/sw.js")
     async def service_worker():
-        return FileResponse(static_dir / "sw.js", media_type="application/javascript")
+        # no-cache so the browser revalidates the worker on every load and
+        # detects a new version promptly (otherwise an installed PWA can lag
+        # a deploy until its HTTP cache expires).
+        return FileResponse(
+            static_dir / "sw.js",
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     # Catch-all: serve index.html for client-side routing
     @app.get("/{path:path}")

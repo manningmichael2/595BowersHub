@@ -1,4 +1,5 @@
 import React from 'react'
+import { reportClientError } from '../lib/reportError'
 
 interface Props {
   children: React.ReactNode
@@ -23,6 +24,10 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('Uncaught render error:', error, info.componentStack)
+    reportClientError({
+      message: error.message || 'Render error',
+      stack: error.stack || info.componentStack || undefined,
+    })
   }
 
   render() {

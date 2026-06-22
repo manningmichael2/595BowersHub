@@ -1009,3 +1009,17 @@ Owner report: chat page default view unusable — no workspace selected, no menu
 tsc clean; 239 frontend tests green. The reverted *visual* changes were not restored (owner confirmed visual work is coming separately); this restores functional access only.
 
 - [Next] Finance visual redesign (owner-flagged, separate). No follow-up owed on these fixes.
+
+---
+
+## [2026-06-22] Hardening pass: error visibility · error-swallow sweep · PWA update flow — Claude Code
+
+After the empty-drawer debugging session (root cause was a test account with no workspace membership, but it exposed real gaps), did a 3-part hardening pass. All deployed.
+
+- **Proactive error visibility.** New `migrations/0038_client_errors.sql` (`public.bh_client_errors`) + `routers/telemetry.py`: `POST /api/telemetry/client-error` (auth) stores browser-reported errors and pings the admin via Pushover the first time a signature is seen in a 60-min window (rate-limited so an error loop can't spam); `GET /api/telemetry/client-errors` (admin). Frontend `lib/reportError.ts` (bare fetch — never triggers the 401/refresh machinery; client-side dedupe + 50/session cap) wired into a global `error`/`unhandledrejection` handler (`main.tsx`) and `ErrorBoundary`. Viewing reuses the existing DB browser. Backend test `test_telemetry_router.py` (store + RBAC), validated against a throwaway pgvector pg16 on :5455.
+- **Error-swallow sweep.** The silent `catch {}` pattern was the reason "broken" looked identical to "empty". `workspace`/`conversation` stores now carry an `error` field + toast; Sidebar shows a workspace "couldn't load — Retry" affordance and a distinct conversation-error line. `dashboard` store toasts on load failure + optimistic-save rollback. `db-browser` store toasts on schema/columns/rows/views load failure (left the explicitly non-fatal ones: field hints, layout defaults, undo/redo, caller-handled cell edits). `settings` already had an `error` field + rethrow; `branding` is an intentional cosmetic fallback — both left as-is. New `workspace.test.ts` covers the stale-id fallback (the deadlock) + the fetch-failure-sets-error path.
+- **PWA update flow.** `/sw.js` now served `Cache-Control: no-cache` (main.py) so updates are detected promptly; `main.tsx` listens for an installed-while-controlled worker and shows a "New version available — Reload" toast (toast store gained an optional `action` button, rendered in `Toaster`). Addresses the stale-installed-PWA pain directly.
+
+tsc clean; 244 frontend tests; backend telemetry + baseline + system-health green.
+
+- [Next] Optional build items discussed (not started): finance forecasting (engine seam exists), Home Assistant conversational layer, agentic finance. Visual redesign still owner-flagged/separate.
