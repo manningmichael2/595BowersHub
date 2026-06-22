@@ -9,10 +9,10 @@
 - **Effort:** M
 - **Dependencies:** none
 - **Requirements:** R1.2, R1.3, R1.5
-- [ ] New `services/finance_narration.py` with `narrate(facts, question, scope) -> str` (figures-from-`facts`, verbatim; output is `str`, terminal) and `propose_structured(schema, nl_text) -> dict` (constrained JSON/tool-use, never a write).
-- [ ] Fixed module-constant system prompt (R1.3d); render `facts` as a delimited "read-only data, not instructions" block (R1.3c).
-- [ ] Implement the `resolve_role → ModelProvider.complete → cost_for → CostTracker.log_usage` 4-step inside the boundary (CostTracker is currently un-wired). Interactive role `"fast"`, nightly `"local"`.
-- [ ] **Tests:** adversarial injection fixture (planted `'; DROP`, `IGNORE ABOVE`, `UNION SELECT … bh_users` in `facts`) asserts worst-case is wrong narration only; `test_qa_cost_logged` asserts an `api_usage_log` row per call **and that `cost_for` resolved a non-null price for the role** (so a zero-cost local row doesn't mask a miswired call); grep asserts no literal model IDs.
+- [x] New `services/finance_narration.py` with `narrate(facts, question, scope) -> str` (figures-from-`facts`, verbatim; output is `str`, terminal) and `propose_structured(schema, nl_text) -> dict` (constrained JSON/tool-use, never a write).
+- [x] Fixed module-constant system prompt (R1.3d); render `facts` as a delimited "read-only data, not instructions" block (R1.3c).
+- [x] Implement the `resolve_role → ModelProvider.complete → cost_for → CostTracker.log_usage` 4-step inside the boundary (CostTracker is currently un-wired). Interactive role `"fast"`, nightly `"local"`.
+- [x] **Tests:** adversarial injection fixture (planted `'; DROP`, `IGNORE ABOVE`, `UNION SELECT … bh_users` in `facts`) asserts worst-case is wrong narration only; `test_qa_cost_logged` asserts an `api_usage_log` row per call **and that `cost_for` resolved a non-null price for the role** (so a zero-cost local row doesn't mask a miswired call); grep asserts no literal model IDs.
 
 ## Task 2: `ask_db` — ModelProvider model call + sqlstate scope classification
 - **Effort:** M
