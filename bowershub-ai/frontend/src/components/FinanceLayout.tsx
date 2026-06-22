@@ -12,6 +12,7 @@ const TABS = [
   { to: '/finance/insights', label: 'Insights' },
   { to: '/finance/budgets', label: 'Budgets' },
   { to: '/finance/net-worth', label: 'Net Worth' },
+  { to: '/finance/retirement', label: 'Retirement' },
   { to: '/finance/recurring', label: 'Recurring' },
 ]
 

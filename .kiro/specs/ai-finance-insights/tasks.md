@@ -130,8 +130,8 @@
 - **Effort:** M
 - **Dependencies:** Task 15
 - **Requirements:** R4.4, R4.6, R4.7, R4.8, R5.2
-- [ ] `RetirementPlanner` (tokenized Tailwind, R5.2): inputs form, balance-over-time chart + live stats summary recomputing on input change (R4.7/R4.4), prominent disclaimer (R4.6), setup/empty state when no inputs (R4.8).
-- [ ] **Tests:** dragging retirement-age updates chart+stats live; disclaimer rendered on every projection surface; cold-start shows setup state; `tsc` clean.
+- [x] `RetirementPlanner` (tokenized Tailwind, R5.2): inputs form, balance-over-time chart + live stats summary recomputing on input change (R4.7/R4.4), prominent disclaimer (R4.6), setup/empty state when no inputs (R4.8).
+- [x] **Tests:** dragging retirement-age updates chart+stats live; disclaimer rendered on every projection surface; cold-start shows setup state; `tsc` clean.
 
 ## Task 17: Retirement Q&A branch (cut line — lands after Phase 1)
 - **Effort:** S
