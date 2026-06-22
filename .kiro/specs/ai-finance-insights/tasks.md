@@ -109,8 +109,8 @@
 - **Effort:** M
 - **Dependencies:** none
 - **Requirements:** R4.2
-- [ ] `services/finance_projection.py` (pure, `Decimal`): `future_value`, `real_rate`, `fire_target`, `coast_fire`, `retire_at_age` (surplus/gap + contribution/age delta), `project_series(inputs, assumptions)` with `contributions: Callable[[month], Decimal]` (forecasting seam).
-- [ ] **Tests:** reference-spreadsheet suite within rounding (zero-contribution, coast boundary, retire-at-60-vs-65); property: FV monotonic in contribution. No DB/network.
+- [x] `services/finance_projection.py` (pure, `Decimal`): `future_value`, `real_rate`, `fire_target`, `coast_fire`, `retire_at_age` (surplus/gap + contribution/age delta), `project_series(inputs, assumptions)` with `contributions: Callable[[month], Decimal]` (forecasting seam).
+- [x] **Tests:** reference-spreadsheet suite within rounding (zero-contribution, coast boundary, retire-at-60-vs-65); property: FV monotonic in contribution. No DB/network.
 
 ## Task 14: Retirement schema + assumptions seed + GRANTs
 - **Effort:** S
