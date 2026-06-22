@@ -89,8 +89,9 @@ export default function Sidebar() {
 
       {/* User menu */}
       <div className="p-3 border-t border-border">
-        {/* Navigation links */}
-        <div className="flex gap-1 mb-2">
+        {/* Navigation links — hidden on mobile, where the BottomTabBar already
+            provides these. Kept on desktop (no bottom bar there). */}
+        <div className="hidden sm:flex gap-1 mb-2">
           <Link to="/dashboard" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Dashboard" onClick={() => setSidebarOpen(false)}>📊</Link>
           <Link to="/finance" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Finance" onClick={() => setSidebarOpen(false)}>💵</Link>
           <Link to="/chat" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Chat" onClick={() => setSidebarOpen(false)}>💬</Link>
