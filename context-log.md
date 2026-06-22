@@ -975,3 +975,23 @@ Started implementing the `ai-finance-insights` spec (the AI-native finance epic)
 **Local DB note:** the Portainer `postgres` (pgvector/pgvector:pg16) exposes 5432 only on the docker network, so DB-backed tests ran against a throwaway `pgvector/pgvector:pg16` container on host port 5455 (`DB_HOST=127.0.0.1 DB_PORT=5455 DB_USER=michael DB_PASSWORD=test`).
 
 - [Next] Phase 1 — proactive nightly insight agent (Tasks 4–10): insights schema + watermark tables/GRANTs, categorizer watermark write, DB-driven detector config, 6 detectors, insight store (period/dedupe/cooldown/dismissal), nightly runner + scheduler, insights API + review surface + morning-card wiring. Then Phase 2 (NL→rules), Phase 3 (retirement, R4.5 cut line), Phase 4 (Tailwind). Commits are local on `feat/ai-finance-insights` — not pushed/PR'd yet.
+
+### Allocation-aware fix (owner-requested follow-up to Phase 0)
+
+Pointed ask_db's spending guidance at the allocation-aware `public.real_activity` (verified `finance_reader` can read it — PUBLIC keeps schema USAGE, the view is GRANTed) and dropped the unreadable `public.bh_patterns` line. Q&A spending is now allocation-aware (no split-parent double-count). Done before Phase 1.
+
+## [2026-06-22] ai-finance-insights — Phase 1 IMPLEMENTED (Tasks 4–10) — Claude Code
+
+The **proactive nightly insight agent**, end-to-end, task-by-task with per-task commits + tests (all DB-backed against a throwaway pgvector pg16 on :5455).
+
+- **Task 4** `0034`: `finance.insights` (UNIQUE (insight_type, merchant_key, period); status active/dismissed/actioned; dollar_impact ranking; figures jsonb; cooldown/dismissal cols), `finance.insight_runs` (R2.8 per-run status incl. skipped-not-ready/skipped-disabled), `finance.job_runs` (readiness watermark). text+CHECK (no PG enums); explicit GRANT SELECT → finance_reader.
+- **Task 5**: `run_categorizer` writes a `finance.job_runs 'completed'` row for today's window on success (best-effort; failure → no row). The categorizer is the only in-process nightly finance job (sync is external n8n), so it's the readiness signal.
+- **Task 6** `0035` + `services/finance_insights/config.py`: `finance.insight_config` (key→jsonb) — all detector enable flags + thresholds + `insights_enabled` kill-switch + `insights_cooldown_days` + the retirement keyword set; loader is DB-over-code-defaults (defaults are missing-key fallback only).
+- **Task 7** `detectors.py`: 6 detectors (duplicate-charge, price-creep, free-trial-conversion, unusual-spend [median/MAD], bill-higher-than-usual [IQR fence], low-balance-before-payday) over allocation-aware `public.real_activity` joined to `finance.transactions` for merchant_key; robust stats + min-history guards; each emits figures + a human reason; light `(type, config_key, fn)` registry. **Extracted** the route-bound recurring SQL → `finance_insights/recurring.py` (shared by `/recurring` + detectors).
+- **Task 8** `store.py`: upsert dedupes on (type, merchant, period); `ON CONFLICT … WHERE status='active'` refreshes active rows but never resurrects dismissed/actioned ones; dismiss/reopen/mark_actioned lifecycle; ranked by dollar impact; returns newly-raised ids.
+- **Task 9** `runner.py` + `main.py` 3:00 job (max_instances=1, coalesce): pg advisory-lock single-flight; readiness gate on the categorizer watermark (else skipped-not-ready); kill-switch (else skipped-disabled); per-detector try/except isolation; writes an `insight_runs` summary.
+- **Task 10** `routers/finance_insights.py` (GET insights / dismiss·reopen·action require_admin / runs/latest) + `BriefingService._get_insights()` + `**Finance Insights:**` section + `EXPECTED_SECTIONS` entry (M1 fix: real content when insights exist) + `InsightsPage` (tokenized Tailwind, `/finance/insights` tab) + 💡 MorningCard icon.
+
+**50 backend (Phase 0+1) + 234 frontend tests green; tsc clean.** Detectors run as the internal pool (not the finance_reader Q&A sandbox). **Note:** "non-blocking toast for new insights" is realized via the morning-card surfacing + action toasts; a real-time push for nightly-detected insights (websocket) was not built (it's a nightly job — the card is the surface).
+
+- [Next] Phase 2 — NL→rules (Tasks 11 candidate-scoring refactor incl. override-guard parity, 12 NL→rule parse/validate/preview/commit + the insight→rule action). Then Phase 3 retirement (13 pure projection, 14 schema, 15 service, 16 frontend, 17 retirement Q&A — R4.5 cut line), Phase 4 Tailwind (18). 17 commits local on `feat/ai-finance-insights`, not pushed.
