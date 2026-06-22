@@ -24,6 +24,7 @@ EXPECTED_SECTIONS: List[tuple[str, str]] = [
     ("inbox", "Inbox"),
     ("schedule", "Today's Schedule"),
     ("anything_else", "Anything Else"),
+    ("finance_insights", "Finance Insights"),
 ]
 
 # Placeholder used when a section is missing or empty (R8.7).

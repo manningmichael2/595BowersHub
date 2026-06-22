@@ -67,6 +67,13 @@ class BriefingService:
         finance = await self._get_finance_summary()
         data_sections.append(f"**💰 Finance**\n\n{finance}")
 
+        # Proactive finance insights (R2.5). Colon-label heading so the morning-card
+        # parser (briefing_summary.EXPECTED_SECTIONS) extracts it; omitted entirely
+        # when there are none, so the card shows a muted placeholder rather than noise.
+        insights = await self._get_insights()
+        if insights:
+            data_sections.append(f"**Finance Insights:**\n\n{insights}")
+
         recent_txns = await self._get_recent_notable_transactions()
         data_sections.append(f"**🧾 Recent Transactions**\n\n{recent_txns or '_No notable transactions in the last 7 days._'}")
 
@@ -83,6 +90,27 @@ class BriefingService:
         date_str = datetime.now().strftime("%A, %B %d, %Y")
         header = f"**Good morning — {date_str}**\n\n---\n"
         return header + "\n\n---\n\n".join(data_sections)
+
+    async def _get_insights(self, limit: int = 5) -> Optional[str]:
+        """Top active finance insights for the morning card (R2.5), ranked by
+        dollar impact. Returns None when there are none (so the section is omitted
+        rather than rendered empty) — the M1 fix: the section has real content
+        whenever insights exist."""
+        try:
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT reason, dollar_impact FROM finance.insights "
+                    "WHERE status = 'active' ORDER BY dollar_impact DESC, created_at DESC "
+                    "LIMIT $1",
+                    limit,
+                )
+            if not rows:
+                return None
+            return "\n".join(f"- {r['reason']}" for r in rows if r["reason"])
+        except Exception as e:
+            logger.warning(f"Briefing insights gather failed: {e}")
+            return None
 
     async def generate_short(self, user_id: int) -> str:
         """Generate a short briefing — just weather + important emails."""

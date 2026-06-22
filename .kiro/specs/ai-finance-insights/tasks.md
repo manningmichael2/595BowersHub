@@ -79,10 +79,10 @@
 - **Effort:** M
 - **Dependencies:** Task 8, Task 9
 - **Requirements:** R2.5, R2.6, R5.2
-- [ ] Endpoints: `GET /api/finance/insights?status=`, `POST …/{id}/dismiss|reopen|action` (`require_admin`), `GET …/runs/latest` (admin).
-- [ ] `_get_insights()` gatherer in `briefing.py` + `("finance_insights","Finance Insights")` in `EXPECTED_SECTIONS` + icon in `MorningCard.tsx SECTION_ICONS`; non-blocking toast for new insights.
-- [ ] `InsightReview` surface (tokenized Tailwind, R5.2): list with explanation+figures; per-insight actions that need no later code — dismiss, reopen, mark-actioned. (The "always categorize {merchant} as {category}" action is added in Task 12, which builds the rule-create path — no forward dependency here.)
-- [ ] **Tests:** dismiss/reopen via API; morning-card section renders content (not the `—` placeholder) when insights exist; `tsc` clean.
+- [x] Endpoints: `GET /api/finance/insights?status=`, `POST …/{id}/dismiss|reopen|action` (`require_admin`), `GET …/runs/latest` (admin).
+- [x] `_get_insights()` gatherer in `briefing.py` + `("finance_insights","Finance Insights")` in `EXPECTED_SECTIONS` + icon in `MorningCard.tsx SECTION_ICONS`; non-blocking toast for new insights.
+- [x] `InsightReview` surface (tokenized Tailwind, R5.2): list with explanation+figures; per-insight actions that need no later code — dismiss, reopen, mark-actioned. (The "always categorize {merchant} as {category}" action is added in Task 12, which builds the rule-create path — no forward dependency here.)
+- [x] **Tests:** dismiss/reopen via API; morning-card section renders content (not the `—` placeholder) when insights exist; `tsc` clean.
 
 ## Phase 2 — Natural-language → rules (Feature 3)
 

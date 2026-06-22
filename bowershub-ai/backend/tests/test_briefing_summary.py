@@ -26,13 +26,14 @@ from backend.services.briefing_summary import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-CANONICAL_KEYS = ["weather", "yesterday_spending", "inbox", "schedule", "anything_else"]
+CANONICAL_KEYS = ["weather", "yesterday_spending", "inbox", "schedule", "anything_else", "finance_insights"]
 CANONICAL_LABELS = [
     "Weather",
     "Yesterday's Spending",
     "Inbox",
     "Today's Schedule",
     "Anything Else",
+    "Finance Insights",
 ]
 
 
@@ -76,7 +77,8 @@ def test_full_briefing_with_all_sections():
         "**Yesterday's Spending:**\n$84.12 across 5 transactions\n\n"
         "**Inbox:**\n7 files (3 images)\n\n"
         "**Today's Schedule:**\n- 10am standup\n- 2pm dentist\n\n"
-        "**Anything Else:**\nDon't forget the package on the porch.\n"
+        "**Anything Else:**\nDon't forget the package on the porch.\n\n"
+        "**Finance Insights:**\n- Netflix rose to $15.00 from $10.00\n"
     )
     by_key = _by_key(parse_sections(markdown))
 
@@ -85,6 +87,7 @@ def test_full_briefing_with_all_sections():
     assert by_key["inbox"]["content"] == "7 files (3 images)"
     assert by_key["schedule"]["content"] == "- 10am standup\n- 2pm dentist"
     assert by_key["anything_else"]["content"] == "Don't forget the package on the porch."
+    assert by_key["finance_insights"]["content"] == "- Netflix rose to $15.00 from $10.00"
 
     # No placeholders when every section is present and non-empty.
     for section in by_key.values():

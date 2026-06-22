@@ -73,6 +73,7 @@ const SECTION_ICONS: Record<string, string> = {
   inbox: '📥',
   schedule: '📅',
   anything_else: '✨',
+  finance_insights: '💡',
 }
 
 // Mirrors backend MISSING_PLACEHOLDER. We compare with this literal so the
