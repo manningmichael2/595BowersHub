@@ -58,6 +58,18 @@ async def _mutate(insight_id: int, fn) -> dict:
     return {"ok": True}
 
 
+@router.post("/insights/dismiss-all")
+async def dismiss_all_insights(user: dict = Depends(require_admin)) -> dict:
+    """Dismiss every active insight at once — clears the queue in one call."""
+    try:
+        async with get_pool().acquire() as conn:
+            count = await store.dismiss_all_active(conn)
+    except (asyncpg.PostgresError, OSError, RuntimeError) as e:
+        logger.warning("finance_insights: DB unavailable: %s", e)
+        raise HTTPException(status_code=503, detail="Finance database unavailable.")
+    return {"dismissed": count}
+
+
 @router.post("/insights/{insight_id}/dismiss")
 async def dismiss_insight(insight_id: int, user: dict = Depends(require_admin)) -> dict:
     return await _mutate(insight_id, store.dismiss)

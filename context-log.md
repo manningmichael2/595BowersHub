@@ -1023,3 +1023,17 @@ After the empty-drawer debugging session (root cause was a test account with no 
 tsc clean; 244 frontend tests; backend telemetry + baseline + system-health green.
 
 - [Next] Optional build items discussed (not started): finance forecasting (engine seam exists), Home Assistant conversational layer, agentic finance. Visual redesign still owner-flagged/separate.
+
+---
+
+## [2026-06-24] Insights: "Dismiss all" bulk-clear button — Claude Code
+
+Owner ask: clear the insights queue in one click instead of dismissing row by row.
+
+- **Backend:** `store.dismiss_all_active(conn)` — single `UPDATE finance.insights SET status='dismissed' WHERE status='active'`, returns the row count. New route `POST /api/finance/insights/dismiss-all` (`require_admin`) → `{"dismissed": n}`. Placed before the `{insight_id}` routes; no path collision (extra segment).
+- **Frontend:** `financeInsights.dismissAll()`; **Dismiss all** button on `InsightsPage`, right-aligned by the status tabs, shown only on the **active** tab when items exist. `window.confirm` gate, then toasts the count + reloads.
+- **Design calls:** bulk = *dismiss* (not mark-handled — handled would falsely imply per-row action); reversible via the Dismissed tab's Reopen; active-only + idempotent (second click dismisses 0).
+
+tsc clean; new `test_dismiss_all_clears_only_active` (only-active + idempotent) + insights API suite 3 passed (throwaway pgvector pg16 on :5455); `InsightsPage.test.tsx` 3 passed.
+
+- [Next] Unchanged optional build items: finance forecasting (engine seam exists), Home Assistant conversational layer, agentic finance. Visual redesign still owner-flagged/separate.

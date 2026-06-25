@@ -124,6 +124,17 @@ export default function InsightsPage() {
     }
   }
 
+  async function dismissAll() {
+    if (!window.confirm(`Dismiss all ${items.length} active insights?`)) return
+    try {
+      const n = await financeInsights.dismissAll()
+      toast.success(`Dismissed ${n} insight${n === 1 ? '' : 's'}.`)
+      await load()
+    } catch {
+      toast.error('Could not dismiss insights.')
+    }
+  }
+
   async function openRulePicker(insightId: number) {
     if (categories.length === 0) {
       try {
@@ -163,7 +174,7 @@ export default function InsightsPage() {
 
       <NlRuleComposer onCreated={load} />
 
-      <div className="flex gap-1 mb-4">
+      <div className="flex items-center gap-1 mb-4">
         {STATUS_TABS.map((s) => (
           <button
             key={s}
@@ -176,6 +187,16 @@ export default function InsightsPage() {
             {s}
           </button>
         ))}
+        {status === 'active' && items.length > 0 && (
+          <button
+            type="button"
+            onClick={dismissAll}
+            className="ml-auto rounded-md border border-border px-3 py-1 text-xs font-medium text-text-muted hover:text-text hover:border-primary"
+            data-testid="dismiss-all"
+          >
+            Dismiss all
+          </button>
+        )}
       </div>
 
       {loading ? (

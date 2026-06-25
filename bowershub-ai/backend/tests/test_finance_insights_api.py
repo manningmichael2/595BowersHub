@@ -7,6 +7,7 @@ import pytest
 from backend.database import close_pool, get_pool
 from backend.routers.finance_insights import (
     list_insights, dismiss_insight, reopen_insight, action_insight,
+    dismiss_all_insights,
 )
 from backend.services.briefing import BriefingService
 from backend.services.briefing_summary import parse_sections
@@ -46,6 +47,28 @@ async def test_list_dismiss_reopen_via_api(fresh_db, db_settings):
 
         await action_insight(iid, user={"id": 1})
         assert len((await list_insights(status="actioned", user={"id": 1}))["insights"]) == 1
+    finally:
+        await close_pool()
+
+
+@pytest.mark.asyncio
+async def test_dismiss_all_clears_only_active(fresh_db, db_settings):
+    await apply_migrations(fresh_db, db_settings)
+    try:
+        a = await _seed_insight(merchant="acme")
+        b = await _seed_insight(merchant="globex")
+        # Pre-dismiss one so we can prove dismiss-all only touches active rows.
+        await dismiss_insight(a, user={"id": 1})
+
+        result = await dismiss_all_insights(user={"id": 1})
+        assert result == {"dismissed": 1}  # only globex was still active
+
+        assert await list_insights(status="active", user={"id": 1}) == {"insights": []}
+        assert len((await list_insights(status="dismissed", user={"id": 1}))["insights"]) == 2
+
+        # Idempotent: nothing active left to dismiss.
+        assert await dismiss_all_insights(user={"id": 1}) == {"dismissed": 0}
+        _ = b
     finally:
         await close_pool()
 

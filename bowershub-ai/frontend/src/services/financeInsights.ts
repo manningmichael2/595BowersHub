@@ -27,6 +27,10 @@ export const financeInsights = {
   async dismiss(id: number): Promise<void> {
     await api.post(`/api/finance/insights/${id}/dismiss`)
   },
+  async dismissAll(): Promise<number> {
+    const { data } = await api.post(`/api/finance/insights/dismiss-all`)
+    return (data as { dismissed: number }).dismissed
+  },
   async reopen(id: number): Promise<void> {
     await api.post(`/api/finance/insights/${id}/reopen`)
   },

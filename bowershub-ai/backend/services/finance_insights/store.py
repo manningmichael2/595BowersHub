@@ -72,6 +72,17 @@ async def dismiss(conn, insight_id: int) -> bool:
     return result.endswith("1")
 
 
+async def dismiss_all_active(conn) -> int:
+    """Dismiss every currently-active insight in one statement; return the count
+    dismissed (lets the user clear the queue without acting on each one)."""
+    result = await conn.execute(
+        "UPDATE finance.insights SET status = 'dismissed', dismissed_at = now(), "
+        "updated_at = now() WHERE status = 'active'"
+    )
+    # asyncpg returns e.g. "UPDATE 7" — the trailing token is the row count.
+    return int(result.rsplit(" ", 1)[-1]) if result else 0
+
+
 async def reopen(conn, insight_id: int) -> bool:
     """Un-dismiss: make a previously dismissed/actioned insight active again."""
     result = await conn.execute(
