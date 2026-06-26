@@ -82,6 +82,14 @@ async def lifespan(app: FastAPI):
         pool, build_default_sources(config), invalidate=resolver.reload,
     )
 
+    # Warm the authz capability cache (after migrations: bh_capabilities exists),
+    # then run the boot self-check — fail startup if any require_capability(...)
+    # gate references a capability with no DB row (routers are already imported,
+    # so every gate has registered). Fail-closed at boot, not at first request.
+    from backend.services import authz
+    await authz.init_authz(pool)
+    await authz.verify_registered_capabilities()
+
     # Seed admin user on first run
     from backend.services.auth import AuthService
     auth_service = AuthService(pool, config)

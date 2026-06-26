@@ -11,14 +11,12 @@ from backend.http_client import get_http_client
 
 from backend.config import Config
 from backend.database import get_pool
+from backend.services import authz
+# Canonical role ladder lives in authz (the single definition — R1.1). Re-exported
+# here for back-compat with importers/tests; do NOT redefine it locally.
+from backend.services.authz import ROLE_RANK  # noqa: F401
 
 logger = logging.getLogger(__name__)
-
-# Role hierarchy for the DB-driven per-skill `min_role` gate (bh_skills.min_role).
-# Higher rank = more privileged. A user may run a skill iff their role rank >=
-# the skill's min_role rank; NULL min_role means no role restriction. Adding a
-# gated skill is now a DB row, not a code constant (was ADMIN_ONLY_SKILLS).
-ROLE_RANK = {"member": 0, "admin": 100}
 
 
 class SkillPermissionError(Exception):
@@ -94,7 +92,11 @@ class SkillExecutor:
             role = await conn.fetchval(
                 "SELECT role FROM public.bh_users WHERE id = $1", user_id
             )
-        return ROLE_RANK.get(role or "", 0) >= ROLE_RANK.get(min_role, 999)
+        # Canonical ladder (authz): the user side uses authz.rank (unknown/None
+        # role -> -1, below viewer). The required side fails closed — a typo'd
+        # min_role maps to DENY (above admin) so nobody satisfies it, matching the
+        # prior 999 sentinel. Fixes the old map's viewer==member + 0/999 mismatch.
+        return authz.rank(role) >= authz.ROLE_RANK.get(min_role, authz.DENY)
 
     async def check_workspace_permitted(self, skill_id: int, workspace_id: int) -> bool:
         """Check if a skill is assigned to a workspace."""

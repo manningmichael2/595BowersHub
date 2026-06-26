@@ -1,0 +1,159 @@
+"""
+authz — the single authorization module.
+
+The one place the role ladder, capability resolution, and (later, Task 9) per-user
+feature access compose. Holds the canonical role rank; resolves a
+(user, capability) -> bool; computes the frontend effective-access payload.
+
+Import direction (design M2): this module imports only `database.get_pool` +
+asyncpg — never `middleware.auth` or `skill_executor` — so `skill_executor ->
+authz` stays acyclic.
+
+Fail-closed everywhere (R1.1 / R1.3, symmetric):
+  - an unknown/None role ranks below viewer (-1), so it satisfies nothing;
+  - an unknown capability resolves to DENY (a rank above admin), so no role
+    satisfies it.
+
+Cache shape mirrors `model_catalog.Resolver` (warm in lifespan, `reload()` after
+an admin edit). NO-HARDCODING: a capability's min_role is a `bh_capabilities`
+row; retuning a gate is a DB edit + `reload()`, not a code change.
+"""
+
+import logging
+from typing import Optional
+
+from backend.database import get_pool  # noqa: F401  (kept for parity; init_authz takes the pool)
+
+logger = logging.getLogger(__name__)
+
+# Canonical role ladder — THE single definition (R1.1). `skill_executor` imports
+# this; do not redefine ranks anywhere else. Higher = more privileged.
+ROLE_RANK: dict[str, int] = {"viewer": 10, "member": 20, "admin": 100}
+
+# Sentinel rank above admin: an unknown capability resolves here so no real role
+# can satisfy it (fail-closed). Distinct from every value in ROLE_RANK.
+DENY = 10_000
+
+# Code fallback for capability min-roles, used only when a row is missing from
+# bh_capabilities (e.g. read before warm / pre-migration). Asserted == the 0039
+# seed by a test. An unseeded *and* unknown capability still resolves to DENY.
+_DEFAULT_CAPS: dict[str, str] = {
+    "finance.read": "viewer",
+    "finance.write": "member",
+    "finance.insight.action": "member",
+    "finance.delete": "admin",
+    "users.manage": "admin",
+    "settings.write": "admin",
+    "db.query": "admin",
+    "db.browser": "admin",
+}
+
+# Capabilities referenced by a live `require_capability(...)` gate. The dependency
+# factory registers its literal here at import time (FastAPI evaluates the factory
+# when routers are imported, before lifespan), so the boot self-check can assert
+# every gated capability has a bh_capabilities row.
+_REGISTERED_CAPABILITIES: set[str] = set()
+
+
+def register_capability(cap: str) -> None:
+    """Record a capability referenced by a require_capability gate (import-time)."""
+    _REGISTERED_CAPABILITIES.add(cap)
+
+
+def rank(role: Optional[str]) -> int:
+    """Rank of a role; unknown/None -> -1 (below viewer, fail-closed)."""
+    return ROLE_RANK.get(role or "", -1)
+
+
+class CapabilityCache:
+    """In-process {capability: min_role} cache from bh_capabilities, with reload().
+
+    Mirrors model_catalog.Resolver's cache+reload shape so capability checks take
+    no per-request DB round-trip. Rebuilt by reload() on an admin retune (R1.3)."""
+
+    def __init__(self, pool):
+        self._pool = pool
+        self._min_role: dict[str, str] = {}
+
+    async def reload(self) -> None:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT capability, min_role FROM public.bh_capabilities"
+            )
+        self._min_role = {r["capability"]: r["min_role"] for r in rows}
+
+    def min_role_rank(self, cap: str) -> int:
+        """Rank a role must meet for `cap`: configured row, else code fallback,
+        else DENY (unknown capability denies everyone — fail-closed)."""
+        role = self._min_role.get(cap) or _DEFAULT_CAPS.get(cap)
+        if role is None:
+            return DENY
+        return ROLE_RANK.get(role, DENY)
+
+    def known_capabilities(self) -> set[str]:
+        """Capabilities that have an actual bh_capabilities row (not just a fallback)."""
+        return set(self._min_role)
+
+    def all_capabilities(self) -> dict[str, str]:
+        """Configured rows merged over the code fallback (the full known set)."""
+        merged = dict(_DEFAULT_CAPS)
+        merged.update(self._min_role)
+        return merged
+
+
+# --- module singleton (mirrors model_catalog.init_resolver) ------------------
+_cache: Optional[CapabilityCache] = None
+
+
+async def init_authz(pool) -> CapabilityCache:
+    """Warm the capability cache in lifespan (after migrations)."""
+    global _cache
+    _cache = CapabilityCache(pool)
+    await _cache.reload()
+    logger.info(f"authz capabilities warmed: {len(_cache._min_role)} rows")
+    return _cache
+
+
+def get_cache() -> CapabilityCache:
+    if _cache is None:
+        raise RuntimeError("authz not initialized — call init_authz(pool) in lifespan")
+    return _cache
+
+
+async def reload() -> None:
+    """Rebuild the capability cache after an admin edit (R1.3)."""
+    if _cache is not None:
+        await _cache.reload()
+
+
+# --- the single resolver (R5.3 precedence lives only here) -------------------
+def resolve(user: dict, capability: str) -> bool:
+    """True if `user` may exercise `capability`.
+
+    Task 1: rank check only. Task 9 extends this — and ONLY this function — with
+    the per-user feature override and the admin-only floor (R5.3 precedence)."""
+    return rank(user.get("role")) >= get_cache().min_role_rank(capability)
+
+
+def effective_access(user: dict) -> dict:
+    """Frontend effective-access payload for GET /me/features (R5.5).
+
+    Stub: role + the capabilities this user resolves. The feature list is added
+    in Task 9/10 (needs the feature registry + per-user overrides)."""
+    role = user.get("role")
+    caps = sorted(c for c in get_cache().all_capabilities() if resolve(user, c))
+    return {"role": role, "capabilities": caps, "features": []}
+
+
+async def verify_registered_capabilities() -> None:
+    """Boot self-check: fail startup if any live require_capability(...) gate
+    references a capability with no bh_capabilities row (risk-first safety rail).
+
+    Routers are imported before lifespan, so every gate has registered by now."""
+    known = get_cache().known_capabilities()
+    missing = sorted(_REGISTERED_CAPABILITIES - known)
+    if missing:
+        raise SystemExit(
+            "authz boot self-check failed — require_capability gates reference "
+            f"capabilities with no bh_capabilities row: {missing}"
+        )
