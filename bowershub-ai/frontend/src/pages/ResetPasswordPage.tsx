@@ -40,10 +40,10 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center px-4">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="text-red-400 mb-4">Invalid reset link — no token in URL.</p>
-          <a href="/forgot-password" className="text-indigo-400 hover:text-indigo-300 text-sm">
+          <p className="text-danger mb-4">Invalid reset link — no token in URL.</p>
+          <a href="/forgot-password" className="text-primary hover:brightness-125 text-sm">
             Request a new reset link
           </a>
         </div>
@@ -52,36 +52,36 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-white mb-2">Set New Password</h1>
-          <p className="text-gray-400 text-sm">Choose a new password for your account.</p>
+          <h1 className="text-2xl font-bold text-text mb-2">Set New Password</h1>
+          <p className="text-text-muted text-sm">Choose a new password for your account.</p>
         </div>
 
         {done ? (
-          <div className="bg-green-900/30 border border-green-800 rounded-lg px-4 py-4 text-sm text-green-300 text-center">
+          <div className="bg-success/10 border border-success/40 rounded-lg px-4 py-4 text-sm text-success text-center">
             <p className="font-medium">Password reset ✓</p>
-            <p className="text-green-400 mt-1">You can now log in with your new password.</p>
-            <a href="/login" className="inline-block mt-4 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm">
+            <p className="mt-1 opacity-90">You can now log in with your new password.</p>
+            <a href="/login" className="inline-block mt-4 bg-primary hover:brightness-110 text-on-primary px-4 py-2 rounded-lg text-sm transition-[filter]">
               Go to Login
             </a>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-2 text-sm text-red-300">
+              <div className="bg-danger/10 border border-danger/40 rounded-lg px-4 py-2 text-sm text-danger">
                 {error}
               </div>
             )}
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">New Password</label>
+              <label className="block text-sm text-text-muted mb-1">New Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#0f0f1a] border border-gray-700 rounded-lg px-4 py-2.5 text-gray-200 text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full bg-surface border border-border rounded-lg px-4 py-2.5 text-text text-sm focus:outline-none focus:border-primary transition-colors"
                 placeholder="At least 8 characters"
                 required
                 minLength={8}
@@ -90,12 +90,12 @@ export default function ResetPasswordPage() {
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Confirm Password</label>
+              <label className="block text-sm text-text-muted mb-1">Confirm Password</label>
               <input
                 type="password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                className="w-full bg-[#0f0f1a] border border-gray-700 rounded-lg px-4 py-2.5 text-gray-200 text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full bg-surface border border-border rounded-lg px-4 py-2.5 text-text text-sm focus:outline-none focus:border-primary transition-colors"
                 placeholder="Type it again"
                 required
                 minLength={8}
@@ -105,7 +105,7 @@ export default function ResetPasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm"
+              className="w-full bg-primary hover:brightness-110 disabled:opacity-50 text-on-primary font-medium py-2.5 rounded-lg transition-[filter] text-sm"
             >
               {loading ? 'Resetting...' : 'Reset Password'}
             </button>

@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import ErrorBoundary from './components/ErrorBoundary'
 import Toaster from './components/Toaster'
+import ConfirmDialog from './components/ConfirmDialog'
 import './index.css'
 import { toast } from './stores/toast'
 import { installGlobalErrorReporting } from './lib/reportError'
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <App />
         <Toaster />
+        <ConfirmDialog />
       </BrowserRouter>
     </ErrorBoundary>
   </React.StrictMode>,

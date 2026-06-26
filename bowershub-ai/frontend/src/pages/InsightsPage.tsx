@@ -8,11 +8,25 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from '../stores/toast'
+import { confirm } from '../stores/confirm'
 import { financeInsights, type Insight, type InsightStatus } from '../services/financeInsights'
 import { financeRules, type ParsedRule } from '../services/financeRules'
 import { financeReview, type CategoryOption } from '../services/financeReview'
 
 const STATUS_TABS: InsightStatus[] = ['active', 'dismissed', 'actioned']
+
+/** Render one figure value readably instead of dumping raw JSON. */
+function formatFigure(v: unknown): string {
+  if (v == null) return '—'
+  if (typeof v === 'number') {
+    return Number.isInteger(v)
+      ? v.toLocaleString()
+      : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
+  if (typeof v === 'string') return v
+  return JSON.stringify(v)
+}
 
 /** Natural-language rule composer: type a rule in English, preview how many
  *  transactions it affects (validated server-side), then commit it. */
@@ -125,7 +139,12 @@ export default function InsightsPage() {
   }
 
   async function dismissAll() {
-    if (!window.confirm(`Dismiss all ${items.length} active insights?`)) return
+    const ok = await confirm({
+      title: 'Dismiss all insights',
+      message: `Dismiss all ${items.length} active insight${items.length === 1 ? '' : 's'}?`,
+      confirmLabel: 'Dismiss all',
+    })
+    if (!ok) return
     try {
       const n = await financeInsights.dismissAll()
       toast.success(`Dismissed ${n} insight${n === 1 ? '' : 's'}.`)
@@ -226,9 +245,14 @@ export default function InsightsPage() {
               </div>
 
               {Object.keys(it.figures || {}).length > 0 && (
-                <pre className="mt-2 overflow-x-auto rounded bg-surface-dark px-2 py-1 text-xs text-text-muted">
-                  {JSON.stringify(it.figures, null, 0)}
-                </pre>
+                <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {Object.entries(it.figures).map(([k, v]) => (
+                    <div key={k} className="flex items-baseline gap-1.5 text-xs">
+                      <dt className="text-text-muted capitalize">{k.replace(/_/g, ' ')}</dt>
+                      <dd className="font-medium text-text">{formatFigure(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
               )}
 
               <div className="mt-2 flex gap-2">

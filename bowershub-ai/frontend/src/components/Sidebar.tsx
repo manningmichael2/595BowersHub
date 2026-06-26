@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
+import {
+  LayoutDashboard, MessageSquare, Wallet, Database, Workflow,
+  Settings, Wrench, Plus, MoreHorizontal, Pencil, Trash2,
+} from 'lucide-react'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useConversationStore, Conversation } from '../stores/conversation'
 import { useAuthStore } from '../stores/auth'
 import { useUIStore } from '../stores/ui'
+import { confirm } from '../stores/confirm'
 import WorkspaceSettingsPanel from './WorkspaceSettingsPanel'
 
 export default function Sidebar() {
@@ -49,11 +54,11 @@ export default function Sidebar() {
           {activeWorkspace && (
             <button
               onClick={() => setWsSettingsOpen(true)}
-              className="px-2 rounded-lg border border-border text-text-muted hover:text-text hover:bg-background text-sm"
+              className="px-2 flex items-center justify-center rounded-lg border border-border text-text-muted hover:text-text hover:bg-surface transition-colors"
               title="Workspace system prompt"
               aria-label="Workspace settings"
             >
-              ⚙️
+              <Settings size={16} aria-hidden />
             </button>
           )}
         </div>
@@ -76,9 +81,9 @@ export default function Sidebar() {
       <div className="p-3">
         <button
           onClick={handleNewConversation}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-primary hover:brightness-110 text-on-primary text-sm font-medium transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary hover:brightness-110 text-on-primary text-sm font-medium transition-[filter]"
         >
-          <span>+</span>
+          <Plus size={16} aria-hidden />
           <span>New conversation</span>
         </button>
       </div>
@@ -99,7 +104,7 @@ export default function Sidebar() {
               {convError}
             </p>
           ) : (
-            <p className="text-center text-gray-500 text-sm py-8">
+            <p className="text-center text-text-muted text-sm py-8">
               No conversations yet
             </p>
           )
@@ -111,11 +116,11 @@ export default function Sidebar() {
         {/* Navigation links — hidden on mobile, where the BottomTabBar already
             provides these. Kept on desktop (no bottom bar there). */}
         <div className="hidden sm:flex gap-1 mb-2">
-          <Link to="/dashboard" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Dashboard" onClick={() => setSidebarOpen(false)}>📊</Link>
-          <Link to="/finance" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Finance" onClick={() => setSidebarOpen(false)}>💵</Link>
-          <Link to="/chat" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="Chat" onClick={() => setSidebarOpen(false)}>💬</Link>
-          <a href="http://100.106.180.101:5002" target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="DB Admin">🗄️</a>
-          <a href="http://100.106.180.101:5678" target="_blank" rel="noopener noreferrer" className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50" title="n8n">⚡</a>
+          <Link to="/dashboard" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Dashboard" aria-label="Dashboard" onClick={() => setSidebarOpen(false)}><LayoutDashboard size={16} aria-hidden /></Link>
+          <Link to="/finance" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Finance" aria-label="Finance" onClick={() => setSidebarOpen(false)}><Wallet size={16} aria-hidden /></Link>
+          <Link to="/chat" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Chat" aria-label="Chat" onClick={() => setSidebarOpen(false)}><MessageSquare size={16} aria-hidden /></Link>
+          <Link to="/db" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Database" aria-label="Database" onClick={() => setSidebarOpen(false)}><Database size={16} aria-hidden /></Link>
+          <Link to="/tools/n8n" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="n8n" aria-label="n8n" onClick={() => setSidebarOpen(false)}><Workflow size={16} aria-hidden /></Link>
         </div>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -126,32 +131,27 @@ export default function Sidebar() {
           </div>
           <button
             onClick={logout}
-            className="text-xs text-gray-500 hover:text-gray-300 shrink-0"
+            className="text-xs text-text-muted hover:text-text shrink-0 transition-colors"
           >
             Logout
           </button>
         </div>
         <div className="flex gap-2">
-          <a
-            href="/settings"
-            className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50"
+          <Link
+            to="/settings"
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors"
+            onClick={() => setSidebarOpen(false)}
           >
-            ⚙ Settings
-          </a>
-          <button
-            onClick={() => window.location.reload()}
-            className="flex-1 text-center text-xs text-text-muted hover:text-text py-1.5 rounded hover:bg-background/50"
-            title="Reload to pick up updates"
-          >
-            🔄 Refresh
-          </button>
+            <Settings size={14} aria-hidden /> Settings
+          </Link>
           {user?.role === 'admin' && (
-            <a
-              href="/admin"
-              className="flex-1 text-center text-xs text-primary hover:brightness-125 py-1.5 rounded hover:bg-gray-800/50"
+            <Link
+              to="/admin"
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs text-primary hover:brightness-125 py-2 rounded hover:bg-background/50 transition-colors"
+              onClick={() => setSidebarOpen(false)}
             >
-              🔧 Admin
-            </a>
+              <Wrench size={14} aria-hidden /> Admin
+            </Link>
           )}
         </div>
       </div>
@@ -226,10 +226,14 @@ function ConversationItem({ conv, isActive, onSelect }: ConversationItemProps) {
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (confirm(`Delete conversation "${conv.title || 'New conversation'}"?`)) {
-      await archiveConversation(conv.id)
-    }
     setShowMenu(false)
+    const ok = await confirm({
+      title: 'Delete conversation',
+      message: `Delete "${conv.title || 'New conversation'}"? This can't be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    })
+    if (ok) await archiveConversation(conv.id)
   }
 
   return (
@@ -255,7 +259,7 @@ function ConversationItem({ conv, isActive, onSelect }: ConversationItemProps) {
                 if (e.key === 'Escape') { setEditing(false); setTitle(conv.title || '') }
               }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full bg-gray-900 border border-primary rounded px-1.5 py-0.5 text-sm text-gray-200 focus:outline-none"
+              className="w-full bg-background border border-primary rounded px-1.5 py-0.5 text-sm text-text focus:outline-none"
             />
           ) : (
             <span className="truncate block font-medium">
@@ -263,29 +267,25 @@ function ConversationItem({ conv, isActive, onSelect }: ConversationItemProps) {
             </span>
           )}
           {conv.parent_id && !editing && (
-            <span className="text-xs text-gray-500">↳ branch</span>
+            <span className="text-xs text-text-muted">↳ branch</span>
           )}
         </div>
 
         {!editing && (
           <>
             {/* Time: always visible on mobile, hidden on desktop hover */}
-            <span className="text-xs text-gray-500 shrink-0 sm:group-hover:hidden">
+            <span className="text-xs text-text-muted shrink-0 sm:group-hover:hidden">
               {formatTime(conv.updated_at)}
             </span>
             {/* Action button: always visible on mobile, hover-only on desktop */}
             <div className="flex sm:hidden sm:group-hover:flex items-center gap-1 shrink-0">
               <button
                 onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
-                className="p-1 rounded hover:bg-gray-700 text-gray-400"
+                className="p-1 rounded hover:bg-surface text-text-muted hover:text-text transition-colors"
                 aria-label="Conversation actions"
                 title="More"
               >
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                  <circle cx="5" cy="12" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="19" cy="12" r="2" />
-                </svg>
+                <MoreHorizontal size={16} aria-hidden />
               </button>
             </div>
           </>
@@ -295,20 +295,20 @@ function ConversationItem({ conv, isActive, onSelect }: ConversationItemProps) {
       {showMenu && (
         <div
           ref={menuRef}
-          className="absolute top-full right-2 mt-1 bg-surface border border-gray-700 rounded-lg shadow-xl z-30 overflow-hidden"
+          className="absolute top-full right-2 mt-1 bg-surface border border-border rounded-lg shadow-xl z-30 overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={(e) => { e.stopPropagation(); setEditing(true); setShowMenu(false) }}
-            className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 whitespace-nowrap"
+            className="flex items-center gap-2 w-full text-left px-4 py-2 text-sm text-text hover:bg-background whitespace-nowrap transition-colors"
           >
-            ✏️ Rename
+            <Pencil size={14} aria-hidden /> Rename
           </button>
           <button
             onClick={handleDelete}
-            className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 whitespace-nowrap"
+            className="flex items-center gap-2 w-full text-left px-4 py-2 text-sm text-danger hover:bg-background whitespace-nowrap transition-colors"
           >
-            🗑️ Delete
+            <Trash2 size={14} aria-hidden /> Delete
           </button>
         </div>
       )}

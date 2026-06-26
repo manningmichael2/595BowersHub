@@ -1,20 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useFeatures } from '../hooks/useFeatures'
 import { isFeatureVisible } from '../lib/featureNav'
-
-// `feature` ties an item to a registry feature key — shown iff server-permitted
-// AND not self-hidden. Items without `feature` always show.
-const NAV_ITEMS: { path: string; label: string; icon: string; feature?: string }[] = [
-  { path: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { path: '/chat', label: 'Chat', icon: '💬' },
-  { path: '/finance', label: 'Finance', icon: '💵', feature: 'finance' },
-  { path: '/db', label: 'Database', icon: '🗄️', feature: 'database' },
-  { path: '/settings', label: 'Settings', icon: '⚙️' },
-]
-
-const EXTERNAL_ITEMS = [
-  { href: 'http://100.106.180.101:5678', label: 'n8n', icon: '⚡' },
-]
+import { NAV_ITEMS, TOOL_ITEMS } from '../lib/navItems'
 
 export default function TopNav() {
   const location = useLocation()
@@ -32,6 +19,7 @@ export default function TopNav() {
       {/* Internal nav */}
       {items.map(item => {
         const isActive = location.pathname.startsWith(item.path) || (item.path === '/dashboard' && location.pathname === '/')
+        const Icon = item.Icon
         return (
           <Link
             key={item.path}
@@ -42,7 +30,7 @@ export default function TopNav() {
               color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
             }}
           >
-            <span>{item.icon}</span>
+            <Icon size={15} strokeWidth={2} aria-hidden />
             <span>{item.label}</span>
           </Link>
         )
@@ -51,20 +39,21 @@ export default function TopNav() {
       {/* Separator */}
       <div className="w-px h-5 mx-2" style={{ backgroundColor: 'var(--color-border)' }} />
 
-      {/* External links */}
-      {EXTERNAL_ITEMS.map(item => (
-        <a
-          key={item.href}
-          href={item.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          <span>{item.icon}</span>
-          <span>{item.label}</span>
-        </a>
-      ))}
+      {/* Embedded tools (in-app iframe shell — no external host:port) */}
+      {TOOL_ITEMS.map(item => {
+        const Icon = item.Icon
+        return (
+          <Link
+            key={item.path}
+            to={item.path}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            <Icon size={15} strokeWidth={2} aria-hidden />
+            <span>{item.label}</span>
+          </Link>
+        )
+      })}
     </header>
   )
 }

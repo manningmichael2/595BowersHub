@@ -14,30 +14,30 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">BowersHub AI</h1>
-          <p className="text-gray-400 text-sm">Personal AI Assistant</p>
+          <h1 className="text-3xl font-bold text-text mb-2">BowersHub AI</h1>
+          <p className="text-text-muted text-sm">Personal AI Assistant</p>
         </div>
 
         {/* Login form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-2 text-sm text-red-300">
+            <div className="bg-danger/10 border border-danger/40 rounded-lg px-4 py-2 text-sm text-danger">
               {error}
-              <button onClick={clearError} className="float-right text-red-400 hover:text-red-200">×</button>
+              <button onClick={clearError} className="float-right text-danger hover:brightness-125">×</button>
             </div>
           )}
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Email</label>
+            <label className="block text-sm text-text-muted mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#0f0f1a] border border-gray-700 rounded-lg px-4 py-2.5 text-gray-200 text-sm focus:outline-none focus:border-indigo-500"
+              className="w-full bg-surface border border-border rounded-lg px-4 py-2.5 text-text text-sm focus:outline-none focus:border-primary transition-colors"
               placeholder="you@example.com"
               required
               autoFocus
@@ -45,12 +45,12 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Password</label>
+            <label className="block text-sm text-text-muted mb-1">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#0f0f1a] border border-gray-700 rounded-lg px-4 py-2.5 text-gray-200 text-sm focus:outline-none focus:border-indigo-500"
+              className="w-full bg-surface border border-border rounded-lg px-4 py-2.5 text-text text-sm focus:outline-none focus:border-primary transition-colors"
               placeholder="••••••••"
               required
             />
@@ -59,17 +59,17 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 text-white font-medium py-2.5 rounded-lg transition-colors text-sm"
+            className="w-full bg-primary hover:brightness-110 disabled:opacity-50 text-on-primary font-medium py-2.5 rounded-lg transition-[filter] text-sm"
           >
             {isLoading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
 
-        <p className="text-center text-xs text-gray-600 mt-6">
+        <p className="text-center text-xs text-text-muted mt-6">
           Need an account? Ask your admin for an invite link.
         </p>
         <p className="text-center text-xs mt-2">
-          <a href="/forgot-password" className="text-indigo-400 hover:text-indigo-300">Forgot password?</a>
+          <a href="/forgot-password" className="text-primary hover:brightness-125">Forgot password?</a>
         </p>
       </div>
     </div>
