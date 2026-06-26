@@ -6,7 +6,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
-vi.mock('../../services/financeTransactions', () => ({ financeTransactions: { search: vi.fn() } }))
+// Keep the real attributionHint (pure helper); only mock the network call.
+vi.mock('../../services/financeTransactions', async (importActual) => ({
+  ...(await importActual<typeof import('../../services/financeTransactions')>()),
+  financeTransactions: { search: vi.fn() },
+}))
 vi.mock('../../services/financeReview', () => ({ financeReview: { getCategories: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../../stores/toast', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 
@@ -15,7 +19,7 @@ import { financeTransactions, type TxnSearchResult } from '../../services/financ
 
 const RESULT: TxnSearchResult = {
   items: [
-    { id: 't1', posted_date: '2026-06-01', description: 'COSTCO', merchant_key: 'COSTCO', amount: -40, account_id: 'a', account_name: 'Chk', category_id: 1, category_name: 'Groceries', is_transfer: false, is_investment: false, is_split: false, cleared: false },
+    { id: 't1', posted_date: '2026-06-01', description: 'COSTCO', merchant_key: 'COSTCO', amount: -40, account_id: 'a', account_name: 'Chk', category_id: 1, category_name: 'Groceries', is_transfer: false, is_investment: false, is_split: false, cleared: false, updated_by_name: null, user_category_override: false, source: 'sync' },
   ],
   count: 1,
   subtotals: [{ category: 'Groceries', total: -40, count: 1 }],

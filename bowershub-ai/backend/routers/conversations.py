@@ -16,7 +16,13 @@ router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
 async def _check_conversation_access(conversation_id: int, user: dict) -> dict:
-    """Verify user owns the conversation or has workspace access."""
+    """Verify the user owns the conversation, or is admin. Owner-or-admin ONLY.
+
+    Conversations (and their messages) are private-per-user (D3 / R1.5). A
+    same-workspace non-owner must NOT read another user's conversation — the old
+    "any workspace member" branch was an IDOR hole and has been removed. Every
+    message route reaches bh_messages through this check + a `conversation_id`
+    filter, so closing it here closes message access too."""
     pool = get_pool()
     async with pool.acquire() as conn:
         conv = await conn.fetchrow(
@@ -25,19 +31,10 @@ async def _check_conversation_access(conversation_id: int, user: dict) -> dict:
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Owner or admin can access
         if conv["user_id"] == user["id"] or user["role"] == "admin":
             return dict(conv)
 
-        # Check workspace membership (for shared conversations)
-        member = await conn.fetchval("""
-            SELECT 1 FROM public.bh_workspace_users
-            WHERE workspace_id = $1 AND user_id = $2
-        """, conv["workspace_id"], user["id"])
-
-        if not member:
-            raise HTTPException(status_code=403, detail="Access denied")
-        return dict(conv)
+        raise HTTPException(status_code=403, detail="Access denied")
 
 
 @router.get("", response_model=List[ConversationListItem])
@@ -256,21 +253,15 @@ async def branch_conversation(conversation_id: int, msg_id: int, user: dict = De
 
 @router.post("/{conversation_id}/share/{target_user_id}")
 async def share_conversation(conversation_id: int, target_user_id: int, user: dict = Depends(get_current_user)):
-    """Share a conversation with another user (read-only access via workspace membership)."""
-    conv = await _check_conversation_access(conversation_id, user)
-
-    # Verify target user has workspace access
-    pool = get_pool()
-    async with pool.acquire() as conn:
-        access = await conn.fetchval("""
-            SELECT 1 FROM public.bh_workspace_users
-            WHERE workspace_id = $1 AND user_id = $2
-        """, conv["workspace_id"], target_user_id)
-
-        if not access:
-            raise HTTPException(
-                status_code=400,
-                detail="Target user doesn't have access to this workspace"
-            )
-
-    return {"ok": True, "message": "Conversation shared (user has workspace access)"}
+    """Disabled (410). Conversations are private-per-user (D3): there is no
+    cross-user share grant, and access is owner-or-admin only. This endpoint
+    previously relied on the workspace-member branch of _check_conversation_access
+    (now removed) and never persisted a grant — it returned a misleading success.
+    It is unused by the frontend and is disabled rather than left lying."""
+    # Still require the caller to own/admin the conversation (no info leak on a
+    # 404 vs 410 for conversations they can't see).
+    await _check_conversation_access(conversation_id, user)
+    raise HTTPException(
+        status_code=410,
+        detail="Conversation sharing is disabled — conversations are private per user.",
+    )

@@ -18,6 +18,27 @@ export interface TxnRow {
   is_investment: boolean
   is_split: boolean
   cleared: boolean
+  // Attribution (R4.1). updated_by_name is the display name of the human who
+  // last edited this row, or null for system/sync/historical rows.
+  updated_by_name: string | null
+  user_category_override: boolean
+  source: string | null
+}
+
+/**
+ * Attribution hint for a transaction row (R4.1):
+ *   - a human editor      -> "Edited by {name}"
+ *   - bank-synced/auto     -> "Bank sync"   (never edited by a person)
+ *   - historical manual    -> null          (edited pre-attribution; no hint, never "undefined")
+ * Pure + null-safe so a NULL editor never renders blank/"undefined"/broken.
+ */
+export function attributionHint(row: Pick<TxnRow, 'updated_by_name' | 'user_category_override' | 'source'>): string | null {
+  if (row.updated_by_name) return `Edited by ${row.updated_by_name}`
+  // No human editor recorded. A row the user never overrode is system-originated
+  // (bank sync / nightly categorizer) -> "Bank sync". An overridden row with no
+  // editor is a pre-attribution historical edit -> no hint.
+  if (!row.user_category_override) return 'Bank sync'
+  return null
 }
 
 export interface Subtotal { category: string; total: number; count: number }

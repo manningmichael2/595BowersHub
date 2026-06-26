@@ -21,9 +21,9 @@
 - **Dependencies:** none
 - **Requirements:** R1.5
 - [x] **B1 (DONE — hotfix already applied):** every `routers/db_browser.py` endpoint (reads + `/export-csv` included) now `require_admin`; import + module docstring updated. DB browser is admin-only end-to-end.
-- [ ] **B2:** tighten `routers/conversations.py:_check_conversation_access` to **owner-or-admin only** — remove the "any workspace member" branch (`:33-36`) so conversations are private-per-user (D3). Audit every conversation/message route to use the tightened check.
-- [ ] Object-level checks: ensure no `bh_messages` route fetches by `message_id` without the `conversation_id`-ownership join; verify per-user `settings_json` and invite reads are owner-or-admin scoped.
-- [ ] **Tests:** `T-DBBROWSER-1` (a member/viewer `GET /api/db/public/bh_users/export-csv` → 403 — note prefix is `/api/db`, not `/api/db-browser`); `T-IDOR-1/2` written to **fail against today's leaky helper** — a same-workspace non-owner is denied another user's conversation + its messages-by-`conversation_id`; `T-IDOR-3` settings + invites.
+- [x] **B2:** tighten `routers/conversations.py:_check_conversation_access` to **owner-or-admin only** — remove the "any workspace member" branch (`:33-36`) so conversations are private-per-user (D3). Audit every conversation/message route to use the tightened check.
+- [x] Object-level checks: ensure no `bh_messages` route fetches by `message_id` without the `conversation_id`-ownership join; verify per-user `settings_json` and invite reads are owner-or-admin scoped.
+- [x] **Tests:** `T-DBBROWSER-1` (a member/viewer `GET /api/db/public/bh_users/export-csv` → 403 — note prefix is `/api/db`, not `/api/db-browser`); `T-IDOR-1/2` written to **fail against today's leaky helper** — a same-workspace non-owner is denied another user's conversation + its messages-by-`conversation_id`; `T-IDOR-3` settings + invites.
 
 ## Task 3: Re-gate finance endpoints + reads via capabilities; mechanical route-audit
 - **Effort:** L
@@ -38,17 +38,17 @@
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R1.6, R1.7
-- [ ] `websocket/handlers.py`: the message loop re-loads the live user (`role` + `is_active`) per message before dispatch, rather than reusing the connect-time `user` dict (`:74,:111`); a demoted/deactivated user is rejected on the **next message** without reconnect. Ensure no authz decision reads `RoutingContext.user_role` (`:260` — prompt-flavor only).
-- [ ] **Tests:** `T-DEMOTE-1` (HTTP — demoted user 403 on next request despite unexpired JWT); `T-WS-1` (viewer/demoted member over an open socket denied a member-gated skill on the next message); deactivation-over-open-socket rejected next message.
+- [x] `websocket/handlers.py`: the message loop re-loads the live user (`role` + `is_active`) per message before dispatch, rather than reusing the connect-time `user` dict (`:74,:111`); a demoted/deactivated user is rejected on the **next message** without reconnect. Ensure no authz decision reads `RoutingContext.user_role` (`:260` — prompt-flavor only).
+- [x] **Tests:** `T-DEMOTE-1` (HTTP — demoted user 403 on next request despite unexpired JWT); `T-WS-1` (viewer/demoted member over an open socket denied a member-gated skill on the next message); deactivation-over-open-socket rejected next message.
 
 ## Task 5: Finance attribution columns + server-side stamping
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R4.1, R4.2
-- [ ] **Migration:** `backend/migrations/0042_finance_attribution.sql` — add `created_by`/`updated_by` (FK→`public.bh_users` `ON DELETE SET NULL`) to `finance.transactions`, `finance.budgets`, `finance.categories`; additive/nullable, no backfill; `IF NOT EXISTS`; grant block per `0021`. (No cross-deps → its number-vs-author-order is safe.)
-- [ ] Stamp `created_by`/`updated_by = user["id"]` in the service-layer finance write paths only; finance write request models get Pydantic `extra="forbid"` and carry no `*_by` field (anti-spoof). System/sync writers (`simplefin_sync.py`, nightly jobs) leave attribution NULL (D6).
-- [ ] Frontend: surface "edited by {name}" on a manually-changed transaction/budget; render NULL as "Bank sync"/"Automatic" (system) or no hint (historical) — never blank/"undefined"/broken FK.
-- [ ] **Tests:** `T-ATTR-1` (manual edit stamps `updated_by`; `updated_by` in request body ignored; NULL renders "Bank sync"; historical NULL renders without error); `T-DB-1` (app-role INSERT/UPDATE with a valid `bh_users.id` succeeds — writer grant present; an `n8n_app`-style NULL-attribution write succeeds).
+- [x] **Migration:** `backend/migrations/0042_finance_attribution.sql` — add `created_by`/`updated_by` (FK→`public.bh_users` `ON DELETE SET NULL`) to `finance.transactions`, `finance.budgets`, `finance.categories`; additive/nullable, no backfill; `IF NOT EXISTS`; grant block per `0021`. (No cross-deps → its number-vs-author-order is safe.)
+- [x] Stamp `created_by`/`updated_by = user["id"]` in the service-layer finance write paths only; finance write request models get Pydantic `extra="forbid"` and carry no `*_by` field (anti-spoof). System/sync writers (`simplefin_sync.py`, nightly jobs) leave attribution NULL (D6).
+- [x] Frontend: surface "edited by {name}" on a manually-changed transaction/budget; render NULL as "Bank sync"/"Automatic" (system) or no hint (historical) — never blank/"undefined"/broken FK.
+- [x] **Tests:** `T-ATTR-1` (manual edit stamps `updated_by`; `updated_by` in request body ignored; NULL renders "Bank sync"; historical NULL renders without error); `T-DB-1` (app-role INSERT/UPDATE with a valid `bh_users.id` succeeds — writer grant present; an `n8n_app`-style NULL-attribution write succeeds).
 
 ## Task 6: User management core — role edit + last-admin invariant
 - **Effort:** M

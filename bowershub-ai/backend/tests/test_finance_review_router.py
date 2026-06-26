@@ -37,6 +37,14 @@ def _client(user) -> httpx.AsyncClient:
 async def seeded(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
     async with pool.acquire() as conn:
+        # Seed the fake _ADMIN/_MEMBER as real bh_users rows so attribution
+        # stamping (updated_by FK -> bh_users) is satisfiable. In production
+        # get_current_user always yields a live row; the override fakes that.
+        for uid, email, name, role in [
+            (1, "owner@x", "Owner", "admin"), (2, "m@x", "Member", "member")]:
+            await conn.execute(
+                "INSERT INTO public.bh_users (id, email, password_hash, display_name, role) "
+                "VALUES ($1,$2,'x',$3,$4) ON CONFLICT (id) DO NOTHING", uid, email, name, role)
         acct = await conn.fetchval(
             "INSERT INTO finance.accounts (id, org_name, account_name) "
             "VALUES (gen_random_uuid()::text, 'T', 'CC') RETURNING id")

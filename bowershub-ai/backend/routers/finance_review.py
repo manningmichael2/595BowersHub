@@ -16,7 +16,7 @@ from typing import Optional
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.database import get_pool
 from backend.middleware.auth import get_current_user, require_admin
@@ -52,6 +52,9 @@ class ReviewQueueResponse(BaseModel):
 
 
 class CategorizeRequest(BaseModel):
+    # extra="forbid": a client cannot smuggle created_by/updated_by — attribution
+    # is server-stamped from the session, never the request body (R4.1 anti-spoof).
+    model_config = ConfigDict(extra="forbid")
     category_id: int
     learn: bool = True  # reinforce merchant_memory (R3)
 
@@ -63,6 +66,7 @@ class CategorizeResponse(BaseModel):
 
 
 class BulkCategorizeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # anti-spoof (R4.1)
     transaction_ids: list[str] = Field(min_length=1)
     category_id: int
     learn: bool = True
@@ -74,6 +78,7 @@ class BulkCategorizeResponse(BaseModel):
 
 
 class ApplyMerchantRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # anti-spoof (R4.1)
     category_id: int
     set_prior: bool = True       # set the directory category_prior_id (R3.3)
     make_rule: bool = False      # mint a user_rule for this merchant_key
@@ -268,9 +273,10 @@ async def categorize_transaction(transaction_id: str, body: CategorizeRequest,
                     raise HTTPException(status_code=404, detail="Transaction not found")
                 res = await conn.execute(
                     "UPDATE finance.transactions SET category_id = $1, user_category_override = true, "
-                    "categorized_by_tier = 'manual', categorization_confidence = 1.0, updated_at = now() "
+                    "categorized_by_tier = 'manual', categorization_confidence = 1.0, updated_at = now(), "
+                    "updated_by = $3 "  # R4.1: stamp the human editor (server-side; never client-supplied)
                     "WHERE id = $2",
-                    body.category_id, transaction_id)
+                    body.category_id, transaction_id, user["id"])
                 await conn.execute(
                     "INSERT INTO finance.categorization_decision (transaction_id, tier, confidence, "
                     "prior_category_id, applied_category_id, auto_applied, rationale) "
@@ -306,8 +312,9 @@ async def bulk_categorize(body: BulkCategorizeRequest,
                         continue
                     res = await conn.execute(
                         "UPDATE finance.transactions SET category_id = $1, user_category_override = true, "
-                        "categorized_by_tier = 'manual', categorization_confidence = 1.0, updated_at = now() "
-                        "WHERE id = $2", body.category_id, tid)
+                        "categorized_by_tier = 'manual', categorization_confidence = 1.0, updated_at = now(), "
+                        "updated_by = $3 "  # R4.1: stamp the human editor
+                        "WHERE id = $2", body.category_id, tid, user["id"])
                     await conn.execute(
                         "INSERT INTO finance.categorization_decision (transaction_id, tier, confidence, "
                         "prior_category_id, applied_category_id, auto_applied, rationale) "
@@ -351,9 +358,10 @@ async def apply_merchant_category(merchant_key: str, body: ApplyMerchantRequest,
                         {"source": "apply_merchant", "merchant_key": merchant_key})
                 res = await conn.execute(
                     "UPDATE finance.transactions SET category_id = $1, user_category_override = true, "
-                    "categorized_by_tier = 'manual', categorization_confidence = 1.0, updated_at = now() "
+                    "categorized_by_tier = 'manual', categorization_confidence = 1.0, updated_at = now(), "
+                    "updated_by = $3 "  # R4.1: gated mass-recategorize is a human action
                     "WHERE merchant_key = $2 AND user_category_override = false",
-                    body.category_id, merchant_key)
+                    body.category_id, merchant_key, user["id"])
                 updated = int(res.split()[-1]) if res else 0
 
                 await record_correction(conn, category_id=body.category_id,
@@ -420,11 +428,13 @@ async def delete_user_rule(rule_id: int, user: dict = Depends(require_admin)) ->
 
 # --------------------------------------------------------------------------- splits (R1.4/R1.7)
 class SplitAllocation(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # anti-spoof (R4.1)
     category_id: Optional[int] = None
     amount: float
 
 
 class SplitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # anti-spoof (R4.1)
     allocations: list[SplitAllocation] = Field(min_length=2)
 
 
@@ -436,7 +446,7 @@ async def split_transaction(txn_id: str, body: SplitRequest,
         pool = get_pool()
         async with pool.acquire() as conn:
             return await create_split(
-                conn, txn_id, [a.model_dump() for a in body.allocations])
+                conn, txn_id, [a.model_dump() for a in body.allocations], actor_id=user["id"])
     except LookupError:
         raise HTTPException(status_code=404, detail="Transaction not found")
     except ValueError as e:
@@ -451,7 +461,7 @@ async def unsplit_transaction(txn_id: str, user: dict = Depends(require_admin)) 
     try:
         pool = get_pool()
         async with pool.acquire() as conn:
-            return await unsplit(conn, txn_id)
+            return await unsplit(conn, txn_id, actor_id=user["id"])
     except (asyncpg.PostgresError, OSError, RuntimeError) as e:
         raise _db_error(e)
 

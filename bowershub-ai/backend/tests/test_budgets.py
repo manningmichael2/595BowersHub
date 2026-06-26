@@ -36,6 +36,12 @@ def _client(user) -> httpx.AsyncClient:
 async def seeded(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
     async with pool.acquire() as conn:
+        # Seed _ADMIN/_MEMBER so budget attribution (created_by/updated_by FK) holds.
+        for uid, email, name, role in [
+            (1, "o@x", "O", "admin"), (2, "m@x", "M", "member")]:
+            await conn.execute(
+                "INSERT INTO public.bh_users (id, email, password_hash, display_name, role) "
+                "VALUES ($1,$2,'x',$3,$4) ON CONFLICT (id) DO NOTHING", uid, email, name, role)
         acct = await conn.fetchval(
             "INSERT INTO finance.accounts (id, org_name, account_name, account_type) "
             "VALUES ('A1', 'Bank', 'Checking', 'checking') RETURNING id")

@@ -332,21 +332,24 @@ async def test_fresh_briefing_returns_parsed_sections_with_dash_for_missing_weat
     # have returned ``briefing_id: null`` instead of this payload.
     assert 0.0 <= body["age_hours"] < 24.0
 
-    # Parsed sections — five canonical sections always present, in order.
+    # Parsed sections — six canonical sections always present, in order.
     sections = body["parsed_sections"]
-    assert isinstance(sections, list) and len(sections) == 5
+    assert isinstance(sections, list) and len(sections) == 6
     assert [s["key"] for s in sections] == [
         "weather",
         "yesterday_spending",
         "inbox",
         "schedule",
         "anything_else",
+        "finance_insights",
     ]
     by_key = {s["key"]: s for s in sections}
 
-    # Weather omitted in the briefing → "—" placeholder (R8.7).
+    # Weather + Finance Insights omitted in the briefing → "—" placeholder (R8.7).
     assert by_key["weather"]["content"] == "—"
     assert by_key["weather"]["label"] == "Weather"
+    assert by_key["finance_insights"]["content"] == "—"
+    assert by_key["finance_insights"]["label"] == "Finance Insights"
 
     # The four sections that WERE in the markdown come through with content.
     assert by_key["yesterday_spending"]["content"] == "$10.00 across 1 transaction"

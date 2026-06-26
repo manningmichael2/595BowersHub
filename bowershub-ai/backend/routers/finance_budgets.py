@@ -13,7 +13,7 @@ from datetime import date
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from backend.database import get_pool
 from backend.middleware.auth import get_current_user, require_admin
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/finance", tags=["finance-budgets"])
 
 
 class BudgetUpsert(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # anti-spoof: no *_by from the body (R4.1)
     category_id: int
     month: date           # any day in the month; normalized to the 1st
     limit_amount: float
@@ -64,7 +65,8 @@ async def put_budget(body: BudgetUpsert, user: dict = Depends(require_admin)) ->
         async with get_pool().acquire() as conn:
             if not await conn.fetchval("SELECT 1 FROM finance.categories WHERE id = $1", body.category_id):
                 raise HTTPException(status_code=400, detail="Unknown category_id")
-            return await upsert_budget(conn, body.category_id, _first_of_month(body.month), body.limit_amount)
+            return await upsert_budget(conn, body.category_id, _first_of_month(body.month),
+                                       body.limit_amount, actor_id=user["id"])
     except HTTPException:
         raise
     except (asyncpg.PostgresError, OSError, RuntimeError) as e:
