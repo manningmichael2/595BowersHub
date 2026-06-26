@@ -58,5 +58,7 @@ async def test_min_role_gate_enforced_by_rank(fresh_db, db_settings):
         await close_pool()
 
 
-def test_role_rank_orders_member_below_admin():
-    assert ROLE_RANK["admin"] > ROLE_RANK["member"]
+def test_role_rank_orders_viewer_member_admin():
+    # Canonical ladder from authz (the single definition — R1.1).
+    assert ROLE_RANK["viewer"] < ROLE_RANK["member"] < ROLE_RANK["admin"]
+    assert ROLE_RANK == {"viewer": 10, "member": 20, "admin": 100}

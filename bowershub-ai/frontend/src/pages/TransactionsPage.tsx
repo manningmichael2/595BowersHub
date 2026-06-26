@@ -12,6 +12,7 @@ import { useIsMobile } from '../hooks/useMediaQuery'
 import { financeReview, type CategoryOption } from '../services/financeReview'
 import {
   financeTransactions,
+  attributionHint,
   type TxnQuery,
   type TxnSearchResult,
   type TxnStatus,
@@ -233,7 +234,10 @@ export default function TransactionsPage() {
                         <span className="font-medium text-text break-words">{t.description ?? t.merchant_key ?? '—'}</span>
                         <span className={`shrink-0 ${t.amount < 0 ? 'text-text' : POS}`}>{money(t.amount)}</span>
                       </div>
-                      <div className="text-xs text-text-muted mt-0.5">{t.posted_date}</div>
+                      <div className="text-xs text-text-muted mt-0.5">
+                        {t.posted_date}
+                        {attributionHint(t) && <span className="ml-2">· {attributionHint(t)}</span>}
+                      </div>
                       <div className="flex items-center justify-between gap-2 mt-1">
                         {renderCategory(t)}
                         {renderSplitBtn(t)}
@@ -274,7 +278,12 @@ export default function TransactionsPage() {
                           checked={selected.has(t.id)} onChange={() => toggleSel(t.id)} />
                       </td>
                       <td className="p-1.5 whitespace-nowrap">{t.posted_date}</td>
-                      <td className="p-1.5">{t.description ?? t.merchant_key ?? '—'}</td>
+                      <td className="p-1.5">
+                        {t.description ?? t.merchant_key ?? '—'}
+                        {attributionHint(t) && (
+                          <span className="block text-xs text-text-muted">{attributionHint(t)}</span>
+                        )}
+                      </td>
                       <td className="p-1.5">{renderCategory(t)}</td>
                       <td className={`p-1.5 text-right ${t.amount < 0 ? '' : POS}`}>{money(t.amount)}</td>
                       <td className="p-1.5 text-right whitespace-nowrap">{renderSplitBtn(t)}</td>

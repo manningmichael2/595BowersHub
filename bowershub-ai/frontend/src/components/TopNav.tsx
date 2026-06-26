@@ -1,10 +1,14 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useFeatures } from '../hooks/useFeatures'
+import { isFeatureVisible } from '../lib/featureNav'
 
-const NAV_ITEMS = [
+// `feature` ties an item to a registry feature key — shown iff server-permitted
+// AND not self-hidden. Items without `feature` always show.
+const NAV_ITEMS: { path: string; label: string; icon: string; feature?: string }[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/chat', label: 'Chat', icon: '💬' },
-  { path: '/finance', label: 'Finance', icon: '💵' },
-  { path: '/db', label: 'Database', icon: '🗄️' },
+  { path: '/finance', label: 'Finance', icon: '💵', feature: 'finance' },
+  { path: '/db', label: 'Database', icon: '🗄️', feature: 'database' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
@@ -14,6 +18,8 @@ const EXTERNAL_ITEMS = [
 
 export default function TopNav() {
   const location = useLocation()
+  const access = useFeatures()
+  const items = NAV_ITEMS.filter(i => !i.feature || isFeatureVisible(access, i.feature))
 
   return (
     <header
@@ -24,7 +30,7 @@ export default function TopNav() {
       <span className="text-sm font-semibold mr-4" style={{ color: 'var(--color-text)' }}>BowersHub</span>
 
       {/* Internal nav */}
-      {NAV_ITEMS.map(item => {
+      {items.map(item => {
         const isActive = location.pathname.startsWith(item.path) || (item.path === '/dashboard' && location.pathname === '/')
         return (
           <Link

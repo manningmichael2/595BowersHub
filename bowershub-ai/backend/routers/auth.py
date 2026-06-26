@@ -9,7 +9,9 @@ from backend.models.auth import (
     InviteRequest, InviteResponse, RefreshRequest, UserResponse,
 )
 from backend.services.auth import AuthService
-from backend.middleware.auth import get_auth_service, get_current_user, require_admin
+from backend.middleware.auth import (
+    get_auth_service, get_current_user, require_admin, require_capability,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -99,34 +101,78 @@ async def create_invite(
     return InviteResponse(token=token, expires_at=expires_at, invite_url=invite_url)
 
 
+@router.post("/invites/{invite_id}/revoke")
+async def revoke_invite(
+    invite_id: int,
+    user: dict = Depends(require_capability("users.manage")),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """(users.manage) Revoke an unused invite so it can no longer register (R2.2)."""
+    revoked = await auth_service.revoke_invite(invite_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="Invite not found, already used, or already expired")
+    return {"ok": True, "invite_id": invite_id}
+
+
+@router.post("/users/{user_id}/reset-link")
+async def admin_reset_link(
+    user_id: int,
+    request: Request,
+    user: dict = Depends(require_capability("users.manage")),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """(users.manage) Mint a one-time password-reset link for a user and return it
+    directly — lets an admin reset a household member's password without email (R2.4)."""
+    target = await auth_service.get_user_by_id(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    raw_token = await auth_service.create_password_reset_token(user_id)
+    import os
+    base_url = str(request.base_url).rstrip("/")
+    public_url = os.environ.get("PUBLIC_URL", base_url)
+    return {"ok": True, "user_id": user_id,
+            "reset_url": f"{public_url}/reset-password?token={raw_token}"}
+
+
 @router.post("/register", response_model=UserResponse)
 async def register(body: RegisterRequest, auth_service: AuthService = Depends(get_auth_service)):
     """Register a new user using an invite token."""
+    # Password policy (R2.3) — enforced here AND on the reset path.
+    policy_error = AuthService.check_password_policy(body.password)
+    if policy_error:
+        raise HTTPException(status_code=400, detail=policy_error)
+
     # Validate invite
     role = await auth_service.use_invite(body.invite_token)
     if not role:
         raise HTTPException(status_code=400, detail="Invalid, expired, or already-used invite token")
 
-    # Check email not taken
-    existing = await auth_service.get_user_by_id(0)  # We need a different check
+    # Check email not taken + resolve the default/shared workspace to seed.
     from backend.database import get_pool
     pool = get_pool()
     async with pool.acquire() as conn:
         existing = await conn.fetchval(
             "SELECT id FROM public.bh_users WHERE email = $1", body.email
         )
-    if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        # The designated shared workspace = the first (General) workspace (R2.5).
+        default_ws = await conn.fetchval(
+            "SELECT id FROM public.bh_workspaces ORDER BY id LIMIT 1")
 
-    # Create user
-    user = await auth_service.create_user(
-        email=body.email,
-        password=body.password,
-        display_name=body.display_name,
-        role=role,
-    )
+    # Create the user AND seed workspace membership transactionally (R2.5).
+    if default_ws is not None:
+        user = await auth_service.create_invited_user(
+            email=body.email, password=body.password,
+            display_name=body.display_name, role=role, workspace_id=default_ws,
+        )
+    else:
+        user = await auth_service.create_user(
+            email=body.email, password=body.password,
+            display_name=body.display_name, role=role,
+        )
 
-    # Mark invite as used
+    # Mark invite as used (single-use)
     await auth_service.mark_invite_used(body.invite_token, user["id"])
 
     return UserResponse(
@@ -256,8 +302,10 @@ async def reset_password(body: PasswordResetConfirm):
     from datetime import datetime, timezone
     from backend.database import get_pool
 
-    if len(body.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    # Same password policy as register (R2.3).
+    policy_error = AuthService.check_password_policy(body.new_password)
+    if policy_error:
+        raise HTTPException(status_code=400, detail=policy_error)
 
     token_hash = hashlib.sha256(body.token.encode()).hexdigest()
     pool = get_pool()
@@ -279,8 +327,7 @@ async def reset_password(body: PasswordResetConfirm):
         if token_row["expires_at"] < datetime.now(timezone.utc):
             raise HTTPException(status_code=400, detail="This reset link has expired")
 
-        # Hash new password and update
-        from backend.services.auth import AuthService
+        # Hash new password and update (AuthService is imported at module top)
         new_hash = AuthService.hash_password(body.new_password)
 
         await conn.execute(

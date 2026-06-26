@@ -69,10 +69,12 @@ async def search_transactions(conn, *, q=None, category_id=None, month=None,
         f"""
         SELECT t.id, t.posted_date::text AS posted_date, t.description, t.merchant_key,
                t.amount, t.account_id, a.account_name, t.category_id, c.name AS category_name,
-               t.is_transfer, t.is_investment, t.is_split, t.cleared
+               t.is_transfer, t.is_investment, t.is_split, t.cleared,
+               t.user_category_override, t.source, ub.display_name AS updated_by_name
         FROM finance.transactions t
         LEFT JOIN finance.categories c ON c.id = t.category_id
         LEFT JOIN finance.accounts a ON a.id = t.account_id
+        LEFT JOIN public.bh_users ub ON ub.id = t.updated_by  -- R4.1: who last edited (NULL = system/historical)
         WHERE {where_sql}
         ORDER BY {sort_col} {order_sql} NULLS LAST, t.id
         LIMIT {limit} OFFSET {max(0, int(offset))}

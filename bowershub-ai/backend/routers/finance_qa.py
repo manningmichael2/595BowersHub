@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from backend.database import get_pool
-from backend.middleware.auth import get_current_user
+from backend.middleware.auth import require_capability
 from backend.services.finance import ask_db
 from backend.services.finance_narration import FinanceNarrator
 
@@ -76,7 +76,7 @@ async def _answer_retirement(conn, provider, question: str) -> dict:
 async def finance_qa(
     body: QARequest,
     request: Request,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_capability("finance.read")),
 ) -> dict:
     question = (body.question or "").strip()
     if not question:
@@ -123,7 +123,7 @@ class RuleParseRequest(BaseModel):
 async def parse_rule(
     body: RuleParseRequest,
     request: Request,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_capability("finance.read")),
 ) -> dict:
     """NL → a VALIDATED categorization-rule candidate + an affected-count preview
     (R3.1/R3.2/R3.4). Read-only: the candidate is committed separately via the

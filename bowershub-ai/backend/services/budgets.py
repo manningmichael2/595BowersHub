@@ -33,11 +33,16 @@ async def list_budgets(conn, month) -> list[dict]:
              "limit_amount": float(r["limit_amount"])} for r in rows]
 
 
-async def upsert_budget(conn, category_id: int, month, limit_amount: float) -> dict:
+async def upsert_budget(conn, category_id: int, month, limit_amount: float,
+                        actor_id: int | None = None) -> dict:
+    # R4.1: stamp created_by on insert, updated_by on every write (incl. the
+    # conflict-update). actor_id is the editing user; a system caller leaves NULL.
     await conn.execute(
-        "INSERT INTO finance.budgets (category_id, month, limit_amount) VALUES ($1, $2, $3) "
-        "ON CONFLICT (category_id, month) DO UPDATE SET limit_amount = EXCLUDED.limit_amount",
-        category_id, month, limit_amount)
+        "INSERT INTO finance.budgets (category_id, month, limit_amount, created_by, updated_by) "
+        "VALUES ($1, $2, $3, $4, $4) "
+        "ON CONFLICT (category_id, month) DO UPDATE SET limit_amount = EXCLUDED.limit_amount, "
+        "    updated_by = EXCLUDED.updated_by",
+        category_id, month, limit_amount, actor_id)
     return {"category_id": category_id, "month": month.isoformat(), "limit_amount": limit_amount}
 
 

@@ -18,12 +18,16 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
+import { useFeatures } from '../hooks/useFeatures'
+import { api } from '../services/api'
+import { toast } from '../stores/toast'
 import AppearancePanel from '../components/AppearancePanel'
 import VoicePanel from '../components/VoicePanel'
 
 type SectionId =
   | 'profile'
   | 'appearance'
+  | 'navigation'
   | 'voice'
   | 'notifications'
   | 'briefing'
@@ -41,6 +45,7 @@ interface SectionDef {
 const BASE_SECTIONS: SectionDef[] = [
   { id: 'profile', label: 'Profile', icon: '👤' },
   { id: 'appearance', label: 'Appearance', icon: '🎨' },
+  { id: 'navigation', label: 'Navigation', icon: '🧭' },
   { id: 'voice', label: 'Voice', icon: '🎙️' },
   { id: 'notifications', label: 'Notifications', icon: '🔔' },
   { id: 'briefing', label: 'Briefing', icon: '🌅' },
@@ -128,6 +133,7 @@ export default function SettingsPage() {
         <main className="flex-1 min-w-0">
           {activeSection === 'profile' && <ProfileSection />}
           {activeSection === 'appearance' && <AppearancePanel />}
+          {activeSection === 'navigation' && <NavigationSection />}
           {activeSection === 'voice' && <VoicePanel />}
           {activeSection === 'notifications' && (
             <PlaceholderSection
@@ -248,6 +254,68 @@ function LabsSection() {
             </div>
           </div>
         </label>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Navigation section — cosmetic self-hide (R5.4). Lets the user hide features
+// they CAN access from their own nav. Purely cosmetic: the route stays
+// reachable; only the button is hidden. Lists only permitted features.
+// ---------------------------------------------------------------------------
+
+function NavigationSection() {
+  const access = useFeatures()
+  const loadFeatureAccess = useAuthStore(s => s.loadFeatureAccess)
+  const [saving, setSaving] = useState<string | null>(null)
+
+  const permitted = (access?.features ?? []).filter(f => f.permitted)
+  const hidden = new Set(access?.hidden_nav ?? [])
+
+  const toggle = async (key: string, show: boolean) => {
+    setSaving(key)
+    const next = new Set(hidden)
+    if (show) next.delete(key); else next.add(key)
+    try {
+      await api.put('/api/me/settings/nav', { hidden: [...next] })
+      await loadFeatureAccess()   // refresh so the nav updates immediately
+    } catch (err: any) {
+      toast.error(`Couldn't update navigation: ${err.response?.data?.detail || 'Unknown error'}`)
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-medium text-gray-100">Navigation</h2>
+        <p className="text-sm text-gray-400 mt-1">
+          Hide features you don't use from your navigation. This is cosmetic — the
+          pages stay accessible by direct link.
+        </p>
+      </div>
+      <div className="space-y-3">
+        {permitted.length === 0 && (
+          <p className="text-sm text-gray-500">No optional features available.</p>
+        )}
+        {permitted.map(f => (
+          <label
+            key={f.key}
+            className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-800 bg-gray-900/30"
+          >
+            <span className="text-sm text-gray-200">{f.label}</span>
+            <input
+              type="checkbox"
+              aria-label={`Show ${f.label} in navigation`}
+              disabled={saving === f.key}
+              checked={!hidden.has(f.key)}
+              onChange={e => toggle(f.key, e.target.checked)}
+              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500"
+            />
+          </label>
+        ))}
       </div>
     </div>
   )

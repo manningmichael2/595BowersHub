@@ -7,9 +7,8 @@
  *
  * _Requirements: 21.2, 21.3_
  */
-import { useAuthStore } from '../stores/auth'
+import { useHasRole } from './useHasRole'
 
 export function useIsAdmin(): boolean {
-  const user = useAuthStore(s => s.user)
-  return user?.role === 'admin'
+  return useHasRole('admin')
 }

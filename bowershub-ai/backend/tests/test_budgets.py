@@ -19,9 +19,11 @@ from backend.routers.finance_budgets import router as budgets_router
 from backend.services.budgets import alert_thresholds, budget_vs_actual, upsert_budget
 from backend.services.splits import create_split
 from backend.tests.semantic_helpers import apply_migrations
+from backend.services import authz
 
 _ADMIN = {"id": 1, "email": "o@x", "display_name": "O", "role": "admin", "is_active": True}
 _MEMBER = {"id": 2, "email": "m@x", "display_name": "M", "role": "member", "is_active": True}
+_VIEWER = {"id": 3, "email": "v@x", "display_name": "V", "role": "viewer", "is_active": True}
 _MONTH = date.today().replace(day=1)
 
 
@@ -35,7 +37,14 @@ def _client(user) -> httpx.AsyncClient:
 @pytest_asyncio.fixture
 async def seeded(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
+    await authz.init_authz(pool)  # require_capability gates need the warmed cache
     async with pool.acquire() as conn:
+        # Seed _ADMIN/_MEMBER so budget attribution (created_by/updated_by FK) holds.
+        for uid, email, name, role in [
+            (1, "o@x", "O", "admin"), (2, "m@x", "M", "member")]:
+            await conn.execute(
+                "INSERT INTO public.bh_users (id, email, password_hash, display_name, role) "
+                "VALUES ($1,$2,'x',$3,$4) ON CONFLICT (id) DO NOTHING", uid, email, name, role)
         acct = await conn.fetchval(
             "INSERT INTO finance.accounts (id, org_name, account_name, account_type) "
             "VALUES ('A1', 'Bank', 'Checking', 'checking') RETURNING id")
@@ -77,9 +86,13 @@ async def test_budget_vs_actual_allocation_aware(seeded):
 @pytest.mark.asyncio
 async def test_budget_api_rbac_and_roundtrip(seeded):
     c0 = seeded["cats"][0]
-    async with _client(_MEMBER) as c:
+    # finance.write is seeded to `member` (0039): a viewer is denied, a member allowed.
+    async with _client(_VIEWER) as c:
         r = await c.put("/api/finance/budgets", json={"category_id": c0, "month": _MONTH.isoformat(), "limit_amount": 200})
     assert r.status_code == 403
+    async with _client(_MEMBER) as c:
+        r = await c.put("/api/finance/budgets", json={"category_id": c0, "month": _MONTH.isoformat(), "limit_amount": 150})
+    assert r.status_code == 200
     async with _client(_ADMIN) as c:
         r = await c.put("/api/finance/budgets", json={"category_id": c0, "month": _MONTH.isoformat(), "limit_amount": 200})
         assert r.status_code == 200

@@ -69,6 +69,9 @@ class Config:
     # Optional — initial admin (used on first run if no users exist)
     ADMIN_EMAIL: str = "admin@bowershub.local"
     ADMIN_PASSWORD: str = ""
+    # First-admin display name (R2.6). Falls back to the email local-part when unset
+    # — no hardcoded owner name in code.
+    ADMIN_DISPLAY_NAME: str = ""
 
     # Model IDs are no longer hardcoded here — they are DB-driven and resolved via
     # backend.services.model_catalog.resolve_role(...) (spec: dynamic-model-discovery).
@@ -187,4 +190,5 @@ def load_config() -> Config:
         CORS_ORIGINS=os.environ.get("CORS_ORIGINS"),
         ADMIN_EMAIL=os.environ.get("ADMIN_EMAIL", "admin@bowershub.local"),
         ADMIN_PASSWORD=os.environ.get("ADMIN_PASSWORD", ""),
+        ADMIN_DISPLAY_NAME=os.environ.get("ADMIN_DISPLAY_NAME", ""),
     )

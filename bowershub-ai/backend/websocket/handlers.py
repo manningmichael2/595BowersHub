@@ -98,6 +98,21 @@ async def websocket_chat_handler(
             msg_type = data.get("type")
 
             if msg_type == "message":
+                # Re-load the live user (role + is_active) per message before
+                # dispatch — the connect-time snapshot (line ~74) is captured once
+                # and must never be trusted for authorization. A demotion or
+                # deactivation thus takes effect on the NEXT message with no
+                # reconnect (R1.6/R1.7); skill_executor also re-fetches role per
+                # skill, but other role-dependent logic in handle_chat_message
+                # would otherwise read the stale role.
+                user = await auth_service.get_user_by_id(user_id)
+                if not user or not user["is_active"]:
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": {"message": "User not found or deactivated"},
+                    })
+                    await websocket.close(code=4001, reason="User invalid")
+                    return
                 conversation_id = data.get("conversation_id")
                 key = (user_id, conversation_id) if conversation_id else None
                 # If a previous response is still running for this conversation,
@@ -257,6 +272,9 @@ async def handle_chat_message(
 
     routing_context = RoutingContext(
         user_id=user["id"],
+        # Prompt-flavor only — NO authz decision may read user_role. Skill gating
+        # re-fetches the live role in skill_executor; this carries the role into
+        # the prompt context, nothing more (R1.6).
         user_role=user["role"],
         workspace_id=workspace["id"],
         workspace_name=workspace["name"],

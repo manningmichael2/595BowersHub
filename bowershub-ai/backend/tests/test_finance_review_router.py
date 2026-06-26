@@ -17,9 +17,11 @@ from backend.database import close_pool
 from backend.middleware.auth import get_current_user, require_admin
 from backend.routers.finance_review import router as finance_router
 from backend.tests.semantic_helpers import apply_migrations
+from backend.services import authz
 
 _ADMIN = {"id": 1, "email": "owner@x", "display_name": "Owner", "role": "admin", "is_active": True}
 _MEMBER = {"id": 2, "email": "m@x", "display_name": "Member", "role": "member", "is_active": True}
+_VIEWER = {"id": 3, "email": "v@x", "display_name": "Viewer", "role": "viewer", "is_active": True}
 
 
 def _client(user) -> httpx.AsyncClient:
@@ -36,7 +38,16 @@ def _client(user) -> httpx.AsyncClient:
 @pytest_asyncio.fixture
 async def seeded(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
+    await authz.init_authz(pool)  # require_capability gates need the warmed cache
     async with pool.acquire() as conn:
+        # Seed the fake _ADMIN/_MEMBER as real bh_users rows so attribution
+        # stamping (updated_by FK -> bh_users) is satisfiable. In production
+        # get_current_user always yields a live row; the override fakes that.
+        for uid, email, name, role in [
+            (1, "owner@x", "Owner", "admin"), (2, "m@x", "Member", "member")]:
+            await conn.execute(
+                "INSERT INTO public.bh_users (id, email, password_hash, display_name, role) "
+                "VALUES ($1,$2,'x',$3,$4) ON CONFLICT (id) DO NOTHING", uid, email, name, role)
         acct = await conn.fetchval(
             "INSERT INTO finance.accounts (id, org_name, account_name) "
             "VALUES (gen_random_uuid()::text, 'T', 'CC') RETURNING id")
@@ -92,13 +103,18 @@ async def test_categorize_sets_override_and_learns(seeded):
 
 
 @pytest.mark.asyncio
-async def test_rbac_denies_non_owner_on_writes(seeded):
+async def test_rbac_member_writes_viewer_read_only(seeded):
     tid = seeded["ids"]["a"]
+    # finance.write=member (0039): a member can categorize.
     async with _client(_MEMBER) as client:
         r = await client.post(f"/api/finance/transactions/{tid}/categorize",
                               json={"category_id": seeded["dining"]})
+        assert r.status_code == 200
+    # a viewer is read-only: denied the write (finance.write), allowed the read.
+    async with _client(_VIEWER) as client:
+        r = await client.post(f"/api/finance/transactions/{tid}/categorize",
+                              json={"category_id": seeded["dining"]})
         assert r.status_code == 403
-        # reads are allowed for an authenticated member
         assert (await client.get("/api/finance/review-queue")).status_code == 200
 
 

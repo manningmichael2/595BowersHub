@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.database import get_pool
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import require_capability
 from backend.services import retirement as svc
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def _db_error(e: Exception) -> HTTPException:
 
 
 @router.get("/inputs")
-async def get_inputs(user: dict = Depends(get_current_user)) -> dict:
+async def get_inputs(user: dict = Depends(require_capability("finance.read"))) -> dict:
     """Current inputs + the prefilled form (R4.1) + a cold-start flag (R4.8)."""
     try:
         async with get_pool().acquire() as conn:
@@ -66,7 +66,7 @@ async def get_inputs(user: dict = Depends(get_current_user)) -> dict:
 
 
 @router.put("/inputs")
-async def put_inputs(body: InputsPayload, user: dict = Depends(require_admin)) -> dict:
+async def put_inputs(body: InputsPayload, user: dict = Depends(require_capability("finance.write"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             saved = await svc.upsert_inputs(conn, body.model_dump())
@@ -76,7 +76,7 @@ async def put_inputs(body: InputsPayload, user: dict = Depends(require_admin)) -
 
 
 @router.post("/project")
-async def project(body: ProjectRequest, user: dict = Depends(get_current_user)) -> dict:
+async def project(body: ProjectRequest, user: dict = Depends(require_capability("finance.read"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             return await svc.project(conn, body.overrides)
@@ -90,7 +90,7 @@ async def project(body: ProjectRequest, user: dict = Depends(get_current_user)) 
 
 
 @router.post("/scenarios/compare")
-async def compare(body: CompareRequest, user: dict = Depends(get_current_user)) -> dict:
+async def compare(body: CompareRequest, user: dict = Depends(require_capability("finance.read"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             return await svc.compare(conn, [s.model_dump() for s in body.scenarios])

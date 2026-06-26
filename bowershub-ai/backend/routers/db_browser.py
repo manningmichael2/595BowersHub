@@ -2,8 +2,10 @@
 Database Browser API routes: schema introspection, CRUD, image management,
 layout persistence, field hints, inbox processing, and schema management.
 
-All endpoints are prefixed with /api/db and require JWT auth via get_current_user.
-Write operations additionally require require_admin.
+All endpoints are prefixed with /api/db and require ADMIN (require_admin) — the
+DB browser exposes full-table read/export/DDL/CRUD with no per-table allowlist
+(C4 declined), so it is admin-only end-to-end, reads included. A non-admin must
+never reach it (e.g. GET /{schema}/{table}/export-csv on public.bh_users).
 
 Requirements: 21.1, 21.2, 21.4
 """
@@ -34,7 +36,7 @@ from starlette.responses import StreamingResponse
 from fastapi.responses import FileResponse
 
 from backend.database import get_pool
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import require_admin
 from backend.middleware.audit import AuditLogger
 from backend.http_client import get_http_session
 
@@ -57,7 +59,7 @@ _EXCLUDED_PREFIXES = ("pg_",)
 
 
 @router.get("/ping")
-async def ping(user: dict = Depends(get_current_user)) -> dict[str, Any]:
+async def ping(user: dict = Depends(require_admin)) -> dict[str, Any]:
     """
     Health check for the DB browser router.
     Verifies pool connectivity and returns basic status.
@@ -76,7 +78,7 @@ async def ping(user: dict = Depends(get_current_user)) -> dict[str, Any]:
 
 
 @router.get("/schemas")
-async def get_schemas(user: dict = Depends(get_current_user)) -> list[dict[str, Any]]:
+async def get_schemas(user: dict = Depends(require_admin)) -> list[dict[str, Any]]:
     """
     Return all user-accessible schemas with their tables, column counts,
     approximate row counts, and link-table presence indicators.
@@ -210,7 +212,7 @@ def _has_link_table(table_name: str, all_tables: set[str]) -> bool:
 async def get_columns(
     schema: str,
     table: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     Return column metadata for a table including name, type, nullable,
@@ -295,7 +297,7 @@ async def get_columns(
 async def get_primary_key(
     schema: str,
     table: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> dict[str, list[str]]:
     """
     Return the primary key column(s) for a table.
@@ -331,7 +333,7 @@ async def get_row(
     schema: str,
     table: str,
     row_id: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> dict[str, Any]:
     """
     Fetch a single row by its primary key value.
@@ -417,7 +419,7 @@ async def get_rows(
     sort_direction: Optional[str] = Query(default=None),
     filters: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> dict[str, Any]:
     """
     Return paginated rows from a table with server-side sorting, filtering,
@@ -614,7 +616,7 @@ async def export_csv(
     sort_direction: Optional[str] = Query(default=None),
     filters: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> StreamingResponse:
     """
     Export all matching rows as a CSV file (streamed).
@@ -1524,7 +1526,7 @@ async def get_lookup_options(
     table: str,
     column: str,
     search: Optional[str] = Query(default=None),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     Return id + display label pairs for a FK dropdown on the given column.
@@ -1711,7 +1713,7 @@ async def get_row_images(
     schema: str,
     table: str,
     row_id: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     Get all images linked to a specific row via the link table.
@@ -2145,7 +2147,7 @@ async def unlink_row_image(
 async def get_layout(
     schema: str,
     table: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> dict[str, Any]:
     """
     Get per-table layout configuration for the current user.
@@ -2231,7 +2233,7 @@ async def save_layout(
 
 @router.get("/field-hints")
 async def get_field_hints(
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     Return all field hint records from db_admin_field_hints.
@@ -2376,7 +2378,7 @@ async def delete_field_hint(
 async def list_views(
     schema: str,
     table: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     List all saved views for the current user and the specified schema/table.
@@ -2410,7 +2412,7 @@ async def create_view(
     schema: str,
     table: str,
     request: Request,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> dict[str, Any]:
     """
     Create a new saved view for the current user and the specified schema/table.
@@ -2458,7 +2460,7 @@ async def rename_view(
     table: str,
     view_id: str,
     request: Request,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> dict[str, Any]:
     """
     Rename an existing saved view.
@@ -2505,7 +2507,7 @@ async def delete_view(
     schema: str,
     table: str,
     view_id: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> dict[str, Any]:
     """
     Delete a saved view.
@@ -3538,7 +3540,7 @@ async def get_relations(
     schema: str,
     table: str,
     row_id: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     Return all tables that have foreign key columns referencing the target table,
@@ -3943,7 +3945,7 @@ def _get_smart_capture_url(request: Request) -> str:
 
 @router.get("/inbox/files")
 async def list_inbox_files(
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     List all files in the inbox directory.
@@ -3975,7 +3977,7 @@ async def list_inbox_files(
 @router.get("/inbox/files/{filename}")
 async def serve_inbox_file(
     filename: str,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ):
     """
     Serve a file from the inbox directory for thumbnail display.
@@ -4007,7 +4009,7 @@ async def serve_inbox_file(
 
 @router.get("/inbox/tables")
 async def list_inbox_tables(
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_admin),
 ) -> list[dict[str, Any]]:
     """
     List all tables that have image support (an associated _files link table).

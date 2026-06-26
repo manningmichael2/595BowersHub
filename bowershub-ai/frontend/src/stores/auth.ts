@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { parseLoose } from '../lib/validate'
 import { UserSchema, AuthResponseSchema, RefreshResponseSchema, type User } from '../schemas/auth'
+import type { FeatureAccess } from '../lib/featureNav'
 
 export type { User }
 
@@ -11,11 +12,15 @@ interface AuthState {
   isLoading: boolean
   error: string | null
   isRefreshing: boolean
+  // Server-computed effective access (GET /api/me/features). The nav reads this —
+  // never role alone (R5.5). Refreshed with the user.
+  featureAccess: FeatureAccess | null
 
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, displayName: string, inviteToken: string) => Promise<void>
   logout: () => void
   refreshAuth: () => Promise<boolean>
+  loadFeatureAccess: () => Promise<void>
   clearError: () => void
 }
 
@@ -51,6 +56,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   error: null,
   isRefreshing: false,
+  featureAccess: null,
 
   login: async (email, password) => {
     set({ isLoading: true, error: null })
@@ -67,6 +73,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user, accessToken: access_token, refreshToken: refresh_token, isLoading: false })
       localStorage.setItem('refreshToken', refresh_token)
       localStorage.setItem('user', JSON.stringify(user))
+      get().loadFeatureAccess()   // fire-and-forget; nav hydrates when it lands
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Login failed'
       set({ error: msg, isLoading: false })
@@ -102,9 +109,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         body: JSON.stringify({ refresh_token: refreshToken }),
       }).catch(() => {})
     }
-    set({ user: null, accessToken: null, refreshToken: null, error: null })
+    set({ user: null, accessToken: null, refreshToken: null, error: null, featureAccess: null })
     localStorage.removeItem('refreshToken')
     localStorage.removeItem('user')
+  },
+
+  loadFeatureAccess: async () => {
+    const token = get().accessToken
+    if (!token) return
+    try {
+      const data = await rawFetch('/api/me/features', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      set({ featureAccess: data as FeatureAccess })
+    } catch {
+      // Non-fatal: nav simply withholds feature buttons until this succeeds.
+      // (The server still enforces access regardless of what the nav shows.)
+    }
   },
 
   refreshAuth: async () => {
@@ -172,10 +193,12 @@ if (savedUser && savedRefresh) {
   try {
     const user = JSON.parse(savedUser)
     useAuthStore.setState({ user, refreshToken: savedRefresh })
-    // Try to refresh once
+    // Try to refresh once, then hydrate the effective-access payload for nav.
     useAuthStore.getState().refreshAuth().then(success => {
       if (!success) {
         useAuthStore.setState({ user: null })
+      } else {
+        useAuthStore.getState().loadFeatureAccess()
       }
     })
   } catch {

@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from backend.database import get_pool
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import require_capability
 from backend.services.accounting.networth import compute_net_worth, net_worth_history
 from backend.services.accounting.reconciliation import account_status, reconcile
 from backend.services.accounting.transfers import TransferLinker
@@ -85,7 +85,7 @@ def _db_error(e: Exception) -> HTTPException:
 
 # --------------------------------------------------------------------------- reads
 @router.get("/net-worth", response_model=NetWorthResponse)
-async def get_net_worth(user: dict = Depends(get_current_user)) -> NetWorthResponse:
+async def get_net_worth(user: dict = Depends(require_capability("finance.read"))) -> NetWorthResponse:
     try:
         async with get_pool().acquire() as conn:
             nw = await compute_net_worth(conn)
@@ -95,7 +95,7 @@ async def get_net_worth(user: dict = Depends(get_current_user)) -> NetWorthRespo
 
 
 @router.get("/net-worth/history", response_model=NetWorthHistoryResponse)
-async def get_net_worth_history(days: int = 365, user: dict = Depends(get_current_user)) -> NetWorthHistoryResponse:
+async def get_net_worth_history(days: int = 365, user: dict = Depends(require_capability("finance.read"))) -> NetWorthHistoryResponse:
     days = max(1, min(days, 3650))
     try:
         async with get_pool().acquire() as conn:
@@ -106,7 +106,7 @@ async def get_net_worth_history(days: int = 365, user: dict = Depends(get_curren
 
 
 @router.get("/accounts/{account_id}/status")
-async def get_account_status(account_id: str, user: dict = Depends(get_current_user)) -> dict:
+async def get_account_status(account_id: str, user: dict = Depends(require_capability("finance.read"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             return await account_status(conn, account_id)
@@ -117,7 +117,7 @@ async def get_account_status(account_id: str, user: dict = Depends(get_current_u
 
 
 @router.get("/accounts/{account_id}/reconciliations")
-async def list_reconciliations(account_id: str, user: dict = Depends(get_current_user)) -> dict:
+async def list_reconciliations(account_id: str, user: dict = Depends(require_capability("finance.read"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             rows = await conn.fetch(
@@ -133,7 +133,7 @@ async def list_reconciliations(account_id: str, user: dict = Depends(get_current
 
 # --------------------------------------------------------------------------- writes (admin)
 @router.post("/transactions/link")
-async def link_transactions(body: LinkRequest, user: dict = Depends(require_admin)) -> dict:
+async def link_transactions(body: LinkRequest, user: dict = Depends(require_capability("finance.write"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             cfg = await load_config(conn)
@@ -147,7 +147,7 @@ async def link_transactions(body: LinkRequest, user: dict = Depends(require_admi
 
 
 @router.post("/transactions/unlink")
-async def unlink_transaction(body: UnlinkRequest, user: dict = Depends(require_admin)) -> dict:
+async def unlink_transaction(body: UnlinkRequest, user: dict = Depends(require_capability("finance.write"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             return await TransferLinker(conn).unlink(body.id)
@@ -157,7 +157,7 @@ async def unlink_transaction(body: UnlinkRequest, user: dict = Depends(require_a
 
 @router.post("/accounts/{account_id}/reconcile")
 async def reconcile_account(account_id: str, body: ReconcileRequest,
-                            user: dict = Depends(require_admin)) -> dict:
+                            user: dict = Depends(require_capability("finance.write"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             return await reconcile(conn, account_id, body.statement_date, body.statement_balance)
@@ -169,7 +169,7 @@ async def reconcile_account(account_id: str, body: ReconcileRequest,
 
 @router.put("/accounts/{account_id}/type")
 async def set_account_type(account_id: str, body: SetAccountTypeRequest,
-                           user: dict = Depends(require_admin)) -> dict:
+                           user: dict = Depends(require_capability("finance.delete"))) -> dict:
     """Operational path for account_type (R4.1): accounts arrive untyped from
     SimpleFin sync; net worth flags them "needs type" until set here."""
     try:

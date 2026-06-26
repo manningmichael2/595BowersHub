@@ -6,13 +6,19 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from backend.middleware.auth import require_admin
+from backend.middleware.auth import require_admin, require_capability
 from backend.database import get_pool
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
+# Canonical assignable roles (matches authz.ROLE_RANK / bh_users CHECK). The DB
+# CHECK is the backstop; this validates before the UPDATE so a bad role is a
+# clean 400, not a 500.
+_VALID_ROLES = {"viewer", "member", "admin"}
+
 
 class UserUpdate(BaseModel):
+    model_config = {"extra": "forbid"}   # no smuggled columns into the dynamic SET
     role: Optional[str] = None
     is_active: Optional[bool] = None
     display_name: Optional[str] = None
@@ -58,34 +64,166 @@ async def list_users(user: dict = Depends(require_admin)):
 
 
 @router.patch("/users/{user_id}")
-async def update_user(user_id: int, body: UserUpdate, user: dict = Depends(require_admin)):
-    """Update a user's role or active status."""
-    updates = []
-    values = []
-    idx = 1
-    for field, value in body.model_dump(exclude_unset=True).items():
-        updates.append(f"{field} = ${idx}")
-        values.append(value)
-        idx += 1
+async def update_user(user_id: int, body: UserUpdate,
+                      user: dict = Depends(require_capability("users.manage"))):
+    """Update a user's role or active status.
 
-    if not updates:
+    Enforces the last-admin invariant (R2.1a): a role demotion or deactivation is
+    rejected with 409 if it would leave zero active admins — covering both the
+    self-demote and other-demote paths, and serializing concurrent demotions via a
+    FOR UPDATE lock on the admin rows so two can't both observe '1 remaining'."""
+    fields = body.model_dump(exclude_unset=True)
+    if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
+    if "role" in fields and fields["role"] not in _VALID_ROLES:
+        raise HTTPException(status_code=400,
+                            detail=f"role must be one of {sorted(_VALID_ROLES)}")
 
+    # Dynamic SET from Pydantic FIELD NAMES only (closed set via extra='forbid');
+    # values are always parameterized.
+    updates, values = [], []
+    for i, (field, value) in enumerate(fields.items(), start=1):
+        updates.append(f"{field} = ${i}")
+        values.append(value)
     values.append(user_id)
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Lock the current active-admin rows so concurrent demotions serialize:
+            # the second waits, then re-counts against the first's committed result.
+            await conn.execute(
+                "SELECT 1 FROM public.bh_users WHERE role='admin' AND is_active FOR UPDATE")
+            row = await conn.fetchrow(
+                f"UPDATE public.bh_users SET {', '.join(updates)} WHERE id = ${len(values)} "
+                "RETURNING id, email, display_name, role, is_active",
+                *values,
+            )
+            if not row:
+                raise HTTPException(status_code=404, detail="User not found")
+            remaining_admins = await conn.fetchval(
+                "SELECT count(*) FROM public.bh_users WHERE role='admin' AND is_active")
+            if remaining_admins == 0:
+                # Rolls back the UPDATE (exception exits the transaction block).
+                raise HTTPException(status_code=409,
+                                    detail="Cannot remove the last active admin")
+
+    from backend.middleware.audit import AuditLogger
+    await AuditLogger.log(user["id"], "modify_user", "user", user_id, fields)
+
+    return dict(row)
+
+
+# --- Capability / feature registry (NO-HARDCODING admin surface, R1.3/R5.1) ---
+
+class CapabilityUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    min_role: str
+
+
+@router.get("/capabilities")
+async def list_capabilities(user: dict = Depends(require_capability("settings.write"))):
+    """List the capability registry (capability → min_role) for retuning gates."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT capability, min_role, description, updated_at FROM public.bh_capabilities "
+            "ORDER BY capability")
+    return [dict(r) for r in rows]
+
+
+@router.patch("/capabilities/{capability}")
+async def update_capability(capability: str, body: CapabilityUpdate,
+                            user: dict = Depends(require_capability("settings.write"))):
+    """Retune a capability's min_role (R1.3). Takes effect immediately — the authz
+    cache is reloaded after the write, no restart (T-NOHARDCODE-1)."""
+    from backend.services import authz
+    if body.min_role not in _VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"min_role must be one of {sorted(_VALID_ROLES)}")
     pool = get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"UPDATE public.bh_users SET {', '.join(updates)} WHERE id = ${idx} RETURNING id, email, display_name, role, is_active",
-            *values,
-        )
+            "UPDATE public.bh_capabilities SET min_role = $1, updated_at = now(), updated_by = $2 "
+            "WHERE capability = $3 RETURNING capability, min_role, description",
+            body.min_role, user["id"], capability)
     if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Audit log
+        raise HTTPException(status_code=404, detail="Capability not found")
+    await authz.reload()   # invalidate the in-process cache so the gate changes at once
     from backend.middleware.audit import AuditLogger
-    await AuditLogger.log(user["id"], "modify_user", "user", user_id, body.model_dump(exclude_unset=True))
-
+    await AuditLogger.log(user["id"], "retune_capability", "capability", None,
+                          {"capability": capability, "min_role": body.min_role})
     return dict(row)
+
+
+@router.get("/features")
+async def list_features(user: dict = Depends(require_capability("settings.write"))):
+    """List the feature registry (feature → baseline capability + admin-only floor)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT feature_key, label, nav_routes, baseline_capability, admin_only_floor "
+            "FROM public.bh_features ORDER BY feature_key")
+    return [dict(r) for r in rows]
+
+
+# --- Per-user feature access (restrict-only, R5.2/R5.3) ----------------------
+
+class FeatureAccessUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    enabled: bool
+
+
+@router.get("/users/{user_id}/features")
+async def get_user_features(user_id: int,
+                            user: dict = Depends(require_capability("users.manage"))):
+    """The per-user enable/disable state for every feature (default enabled unless
+    an explicit disable row exists)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        if not await conn.fetchval("SELECT 1 FROM public.bh_users WHERE id = $1", user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+        feats = await conn.fetch(
+            "SELECT feature_key, label, admin_only_floor FROM public.bh_features ORDER BY feature_key")
+        override_rows = await conn.fetch(
+            "SELECT feature_key, enabled FROM public.bh_user_feature_access WHERE user_id = $1",
+            user_id)
+        overrides = {r["feature_key"]: r["enabled"] for r in override_rows}
+    return [
+        {"feature_key": f["feature_key"], "label": f["label"],
+         "admin_only_floor": f["admin_only_floor"],
+         # enabled is the effective state: only an explicit enabled=false disables.
+         "enabled": overrides.get(f["feature_key"], True)}
+        for f in feats
+    ]
+
+
+@router.put("/users/{user_id}/features/{feature_key}")
+async def set_user_feature(user_id: int, feature_key: str, body: FeatureAccessUpdate,
+                           user: dict = Depends(require_capability("users.manage"))):
+    """Enable/disable a feature for a user (restrict-only). Rejects (400) granting a
+    floored feature (e.g. database) to a non-admin — the floor can't be lifted (R5.3)."""
+    from backend.services import authz
+    feat = authz.get_features().get(feature_key)
+    if feat is None:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        target_role = await conn.fetchval(
+            "SELECT role FROM public.bh_users WHERE id = $1", user_id)
+        if target_role is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if body.enabled and feat.get("admin_only_floor") and target_role != "admin":
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{feature_key}' is admin-only — it cannot be granted to a {target_role}")
+        await conn.execute(
+            """INSERT INTO public.bh_user_feature_access (user_id, feature_key, enabled, set_by, set_at)
+               VALUES ($1, $2, $3, $4, now())
+               ON CONFLICT (user_id, feature_key)
+               DO UPDATE SET enabled = EXCLUDED.enabled, set_by = EXCLUDED.set_by, set_at = now()""",
+            user_id, feature_key, body.enabled, user["id"])
+    await authz.reload()
+    return {"user_id": user_id, "feature_key": feature_key, "enabled": body.enabled}
 
 
 @router.get("/cost")
