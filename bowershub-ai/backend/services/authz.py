@@ -19,6 +19,7 @@ an admin edit). NO-HARDCODING: a capability's min_role is a `bh_capabilities`
 row; retuning a gate is a DB edit + `reload()`, not a code change.
 """
 
+import json
 import logging
 from typing import Optional
 
@@ -102,25 +103,59 @@ class CapabilityCache:
 
 
 class FeatureCache:
-    """In-process feature registry from bh_features (R5.1). Task 9 extends this
-    with per-user overrides; for now it backs GET /features + the boot check."""
+    """In-process feature registry (bh_features) + per-user overrides
+    (bh_user_feature_access) (R5.1/R5.2/R5.3).
+
+    A capability belongs to a feature by NAMESPACE — the prefix of the feature's
+    baseline_capability (finance.read -> 'finance', db.browser -> 'db'). So
+    finance.write/delete/insight.action all map to the finance feature, and
+    db.query maps to the database feature, with no separate hardcoded table.
+    users.manage / settings.write have no feature → never feature-gated."""
 
     def __init__(self, pool):
         self._pool = pool
-        self._features: dict[str, dict] = {}   # feature_key -> row dict
+        self._features: dict[str, dict] = {}       # feature_key -> row dict
+        self._by_namespace: dict[str, str] = {}    # cap-namespace -> feature_key
+        self._disabled: dict[int, set[str]] = {}   # user_id -> {feature_key} (enabled=false)
 
     async def reload(self) -> None:
         async with self._pool.acquire() as conn:
-            rows = await conn.fetch(
+            frows = await conn.fetch(
                 "SELECT feature_key, label, nav_routes, baseline_capability, "
                 "admin_only_floor FROM public.bh_features")
-        self._features = {r["feature_key"]: dict(r) for r in rows}
+            orows = await conn.fetch(
+                "SELECT user_id, feature_key, enabled FROM public.bh_user_feature_access")
+        features, by_ns = {}, {}
+        for r in frows:
+            row = dict(r)
+            routes = row.get("nav_routes")
+            if isinstance(routes, str):       # asyncpg returns jsonb as text
+                row["nav_routes"] = json.loads(routes)
+            features[row["feature_key"]] = row
+            bc = row.get("baseline_capability")
+            if bc:
+                by_ns[bc.split(".", 1)[0]] = row["feature_key"]
+        disabled: dict[int, set[str]] = {}
+        for r in orows:
+            if not r["enabled"]:              # restrict-only: enabled=true is a no-op
+                disabled.setdefault(r["user_id"], set()).add(r["feature_key"])
+        self._features, self._by_namespace, self._disabled = features, by_ns, disabled
 
     def all_features(self) -> list[dict]:
         return list(self._features.values())
 
     def get(self, feature_key: str) -> Optional[dict]:
         return self._features.get(feature_key)
+
+    def feature_of_capability(self, capability: str) -> Optional[str]:
+        return self._by_namespace.get(capability.split(".", 1)[0])
+
+    def is_disabled_for_user(self, user_id: Optional[int], feature_key: str) -> bool:
+        return user_id is not None and feature_key in self._disabled.get(user_id, set())
+
+    def has_floor(self, feature_key: str) -> bool:
+        f = self._features.get(feature_key)
+        return bool(f and f.get("admin_only_floor"))
 
 
 # --- module singletons (mirror model_catalog.init_resolver) ------------------
@@ -162,21 +197,40 @@ async def reload() -> None:
 
 # --- the single resolver (R5.3 precedence lives only here) -------------------
 def resolve(user: dict, capability: str) -> bool:
-    """True if `user` may exercise `capability`.
+    """True if `user` may exercise `capability` — the ONLY place the R5.3
+    precedence lives:
 
-    Task 1: rank check only. Task 9 extends this — and ONLY this function — with
-    the per-user feature override and the admin-only floor (R5.3 precedence)."""
-    return rank(user.get("role")) >= get_cache().min_role_rank(capability)
+        rank(role) >= min_role(cap)                       [DB, fail-closed]
+        AND NOT feature-disabled-for-user(feature_of cap) [restrict-only]
+        AND NOT (admin_only_floor(feature) AND role<admin)[unconditional]
+    """
+    role = user.get("role")
+    if rank(role) < get_cache().min_role_rank(capability):
+        return False
+    feat = get_features().feature_of_capability(capability)
+    if feat is not None:
+        if get_features().is_disabled_for_user(user.get("id"), feat):
+            return False
+        if get_features().has_floor(feat) and rank(role) < ROLE_RANK["admin"]:
+            return False
+    return True
 
 
 def effective_access(user: dict) -> dict:
-    """Frontend effective-access payload for GET /me/features (R5.5).
-
-    Stub: role + the capabilities this user resolves. The feature list is added
-    in Task 9/10 (needs the feature registry + per-user overrides)."""
+    """Frontend effective-access payload for GET /me/features (R5.5) — the source
+    of truth the frontend consumes (it never infers permission from role)."""
     role = user.get("role")
     caps = sorted(c for c in get_cache().all_capabilities() if resolve(user, c))
-    return {"role": role, "capabilities": caps, "features": []}
+    features = []
+    for f in get_features().all_features():
+        bc = f.get("baseline_capability")
+        features.append({
+            "key": f["feature_key"],
+            "label": f["label"],
+            "routes": f.get("nav_routes") or [],
+            "permitted": resolve(user, bc) if bc else False,
+        })
+    return {"role": role, "capabilities": caps, "features": features}
 
 
 async def verify_registered_capabilities() -> None:

@@ -1,19 +1,23 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useFeatures } from '../hooks/useFeatures'
+import { isFeatureVisible } from '../lib/featureNav'
 
-const TABS = [
+const TABS: { path: string; label: string; icon: string; feature?: string }[] = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/chat', label: 'Chat', icon: '💬' },
-  { path: '/finance', label: 'Finance', icon: '💵' },
-  { path: '/db', label: 'Database', icon: '🗄️' },
+  { path: '/finance', label: 'Finance', icon: '💵', feature: 'finance' },
+  { path: '/db', label: 'Database', icon: '🗄️', feature: 'database' },
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
 export default function BottomTabBar() {
   const location = useLocation()
   const navigate = useNavigate()
+  const access = useFeatures()
+  const tabs = TABS.filter(t => !t.feature || isFeatureVisible(access, t.feature))
 
   // Determine active tab
-  const activePath = TABS.find(t => location.pathname.startsWith(t.path))?.path
+  const activePath = tabs.find(t => location.pathname.startsWith(t.path))?.path
     || (location.pathname === '/' ? '/dashboard' : '/chat')
 
   return (
@@ -25,7 +29,7 @@ export default function BottomTabBar() {
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
     >
-      {TABS.map(tab => {
+      {tabs.map(tab => {
         const isActive = activePath === tab.path
         return (
           <button

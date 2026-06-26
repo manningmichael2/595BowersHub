@@ -14,6 +14,7 @@ from backend.services.authz import (
     ROLE_RANK,
     DENY,
     CapabilityCache,
+    FeatureCache,
     _DEFAULT_CAPS,
     rank,
     resolve,
@@ -24,6 +25,18 @@ def _cache_with(min_role: dict[str, str]) -> CapabilityCache:
     c = CapabilityCache(pool=None)  # reload() not called; inject the map directly
     c._min_role = dict(min_role)
     return c
+
+
+def _empty_features() -> FeatureCache:
+    """A warmed-but-empty feature cache so resolve()'s feature step is a no-op
+    (no features → no overrides/floors) without needing a DB."""
+    f = FeatureCache(pool=None)
+    f._features, f._by_namespace, f._disabled = {}, {}, {}
+    return f
+
+
+def _use_empty_features(monkeypatch):
+    monkeypatch.setattr(authz, "_features", _empty_features())
 
 
 # --- ladder ordering ---------------------------------------------------------
@@ -47,6 +60,7 @@ def test_rank_unknown_and_none_below_viewer():
 # --- capability resolution fail-closed --------------------------------------
 def test_unknown_capability_denies_every_role(monkeypatch):
     monkeypatch.setattr(authz, "_cache", _cache_with({}))
+    _use_empty_features(monkeypatch)
     for role in ("viewer", "member", "admin", None, "superuser"):
         assert resolve({"role": role}, "nonexistent.cap") is False
 
@@ -60,6 +74,7 @@ def test_resolve_rank_threshold(monkeypatch):
     monkeypatch.setattr(authz, "_cache", _cache_with({
         "finance.read": "viewer", "finance.write": "member", "finance.delete": "admin",
     }))
+    _use_empty_features(monkeypatch)
     assert resolve({"role": "viewer"}, "finance.read") is True
     assert resolve({"role": "viewer"}, "finance.write") is False
     assert resolve({"role": "member"}, "finance.write") is True

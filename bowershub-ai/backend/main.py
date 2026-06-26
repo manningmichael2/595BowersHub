@@ -383,6 +383,9 @@ app.include_router(themes_router)
 from backend.routers.settings import router as settings_router
 app.include_router(settings_router)
 
+from backend.routers.me import router as me_router
+app.include_router(me_router)
+
 from backend.routers.briefing import router as briefing_router
 app.include_router(briefing_router)
 

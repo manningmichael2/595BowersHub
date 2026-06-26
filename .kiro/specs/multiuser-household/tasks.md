@@ -82,20 +82,20 @@
 - **Effort:** M
 - **Dependencies:** Task 8
 - **Requirements:** R5.2, R5.3
-- [ ] **Migration:** `backend/migrations/0041_user_feature_access.sql` — `bh_user_feature_access(user_id FK ON DELETE CASCADE, feature_key FK ON DELETE CASCADE, enabled bool, set_by FK→bh_users ON DELETE SET NULL, set_at, PK(user_id,feature_key))` + grants.
-- [ ] Extend `authz.resolve` to the full precedence (R5.3): `rank ≥ min_role` AND `not feature-disabled-for-user` (any `enabled=false` row subtracts; `enabled=true` is a no-op — restrict-only) AND `not (admin_only_floor AND role<admin)` (floor applied last, unconditionally). Per-user feature cache keyed by `user_id`.
-- [ ] Admin endpoints `GET/PUT /api/admin/users/{id}/features[/{key}]` (gated `users.manage`); **PUT rejects granting a floored feature (database) to a non-admin → 400**. UsersSection per-user feature toggles.
-- [ ] **Tests:** `T-FEATURE-1` (admin disables Finance for a member → nav entry gone AND `/api/finance/*` 403; re-enable restores both); `T-FLOOR-1` (override cannot grant `database` to a member — still 403).
+- [x] **Migration:** `backend/migrations/0041_user_feature_access.sql` — `bh_user_feature_access(user_id FK ON DELETE CASCADE, feature_key FK ON DELETE CASCADE, enabled bool, set_by FK→bh_users ON DELETE SET NULL, set_at, PK(user_id,feature_key))` + grants.
+- [x] Extend `authz.resolve` to the full precedence (R5.3): `rank ≥ min_role` AND `not feature-disabled-for-user` (any `enabled=false` row subtracts; `enabled=true` is a no-op — restrict-only) AND `not (admin_only_floor AND role<admin)` (floor applied last, unconditionally). Per-user feature cache keyed by `user_id`.
+- [x] Admin endpoints `GET/PUT /api/admin/users/{id}/features[/{key}]` (gated `users.manage`); **PUT rejects granting a floored feature (database) to a non-admin → 400**. UsersSection per-user feature toggles.
+- [x] **Tests:** `T-FEATURE-1` (admin disables Finance for a member → nav entry gone AND `/api/finance/*` 403; re-enable restores both); `T-FLOOR-1` (override cannot grant `database` to a member — still 403).
 
 ## Task 10: Role-aware frontend + effective-access API + cosmetic self-hide
 - **Effort:** M
 - **Dependencies:** Task 9
 - **Requirements:** R3.1, R3.2, R5.4, R5.5
-- [ ] `GET /api/me/features` returns `authz.effective_access(user)` — `{role, capabilities, features:[{key,label,routes,permitted}]}` (R5.5 source of truth; frontend never infers permission from role).
-- [ ] Frontend: `hooks/useHasRole.ts` (NEW; `useIsAdmin` becomes a `useHasRole('admin')` shim) and `hooks/useFeatures.ts` (consumes `/me/features`); `stores/auth.ts` stores + refreshes the payload (R3.1).
-- [ ] Nav (`TopNav.tsx`, `BottomTabBar.tsx`, `Sidebar.tsx`): a feature button shows iff `permitted (server) AND not self-hidden`; admin-gate the **Database** tab (and Finance when feature-disabled). Finance write affordances hidden/disabled for viewer (R3.2).
-- [ ] Cosmetic self-hide (R5.4): `PUT /api/me/settings/nav` → `settings_json.hidden_nav` (**never 403s on access**; validated to list only permitted features); profile UI lists only features from `/me/features`.
-- [ ] **Tests:** `T-COSMETIC-1` (self-hidden Finance still 200 on direct GET — cosmetic-only; another user's nav unaffected); vitest — `useHasRole` thresholds; nav computes from `/me/features ∩ settings_json`, never role alone; self-hidden feature still routable.
+- [x] `GET /api/me/features` returns `authz.effective_access(user)` — `{role, capabilities, features:[{key,label,routes,permitted}]}` (R5.5 source of truth; frontend never infers permission from role).
+- [x] Frontend: `hooks/useHasRole.ts` (NEW; `useIsAdmin` becomes a `useHasRole('admin')` shim) and `hooks/useFeatures.ts` (consumes `/me/features`); `stores/auth.ts` stores + refreshes the payload (R3.1).
+- [x] Nav (`TopNav.tsx`, `BottomTabBar.tsx`, `Sidebar.tsx`): a feature button shows iff `permitted (server) AND not self-hidden`; admin-gate the **Database** tab (and Finance when feature-disabled). Finance write affordances hidden/disabled for viewer (R3.2).
+- [x] Cosmetic self-hide (R5.4): `PUT /api/me/settings/nav` → `settings_json.hidden_nav` (**never 403s on access**; validated to list only permitted features); profile UI lists only features from `/me/features`.
+- [x] **Tests:** `T-COSMETIC-1` (self-hidden Finance still 200 on direct GET — cosmetic-only; another user's nav unaffected); vitest — `useHasRole` thresholds; nav computes from `/me/features ∩ settings_json`, never role alone; self-hidden feature still routable.
 
 ## Definition of Done
 

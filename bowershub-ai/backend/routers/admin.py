@@ -166,6 +166,66 @@ async def list_features(user: dict = Depends(require_capability("settings.write"
     return [dict(r) for r in rows]
 
 
+# --- Per-user feature access (restrict-only, R5.2/R5.3) ----------------------
+
+class FeatureAccessUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    enabled: bool
+
+
+@router.get("/users/{user_id}/features")
+async def get_user_features(user_id: int,
+                            user: dict = Depends(require_capability("users.manage"))):
+    """The per-user enable/disable state for every feature (default enabled unless
+    an explicit disable row exists)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        if not await conn.fetchval("SELECT 1 FROM public.bh_users WHERE id = $1", user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+        feats = await conn.fetch(
+            "SELECT feature_key, label, admin_only_floor FROM public.bh_features ORDER BY feature_key")
+        override_rows = await conn.fetch(
+            "SELECT feature_key, enabled FROM public.bh_user_feature_access WHERE user_id = $1",
+            user_id)
+        overrides = {r["feature_key"]: r["enabled"] for r in override_rows}
+    return [
+        {"feature_key": f["feature_key"], "label": f["label"],
+         "admin_only_floor": f["admin_only_floor"],
+         # enabled is the effective state: only an explicit enabled=false disables.
+         "enabled": overrides.get(f["feature_key"], True)}
+        for f in feats
+    ]
+
+
+@router.put("/users/{user_id}/features/{feature_key}")
+async def set_user_feature(user_id: int, feature_key: str, body: FeatureAccessUpdate,
+                           user: dict = Depends(require_capability("users.manage"))):
+    """Enable/disable a feature for a user (restrict-only). Rejects (400) granting a
+    floored feature (e.g. database) to a non-admin — the floor can't be lifted (R5.3)."""
+    from backend.services import authz
+    feat = authz.get_features().get(feature_key)
+    if feat is None:
+        raise HTTPException(status_code=404, detail="Feature not found")
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        target_role = await conn.fetchval(
+            "SELECT role FROM public.bh_users WHERE id = $1", user_id)
+        if target_role is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if body.enabled and feat.get("admin_only_floor") and target_role != "admin":
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{feature_key}' is admin-only — it cannot be granted to a {target_role}")
+        await conn.execute(
+            """INSERT INTO public.bh_user_feature_access (user_id, feature_key, enabled, set_by, set_at)
+               VALUES ($1, $2, $3, $4, now())
+               ON CONFLICT (user_id, feature_key)
+               DO UPDATE SET enabled = EXCLUDED.enabled, set_by = EXCLUDED.set_by, set_at = now()""",
+            user_id, feature_key, body.enabled, user["id"])
+    await authz.reload()
+    return {"user_id": user_id, "feature_key": feature_key, "enabled": body.enabled}
+
+
 @router.get("/cost")
 async def cost_dashboard(
     days: int = Query(default=7, ge=1, le=90),
