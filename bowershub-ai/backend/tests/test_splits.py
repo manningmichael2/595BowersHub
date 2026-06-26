@@ -18,9 +18,11 @@ from backend.middleware.auth import get_current_user
 from backend.routers.finance_review import router as review_router
 from backend.services.splits import create_split, get_allocations, unsplit
 from backend.tests.semantic_helpers import apply_migrations
+from backend.services import authz
 
 _ADMIN = {"id": 1, "email": "o@x", "display_name": "O", "role": "admin", "is_active": True}
 _MEMBER = {"id": 2, "email": "m@x", "display_name": "M", "role": "member", "is_active": True}
+_VIEWER = {"id": 3, "email": "v@x", "display_name": "V", "role": "viewer", "is_active": True}
 
 
 def _client(user) -> httpx.AsyncClient:
@@ -33,6 +35,7 @@ def _client(user) -> httpx.AsyncClient:
 @pytest_asyncio.fixture
 async def seeded(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
+    await authz.init_authz(pool)  # require_capability gates need the warmed cache
     async with pool.acquire() as conn:
         # Seed _ADMIN/_MEMBER so split attribution (updated_by/created_by FK) holds.
         for uid, email, name, role in [
@@ -100,11 +103,12 @@ async def test_unsplit_restores(seeded):
 @pytest.mark.asyncio
 async def test_split_api_rbac_and_validation(seeded):
     c0, c1 = seeded["cats"]
-    async with _client(_MEMBER) as c:
+    # finance.write=member (0039): a viewer is denied; a member can split.
+    async with _client(_VIEWER) as c:
         r = await c.post("/api/finance/transactions/T100/split",
                          json={"allocations": [{"category_id": c0, "amount": -60}, {"category_id": c1, "amount": -40}]})
     assert r.status_code == 403
-    async with _client(_ADMIN) as c:
+    async with _client(_MEMBER) as c:
         r = await c.post("/api/finance/transactions/T100/split",
                          json={"allocations": [{"category_id": c0, "amount": -60}, {"category_id": c1, "amount": -40}]})
         assert r.status_code == 200 and r.json()["children"] == 2

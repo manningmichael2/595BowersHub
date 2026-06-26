@@ -1,9 +1,10 @@
 """Typed Finance Review write API (R4).
 
 Backs the Finance Review frontend (Task 12) and shares the same service layer the
-chat skills use (R4.4). Every WRITE endpoint requires `Depends(require_admin)` —
-`get_current_user` + an explicit owner/admin role check (MN4); the system is
-single-owner today. Reads require an authenticated user.
+chat skills use (R4.4). Every WRITE endpoint requires `require_capability("finance.write")`
+and every READ `require_capability("finance.read")` (multiuser-household Task 3) —
+the capability resolves role rank + per-user feature access + the admin floor in
+one chokepoint (authz.resolve), so a finance-disabled user is 403'd on reads too.
 
 Pydantic request/response models throughout — no `any` at the boundary (C6/R4.4).
 DB-unavailable surfaces as a typed 503, never a partial write.
@@ -19,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.database import get_pool
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import require_capability
 from backend.services.categorization.config import load_config
 from backend.services.categorization.learning import record_correction
 from backend.services.categorization.rules import apply_rule_to_existing
@@ -142,7 +143,7 @@ async def _category_exists(conn, category_id: int) -> bool:
 # --------------------------------------------------------------------------- read
 @router.get("/review-queue", response_model=ReviewQueueResponse)
 async def get_review_queue(limit: int = 100, offset: int = 0,
-                           user: dict = Depends(get_current_user)) -> ReviewQueueResponse:
+                           user: dict = Depends(require_capability("finance.read"))) -> ReviewQueueResponse:
     """R4.1: uncategorized + below-threshold + "transfer?" items, each annotated
     with the latest decision-log prediction (category + confidence + rationale)."""
     limit = max(1, min(limit, 500))
@@ -190,7 +191,7 @@ async def get_review_queue(limit: int = 100, offset: int = 0,
 
 
 @router.get("/recurring", response_model=RecurringResponse)
-async def get_recurring(user: dict = Depends(get_current_user)) -> RecurringResponse:
+async def get_recurring(user: dict = Depends(require_capability("finance.read"))) -> RecurringResponse:
     """R4.5: recurring charges — ≥ min_occurrences for a merchant_key, amounts
     within tolerance, with the average cadence. Live read-time query at this
     (single-household) volume; tolerances are DB config."""
@@ -218,7 +219,7 @@ async def get_recurring(user: dict = Depends(get_current_user)) -> RecurringResp
 
 
 @router.get("/categories", response_model=list[CategoryOption])
-async def list_categories(user: dict = Depends(get_current_user)) -> list[CategoryOption]:
+async def list_categories(user: dict = Depends(require_capability("finance.read"))) -> list[CategoryOption]:
     """Category list for the review-UI correction dropdown (R4.1/R4.3)."""
     try:
         pool = get_pool()
@@ -232,7 +233,7 @@ async def list_categories(user: dict = Depends(get_current_user)) -> list[Catego
 
 
 @router.get("/user-rules", response_model=list[UserRuleModel])
-async def list_user_rules(user: dict = Depends(get_current_user)) -> list[UserRuleModel]:
+async def list_user_rules(user: dict = Depends(require_capability("finance.read"))) -> list[UserRuleModel]:
     try:
         pool = get_pool()
         async with pool.acquire() as conn:
@@ -257,7 +258,7 @@ async def list_user_rules(user: dict = Depends(get_current_user)) -> list[UserRu
 # --------------------------------------------------------------------------- writes (RBAC)
 @router.post("/transactions/{transaction_id}/categorize", response_model=CategorizeResponse)
 async def categorize_transaction(transaction_id: str, body: CategorizeRequest,
-                                 user: dict = Depends(require_admin)) -> CategorizeResponse:
+                                 user: dict = Depends(require_capability("finance.write"))) -> CategorizeResponse:
     """R4.3: a human correction is authoritative — sets user_category_override and
     reinforces merchant_memory so it sticks (R3)."""
     try:
@@ -296,7 +297,7 @@ async def categorize_transaction(transaction_id: str, body: CategorizeRequest,
 
 @router.post("/transactions/bulk-categorize", response_model=BulkCategorizeResponse)
 async def bulk_categorize(body: BulkCategorizeRequest,
-                          user: dict = Depends(require_admin)) -> BulkCategorizeResponse:
+                          user: dict = Depends(require_capability("finance.write"))) -> BulkCategorizeResponse:
     """R4.2: multi-select bulk apply. One transaction so the batch is all-or-nothing."""
     try:
         pool = get_pool()
@@ -335,7 +336,7 @@ async def bulk_categorize(body: BulkCategorizeRequest,
 
 @router.post("/merchants/{merchant_key}/apply-category", response_model=ApplyMerchantResponse)
 async def apply_merchant_category(merchant_key: str, body: ApplyMerchantRequest,
-                                  user: dict = Depends(require_admin)) -> ApplyMerchantResponse:
+                                  user: dict = Depends(require_capability("finance.write"))) -> ApplyMerchantResponse:
     """R3.3/R4.3: gated mass-recategorization — apply a category to every
     (non-overridden) transaction for a merchant, reinforce learning, optionally set
     the directory prior and mint a rule. Each rewrite is logged with prior_category_id
@@ -386,7 +387,7 @@ async def apply_merchant_category(merchant_key: str, body: ApplyMerchantRequest,
 
 @router.post("/user-rules", response_model=CreateUserRuleResponse)
 async def create_user_rule(body: CreateUserRuleRequest,
-                           user: dict = Depends(require_admin)) -> CreateUserRuleResponse:
+                           user: dict = Depends(require_capability("finance.write"))) -> CreateUserRuleResponse:
     try:
         pool = get_pool()
         async with pool.acquire() as conn:
@@ -414,7 +415,7 @@ async def create_user_rule(body: CreateUserRuleRequest,
 
 
 @router.delete("/user-rules/{rule_id}")
-async def delete_user_rule(rule_id: int, user: dict = Depends(require_admin)) -> dict:
+async def delete_user_rule(rule_id: int, user: dict = Depends(require_capability("finance.write"))) -> dict:
     try:
         pool = get_pool()
         async with pool.acquire() as conn:
@@ -440,7 +441,7 @@ class SplitRequest(BaseModel):
 
 @router.post("/transactions/{txn_id}/split")
 async def split_transaction(txn_id: str, body: SplitRequest,
-                            user: dict = Depends(require_admin)) -> dict:
+                            user: dict = Depends(require_capability("finance.write"))) -> dict:
     from backend.services.splits import create_split
     try:
         pool = get_pool()
@@ -456,7 +457,7 @@ async def split_transaction(txn_id: str, body: SplitRequest,
 
 
 @router.post("/transactions/{txn_id}/unsplit")
-async def unsplit_transaction(txn_id: str, user: dict = Depends(require_admin)) -> dict:
+async def unsplit_transaction(txn_id: str, user: dict = Depends(require_capability("finance.write"))) -> dict:
     from backend.services.splits import unsplit
     try:
         pool = get_pool()
@@ -468,7 +469,7 @@ async def unsplit_transaction(txn_id: str, user: dict = Depends(require_admin)) 
 
 @router.get("/transactions/{txn_id}/allocations")
 async def get_transaction_allocations(txn_id: str,
-                                      user: dict = Depends(get_current_user)) -> dict:
+                                      user: dict = Depends(require_capability("finance.read"))) -> dict:
     from backend.services.splits import get_allocations
     try:
         pool = get_pool()

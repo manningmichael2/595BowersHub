@@ -19,9 +19,11 @@ from backend.middleware.auth import get_current_user
 from backend.routers.finance_accounting import router as acct_router
 from backend.services.accounting.reconciliation import account_status, reconcile
 from backend.tests.semantic_helpers import apply_migrations
+from backend.services import authz
 
 _ADMIN = {"id": 1, "email": "o@x", "display_name": "Owner", "role": "admin", "is_active": True}
 _MEMBER = {"id": 2, "email": "m@x", "display_name": "Member", "role": "member", "is_active": True}
+_VIEWER = {"id": 3, "email": "v@x", "display_name": "Viewer", "role": "viewer", "is_active": True}
 
 
 def _client(user) -> httpx.AsyncClient:
@@ -34,6 +36,7 @@ def _client(user) -> httpx.AsyncClient:
 @pytest_asyncio.fixture
 async def seeded(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
+    await authz.init_authz(pool)  # require_capability gates need the warmed cache
     async with pool.acquire() as conn:
         chk = await conn.fetchval(
             "INSERT INTO finance.accounts (id, org_name, account_name, account_type, last_balance, last_balance_date) "
@@ -84,12 +87,13 @@ async def test_set_account_type_rbac(seeded):
 
 
 @pytest.mark.asyncio
-async def test_reconcile_endpoint_admin_only(seeded):
-    async with _client(_MEMBER) as c:
+async def test_reconcile_endpoint_is_finance_write(seeded):
+    # reconcile is finance.write=member (0039): a viewer is denied, a member allowed.
+    async with _client(_VIEWER) as c:
         r = await c.post("/api/finance/accounts/ACT-chk/reconcile",
                          json={"statement_date": str(date.today()), "statement_balance": 1000.0})
     assert r.status_code == 403
-    async with _client(_ADMIN) as c:
+    async with _client(_MEMBER) as c:
         r = await c.post("/api/finance/accounts/ACT-chk/reconcile",
                          json={"statement_date": str(date.today()), "statement_balance": 1000.0})
     assert r.status_code == 200 and r.json()["in_sync"] is True

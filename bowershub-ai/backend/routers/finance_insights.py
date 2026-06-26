@@ -14,7 +14,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.database import get_pool
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import require_capability
 from backend.services.finance_insights import store
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ _STATUSES = {"active", "dismissed", "actioned"}
 
 
 @router.get("/insights")
-async def list_insights(status: str = "active", user: dict = Depends(get_current_user)) -> dict:
+async def list_insights(status: str = "active", user: dict = Depends(require_capability("finance.read"))) -> dict:
     if status != "all" and status not in _STATUSES:
         raise HTTPException(status_code=400, detail=f"invalid status; one of {sorted(_STATUSES)} or 'all'")
     try:
@@ -59,7 +59,7 @@ async def _mutate(insight_id: int, fn) -> dict:
 
 
 @router.post("/insights/dismiss-all")
-async def dismiss_all_insights(user: dict = Depends(require_admin)) -> dict:
+async def dismiss_all_insights(user: dict = Depends(require_capability("finance.insight.action"))) -> dict:
     """Dismiss every active insight at once — clears the queue in one call."""
     try:
         async with get_pool().acquire() as conn:
@@ -71,22 +71,22 @@ async def dismiss_all_insights(user: dict = Depends(require_admin)) -> dict:
 
 
 @router.post("/insights/{insight_id}/dismiss")
-async def dismiss_insight(insight_id: int, user: dict = Depends(require_admin)) -> dict:
+async def dismiss_insight(insight_id: int, user: dict = Depends(require_capability("finance.insight.action"))) -> dict:
     return await _mutate(insight_id, store.dismiss)
 
 
 @router.post("/insights/{insight_id}/reopen")
-async def reopen_insight(insight_id: int, user: dict = Depends(require_admin)) -> dict:
+async def reopen_insight(insight_id: int, user: dict = Depends(require_capability("finance.insight.action"))) -> dict:
     return await _mutate(insight_id, store.reopen)
 
 
 @router.post("/insights/{insight_id}/action")
-async def action_insight(insight_id: int, user: dict = Depends(require_admin)) -> dict:
+async def action_insight(insight_id: int, user: dict = Depends(require_capability("finance.insight.action"))) -> dict:
     return await _mutate(insight_id, store.mark_actioned)
 
 
 @router.get("/insights/runs/latest")
-async def latest_run(user: dict = Depends(require_admin)) -> dict:
+async def latest_run(user: dict = Depends(require_capability("finance.read"))) -> dict:
     try:
         async with get_pool().acquire() as conn:
             row = await conn.fetchrow(

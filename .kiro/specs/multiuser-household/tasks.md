@@ -29,10 +29,10 @@
 - **Effort:** L
 - **Dependencies:** Task 1, Task 2
 - **Requirements:** R1.4, R3.3
-- [ ] Swap `Depends(require_admin)` → `Depends(require_capability(...))` on every finance write per the enumerated table in `design.md` §API (categorize/bulk/split/unsplit/user-rules/budgets/retirement-inputs → `finance.write`; insight dismiss/action/reopen/dismiss-all → `finance.insight.action` [resolves the D2 vs `require_admin` contradiction]; account delete / account-type → `finance.delete`). Handler bodies unchanged (dependency still yields `user: dict`).
-- [ ] Wrap finance **reads** and read-only POSTs (`/finance/qa`, `/rules/parse`, retirement `/project`,`/scenarios/compare`, all finance GETs) in `require_capability("finance.read")` so an admin feature-disable (Task 9) also blocks reads (R5.2 truthfulness).
-- [ ] Viewer is read-only end-to-end across these endpoints (R3.3).
-- [ ] **Tests:** **T-AUDIT-1** mechanical route-audit — introspect the FastAPI route table; every mutating route under `/api/finance|/api/retirement|/api/admin` **and every route (read+write) under `/api/db`** must carry a `require_capability`/`require_role` dependency (bare `get_current_user` fails). Two-account matrix at this stage: caps still admin-seeded ⇒ only admin passes (behavior identical to pre-change), proving the wiring grants nothing new before relaxation.
+- [x] Swap `Depends(require_admin)` → `Depends(require_capability(...))` on every finance write per the enumerated table in `design.md` §API (categorize/bulk/split/unsplit/user-rules/budgets/retirement-inputs → `finance.write`; insight dismiss/action/reopen/dismiss-all → `finance.insight.action` [resolves the D2 vs `require_admin` contradiction]; account delete / account-type → `finance.delete`). Handler bodies unchanged (dependency still yields `user: dict`).
+- [x] Wrap finance **reads** and read-only POSTs (`/finance/qa`, `/rules/parse`, retirement `/project`,`/scenarios/compare`, all finance GETs) in `require_capability("finance.read")` so an admin feature-disable (Task 9) also blocks reads (R5.2 truthfulness).
+- [x] Viewer is read-only end-to-end across these endpoints (R3.3).
+- [x] **Tests:** **T-AUDIT-1** mechanical route-audit — introspect the FastAPI route table; every mutating route under `/api/finance|/api/retirement|/api/admin` **and every route (read+write) under `/api/db`** must carry a `require_capability`/`require_role` dependency (bare `get_current_user` fails). Two-account matrix at this stage: caps still admin-seeded ⇒ only admin passes (behavior identical to pre-change), proving the wiring grants nothing new before relaxation.
 
 ## Task 4: WebSocket per-message live-user enforcement
 - **Effort:** M
