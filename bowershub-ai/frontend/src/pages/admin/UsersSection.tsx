@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { api } from '../../services/api'
+import { toast } from '../../stores/toast'
 import { useEndpointData, SectionStateGuard } from './AdminCommon'
+
+const ROLES = ['admin', 'member', 'viewer']
 
 export default function UsersSection() {
   const { data, isLoading, error, reload } = useEndpointData<any[]>('/api/admin/users')
   const [showInvite, setShowInvite] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [role, setRole] = useState('member')
+  const [savingId, setSavingId] = useState<number | null>(null)
 
   const createInvite = async () => {
     try {
@@ -14,6 +18,25 @@ export default function UsersSection() {
       setInviteUrl(res.data.invite_url)
     } catch (err: any) {
       alert('Failed to create invite: ' + (err.response?.data?.detail || 'Unknown error'))
+    }
+  }
+
+  // PATCH a user's role or active status. Surfaces the last-admin 409 (R2.1a) as
+  // a clear toast rather than a silent failure; reloads on success.
+  const patchUser = async (userId: number, patch: { role?: string; is_active?: boolean }) => {
+    setSavingId(userId)
+    try {
+      await api.patch(`/api/admin/users/${userId}`, patch)
+      await reload()
+    } catch (err: any) {
+      const detail = err.response?.data?.detail
+      toast.error(
+        err.response?.status === 409
+          ? (detail || 'Cannot remove the last active admin')
+          : `Failed to update user: ${detail || 'Unknown error'}`,
+      )
+    } finally {
+      setSavingId(null)
     }
   }
 
@@ -112,16 +135,29 @@ export default function UsersSection() {
                     <td className="px-4 py-3 text-gray-300">{u.email}</td>
                     <td className="px-4 py-3 text-gray-300">{u.display_name}</td>
                     <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">
-                        {u.role}
-                      </span>
+                      <select
+                        aria-label={`Role for ${u.email}`}
+                        value={u.role}
+                        disabled={savingId === u.id}
+                        onChange={e => patchUser(u.id, { role: e.target.value })}
+                        className="bg-[#1a1a2e] border border-gray-700 rounded px-2 py-1 text-xs disabled:opacity-50"
+                      >
+                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`text-xs ${u.is_active ? 'text-green-400' : 'text-red-400'}`}
+                      <button
+                        disabled={savingId === u.id}
+                        onClick={() => patchUser(u.id, { is_active: !u.is_active })}
+                        title={u.is_active ? 'Deactivate user' : 'Reactivate user'}
+                        className={`text-xs px-2 py-0.5 rounded border disabled:opacity-50 ${
+                          u.is_active
+                            ? 'text-green-400 border-green-900 hover:bg-green-900/30'
+                            : 'text-red-400 border-red-900 hover:bg-red-900/30'
+                        }`}
                       >
                         {u.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
                       {u.last_login_at

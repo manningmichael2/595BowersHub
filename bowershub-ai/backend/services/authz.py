@@ -101,16 +101,42 @@ class CapabilityCache:
         return merged
 
 
-# --- module singleton (mirrors model_catalog.init_resolver) ------------------
+class FeatureCache:
+    """In-process feature registry from bh_features (R5.1). Task 9 extends this
+    with per-user overrides; for now it backs GET /features + the boot check."""
+
+    def __init__(self, pool):
+        self._pool = pool
+        self._features: dict[str, dict] = {}   # feature_key -> row dict
+
+    async def reload(self) -> None:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT feature_key, label, nav_routes, baseline_capability, "
+                "admin_only_floor FROM public.bh_features")
+        self._features = {r["feature_key"]: dict(r) for r in rows}
+
+    def all_features(self) -> list[dict]:
+        return list(self._features.values())
+
+    def get(self, feature_key: str) -> Optional[dict]:
+        return self._features.get(feature_key)
+
+
+# --- module singletons (mirror model_catalog.init_resolver) ------------------
 _cache: Optional[CapabilityCache] = None
+_features: Optional[FeatureCache] = None
 
 
 async def init_authz(pool) -> CapabilityCache:
-    """Warm the capability cache in lifespan (after migrations)."""
-    global _cache
+    """Warm the capability + feature caches in lifespan (after migrations)."""
+    global _cache, _features
     _cache = CapabilityCache(pool)
     await _cache.reload()
-    logger.info(f"authz capabilities warmed: {len(_cache._min_role)} rows")
+    _features = FeatureCache(pool)
+    await _features.reload()
+    logger.info(f"authz warmed: {len(_cache._min_role)} capabilities, "
+                f"{len(_features._features)} features")
     return _cache
 
 
@@ -120,10 +146,18 @@ def get_cache() -> CapabilityCache:
     return _cache
 
 
+def get_features() -> FeatureCache:
+    if _features is None:
+        raise RuntimeError("authz not initialized — call init_authz(pool) in lifespan")
+    return _features
+
+
 async def reload() -> None:
-    """Rebuild the capability cache after an admin edit (R1.3)."""
+    """Rebuild the capability + feature caches after an admin edit (R1.3)."""
     if _cache is not None:
         await _cache.reload()
+    if _features is not None:
+        await _features.reload()
 
 
 # --- the single resolver (R5.3 precedence lives only here) -------------------
@@ -156,4 +190,17 @@ async def verify_registered_capabilities() -> None:
         raise SystemExit(
             "authz boot self-check failed — require_capability gates reference "
             f"capabilities with no bh_capabilities row: {missing}"
+        )
+
+    # Every feature's baseline_capability must resolve to a real capability —
+    # catches a typo'd seed the 0040 FK wouldn't (the FK allows NULL, and a
+    # capability could be dropped later). Features warmed alongside caps.
+    bad_features = sorted(
+        f["feature_key"] for f in get_features().all_features()
+        if f.get("baseline_capability") and f["baseline_capability"] not in known
+    )
+    if bad_features:
+        raise SystemExit(
+            "authz boot self-check failed — bh_features.baseline_capability does not "
+            f"resolve to a bh_capabilities row for: {bad_features}"
         )

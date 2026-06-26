@@ -11,6 +11,7 @@ import { useAuthStore } from '../stores/auth'
 
 // Sections
 import UsersSection from './admin/UsersSection'
+import CapabilitiesSection from './admin/CapabilitiesSection'
 import WorkspacesSection from './admin/WorkspacesSection'
 import SkillsSection from './admin/SkillsSection'
 import SlashCommandsSection from './admin/SlashCommandsSection'
@@ -33,6 +34,7 @@ interface SectionDef {
 
 const SECTIONS: SectionDef[] = [
   { slug: 'users', label: 'Users', icon: '👥' },
+  { slug: 'capabilities', label: 'Capabilities', icon: '🔐' },
   { slug: 'workspaces', label: 'Workspaces', icon: '🏠' },
   { slug: 'skills', label: 'Skills', icon: '🔧' },
   { slug: 'commands', label: 'Slash Commands', icon: '⌨️' },
@@ -138,6 +140,7 @@ export default function AdminConsolePage() {
             <Routes>
               <Route index element={<Navigate to="users" replace />} />
               <Route path="users" element={<UsersSection />} />
+              <Route path="capabilities" element={<CapabilitiesSection />} />
               <Route path="workspaces" element={<WorkspacesSection />} />
               <Route path="skills" element={<SkillsSection />} />
               <Route path="commands" element={<SlashCommandsSection />} />

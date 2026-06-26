@@ -19,7 +19,7 @@ class LoginResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: str = Field(..., description="User email address")
-    password: str = Field(..., min_length=8, description="Password (min 8 chars)")
+    password: str = Field(..., min_length=10, description="Password (min 10 chars — R2.3)")
     display_name: str = Field(..., min_length=1, max_length=100)
     invite_token: str = Field(..., description="Invite token from admin")
 

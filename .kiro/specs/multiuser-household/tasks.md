@@ -54,29 +54,29 @@
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R2.1
-- [ ] Wire the existing `PATCH /api/admin/users/{id}` (`admin.py:60`) into `frontend/src/pages/admin/UsersSection.tsx`: role `<select>` + activate/deactivate. Users are deactivate-only (no hard delete, D7).
-- [ ] **Last-admin invariant (R2.1a):** in `update_user`, run the UPDATE + `SELECT count(*) … WHERE role='admin' AND is_active` inside one `conn.transaction()` with `FOR UPDATE` (or a txn-scoped advisory lock) so concurrent demotions serialize; roll back + **409** if the post-change count would be 0 (covers self/other demote+deactivate). Validate `role ∈ {viewer,member,admin}` before the UPDATE (CHECK is the backstop); confirm the dynamic-SQL builder still interpolates only field names, never values.
-- [ ] **Tests:** `T-ADMIN-1` — demote/deactivate last admin (self + other) → 409; two concurrent last-admin demotions → exactly one succeeds; frontend role-edit/deactivate flow.
+- [x] Wire the existing `PATCH /api/admin/users/{id}` (`admin.py:60`) into `frontend/src/pages/admin/UsersSection.tsx`: role `<select>` + activate/deactivate. Users are deactivate-only (no hard delete, D7).
+- [x] **Last-admin invariant (R2.1a):** in `update_user`, run the UPDATE + `SELECT count(*) … WHERE role='admin' AND is_active` inside one `conn.transaction()` with `FOR UPDATE` (or a txn-scoped advisory lock) so concurrent demotions serialize; roll back + **409** if the post-change count would be 0 (covers self/other demote+deactivate). Validate `role ∈ {viewer,member,admin}` before the UPDATE (CHECK is the backstop); confirm the dynamic-SQL builder still interpolates only field names, never values.
+- [x] **Tests:** `T-ADMIN-1` — demote/deactivate last admin (self + other) → 409; two concurrent last-admin demotions → exactly one succeeds; frontend role-edit/deactivate flow.
 
 ## Task 7: Provisioning hardening — invites, reset, password policy, member seeding
 - **Effort:** M
 - **Dependencies:** Task 1, Task 6
 - **Requirements:** R2.2, R2.3, R2.4, R2.5, R2.6
-- [ ] Invite-revoke + admin reset-link in `routers/auth.py` (where `bh_invite_links`/`bh_password_reset_tokens` machinery lives), gated `require_capability("users.manage")`: `POST /api/auth/invites/{id}/revoke` (R2.2), `POST /api/auth/users/{id}/reset-link` (R2.4). Verify invite tokens are `secrets.token_urlsafe`, single-use, time-boxed (R2.2).
-- [ ] Password policy (R2.3): min length **10** + reject a small in-code common-password list, applied at **both** the register/set-password path (the `len<8` check in `register`, ~`auth.py:115`) and the reset path (`auth.py:259`).
-- [ ] `register` seeds the new user as `member` of the designated default/shared workspace, transactionally (R2.5; finance is global, not workspace-gated). Verify the workspace add/remove-member UI is reachable.
-- [ ] First-admin `display_name` from `Config.ADMIN_DISPLAY_NAME` (fallback: email local-part), replacing the hardcoded `"Michael"` at `services/auth.py:241` (R2.6).
-- [ ] **Tests:** invite revoke prevents register; reset-link rotates password; password policy rejects <10 / common; new member lands in a workspace; admin display_name from env.
+- [x] Invite-revoke + admin reset-link in `routers/auth.py` (where `bh_invite_links`/`bh_password_reset_tokens` machinery lives), gated `require_capability("users.manage")`: `POST /api/auth/invites/{id}/revoke` (R2.2), `POST /api/auth/users/{id}/reset-link` (R2.4). Verify invite tokens are `secrets.token_urlsafe`, single-use, time-boxed (R2.2).
+- [x] Password policy (R2.3): min length **10** + reject a small in-code common-password list, applied at **both** the register/set-password path (the `len<8` check in `register`, ~`auth.py:115`) and the reset path (`auth.py:259`).
+- [x] `register` seeds the new user as `member` of the designated default/shared workspace, transactionally (R2.5; finance is global, not workspace-gated). Verify the workspace add/remove-member UI is reachable.
+- [x] First-admin `display_name` from `Config.ADMIN_DISPLAY_NAME` (fallback: email local-part), replacing the hardcoded `"Michael"` at `services/auth.py:241` (R2.6).
+- [x] **Tests:** invite revoke prevents register; reset-link rotates password; password policy rejects <10 / common; new member lands in a workspace; admin display_name from env.
 
 ## Task 8: Capability/feature admin CRUD + feature registry + cache invalidation (end-to-end NO-HARDCODING)
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R1.3, R5.1
-- [ ] **Migration:** `backend/migrations/0040_features_registry.sql` — `bh_features(feature_key PK, label, nav_routes jsonb, baseline_capability FK→bh_capabilities, admin_only_floor bool)` + seed `finance` (floor=false) and `database` (floor=true) + `GRANT SELECT … TO bowershub_app`.
-- [ ] Admin endpoints in `admin.py`, gated `require_capability("settings.write")`, each calling `authz.reload()` after a write: `GET/PATCH /api/admin/capabilities[/{cap}]` (retune a gate), `GET /api/admin/features`.
-- [ ] Extend the boot self-check to validate every `bh_features.baseline_capability` resolves to a real capability (catches a typo'd seed the FK wouldn't).
-- [ ] Admin UI: a capabilities section to view/retune `min_role`.
-- [ ] **Tests:** `T-NOHARDCODE-1` — retune `finance.write` admin→member via the API and confirm a member gains access **without a restart** (cache invalidation end-to-end); revert restores 403.
+- [x] **Migration:** `backend/migrations/0040_features_registry.sql` — `bh_features(feature_key PK, label, nav_routes jsonb, baseline_capability FK→bh_capabilities, admin_only_floor bool)` + seed `finance` (floor=false) and `database` (floor=true) + `GRANT SELECT … TO bowershub_app`.
+- [x] Admin endpoints in `admin.py`, gated `require_capability("settings.write")`, each calling `authz.reload()` after a write: `GET/PATCH /api/admin/capabilities[/{cap}]` (retune a gate), `GET /api/admin/features`.
+- [x] Extend the boot self-check to validate every `bh_features.baseline_capability` resolves to a real capability (catches a typo'd seed the FK wouldn't).
+- [x] Admin UI: a capabilities section to view/retune `min_role`.
+- [x] **Tests:** `T-NOHARDCODE-1` — retune `finance.write` admin→member via the API and confirm a member gains access **without a restart** (cache invalidation end-to-end); revert restores 403.
 
 ## Task 9: Per-user feature access — enforced, restrict-only (admin show/hide)
 - **Effort:** M

@@ -39,6 +39,27 @@ class AuthService:
         """Verify a password against its bcrypt hash."""
         return bcrypt.checkpw(password.encode(), password_hash.encode())
 
+    # --- Password policy (R2.3) — enforced at BOTH register and reset ---
+
+    MIN_PASSWORD_LENGTH = 10
+    # A small in-code denylist of the most-guessed passwords. Not exhaustive — a
+    # cheap guard against the obvious, applied on top of the length minimum.
+    _COMMON_PASSWORDS = frozenset({
+        "password", "password1", "password12", "passw0rd", "12345678", "123456789",
+        "1234567890", "qwertyuiop", "qwerty123", "letmein123", "iloveyou1",
+        "admin1234", "welcome123", "changeme123", "bowershub1", "1q2w3e4r5t",
+    })
+
+    @classmethod
+    def check_password_policy(cls, password: str) -> Optional[str]:
+        """Return an error message if `password` violates policy, else None.
+        Used by both the register and reset paths so the rule lives in one place."""
+        if len(password) < cls.MIN_PASSWORD_LENGTH:
+            return f"Password must be at least {cls.MIN_PASSWORD_LENGTH} characters."
+        if password.lower() in cls._COMMON_PASSWORDS:
+            return "Password is too common — choose something less guessable."
+        return None
+
     # --- JWT tokens ---
 
     def generate_access_token(self, user_id: int, email: str, role: str) -> str:
@@ -227,6 +248,55 @@ class AuthService:
                 user_id, token,
             )
 
+    async def revoke_invite(self, invite_id: int) -> bool:
+        """Revoke an unused invite (R2.2) by expiring it immediately — use_invite's
+        existing expiry check then rejects it. Returns False if it doesn't exist or
+        was already used (nothing to revoke)."""
+        async with self.pool.acquire() as conn:
+            res = await conn.execute(
+                """UPDATE public.bh_invite_links
+                   SET expires_at = now()
+                   WHERE id = $1 AND used_by IS NULL AND expires_at > now()""",
+                invite_id,
+            )
+        return res.endswith(" 1")
+
+    async def create_invited_user(self, email: str, password: str, display_name: str,
+                                  role: str, workspace_id: int) -> dict:
+        """Create an invited user AND seed their membership of `workspace_id` in a
+        SINGLE transaction (R2.5) — finance is global, but a workspace membership is
+        what makes the chat UI usable. Either both rows commit or neither does."""
+        password_hash = self.hash_password(password)
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """INSERT INTO public.bh_users (email, password_hash, display_name, role)
+                       VALUES ($1, $2, $3, $4)
+                       RETURNING id, email, display_name, role, is_active, created_at, last_login_at""",
+                    email, password_hash, display_name, role,
+                )
+                await conn.execute(
+                    """INSERT INTO public.bh_workspace_users (workspace_id, user_id, role)
+                       VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING""",
+                    workspace_id, row["id"],
+                )
+        return dict(row)
+
+    async def create_password_reset_token(self, user_id: int) -> str:
+        """Mint a one-time, time-boxed password-reset token for `user_id` and return
+        the RAW token (only its hash is stored). Backs the admin reset-link (R2.4) —
+        same machinery as the self-service email flow."""
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO public.bh_password_reset_tokens (user_id, token_hash, expires_at)
+                   VALUES ($1, $2, $3)""",
+                user_id, token_hash, expires_at,
+            )
+        return raw_token
+
     # --- First-run admin seed ---
 
     async def ensure_admin_exists(self):
@@ -235,10 +305,12 @@ class AuthService:
             count = await conn.fetchval("SELECT COUNT(*) FROM public.bh_users")
 
         if count == 0 and self.config.ADMIN_PASSWORD:
+            # R2.6: no hardcoded owner name — from env, else the email local-part.
+            display_name = self.config.ADMIN_DISPLAY_NAME or self.config.ADMIN_EMAIL.split("@")[0]
             user = await self.create_user(
                 email=self.config.ADMIN_EMAIL,
                 password=self.config.ADMIN_PASSWORD,
-                display_name="Michael",
+                display_name=display_name,
                 role="admin",
             )
             # Assign admin to all workspaces
