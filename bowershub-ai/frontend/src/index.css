@@ -21,7 +21,7 @@
   --color-surface: #1a1a2e;
   --color-surface-light: #16213e;
   --color-surface-dark: #0f0f1a;
-  --color-primary: #6366f1;
+  --color-primary: #4f46e5;
   --color-accent: #818cf8;
   --color-text: #e5e7eb;
   --color-text-muted: #94a3b8;
@@ -32,8 +32,8 @@
   --color-warning: #eab308;
   /* Foreground aliases (R1.3) — Dark Navy first-paint defaults; App.tsx
      recomputes them per theme (text-based reuse text; colored use max-contrast
-     black/white, hence #000 on the indigo primary — 4.70:1 vs white's 4.47). */
-  --color-on-primary: #000000;
+     black/white). on-primary is white over indigo-600 (#4f46e5 → 6.29:1). */
+  --color-on-primary: #ffffff;
   --color-on-background: #e5e7eb;
   --color-on-surface: #e5e7eb;
   --color-on-muted: #e5e7eb;
@@ -55,7 +55,7 @@
   --color-surface-rgb: 26 26 46;
   --color-surface-light-rgb: 22 33 62;
   --color-surface-dark-rgb: 15 15 26;
-  --color-primary-rgb: 99 102 241;
+  --color-primary-rgb: 79 70 229;
   --color-accent-rgb: 129 140 248;
   --color-text-rgb: 229 231 235;
   --color-text-muted-rgb: 148 163 184;
@@ -64,7 +64,7 @@
   --color-error-rgb: 239 68 68;
   --color-success-rgb: 34 197 94;
   --color-warning-rgb: 234 179 8;
-  --color-on-primary-rgb: 0 0 0;
+  --color-on-primary-rgb: 255 255 255;
   --color-on-background-rgb: 229 231 235;
   --color-on-surface-rgb: 229 231 235;
   --color-on-muted-rgb: 229 231 235;
