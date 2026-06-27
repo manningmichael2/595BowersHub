@@ -1104,3 +1104,20 @@ Implemented Phase 1 (Tasks 1–3) on `spec/design-system-and-shell`, each commit
 **State:** `tsc` clean; **282 frontend tests** (255 baseline → +27); migrations `0043`+`0044` verified applying `0001`→`0044` on a throwaway `pgvector/pgvector:pg16`. Branch not yet merged to `main`.
 
 - [Next] **Phase 2 — primitives layer (`components/ui/`)**, Tasks 4–9: scaffold + hand-rolled (Button/Card/Input/Badge via cva), Radix chrome, themed toast, state primitives, React Aria finance widgets (lazy), a11y/matchMedia test baseline. Then P3 shell, P4 surface migration. Legacy `z-[9999]`/etc. call-sites migrate onto the named z-index scale during P2/P3.
+
+---
+
+## [2026-06-27] design-system-and-shell — Phase 2 (primitives layer) complete — Claude Code
+
+Built the owned `components/ui/` primitives layer (Tasks 4–9) on `spec/design-system-and-shell`, each committed + verified. Phase 1 was merged to `main` (`0e84fec`) before this.
+
+- **T4 (`022d5be`)** — scaffold: `cn()` (clsx+tailwind-merge) + hand-rolled `Button`/`Card`/`Input`/`Textarea`/`Badge`/`Label`/`Separator` (cva variants on the theme tokens + R1.5 scales). Barrel `index.ts` is the single import surface. Deps: cva, tailwind-merge, clsx.
+- **T5 (`7761717`)** — Radix chrome: `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`, `Select`, `Tabs`, `Switch`, `ScrollArea`, token-styled, z-index/elevation scales. **`ConfirmDialog` re-pointed onto Radix `AlertDialog`** (confirm store API unchanged) — Radix now owns focus-trap/ESC/scroll-lock. Test harness gained `matchMedia`(+`setMatchMedia`), pointer-capture, scrollIntoView shims.
+- **T6 (`310113f`)** — themed toast: `Toaster` off `bg-red/green/neutral-*` → `bg-danger/success/surface` + `on-*` foregrounds + Lucide icons; action button tinted via alpha-composable `on-*` tokens. **Closes the C6 global-toast tail.**
+- **T7 (`fbcb156`)** — state primitives: `Spinner`/`Skeleton`/`EmptyState`/`ErrorState` (the "couldn't load — Retry" affordance)/`FieldError`.
+- **T8 (`4c6975d`)** — React Aria finance widgets: `CurrencyInput`/`Combobox`/`DatePicker`/`DateRangePicker`/`DataGrid` in a **separate `components/ui/finance/` barrel, deliberately NOT re-exported from `components/ui`** → bundle-isolation verified (react-aria absent from the build; loads only in the lazy finance chunk when P4 wires it). Deps: react-aria-components, @internationalized/date.
+- **T9 (`53ca8bd`)** — a11y baseline: `vitest-axe` assertions over accessible primitive compositions; matchMedia drives both responsive branches. (Contrast across 10 presets already covered in T2.)
+
+**State:** `tsc` clean; **320 frontend tests** (282 after Phase 1 → +38); build green. Branch `spec/design-system-and-shell` ahead of `main` by the Phase 2 commits (Phase 1 already merged).
+
+- [Next] **Phase 3 — unified app shell** (Tasks 10–13): shell layout route + canonical breakpoint + `App.tsx` route refactor (own revertable commit, chat = regression gate) → desktop nav rail + contextual top bar + offset consolidation → mobile chrome → nav gating/safe-area/hotkeys. Then P4 surface migration (where the primitives/state-primitives/finance-widgets get wired into real pages, legacy `z-[9999]` + hardcoded palettes get migrated, and the React-Aria bundle ceiling is re-checked).
