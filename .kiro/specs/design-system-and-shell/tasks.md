@@ -11,10 +11,10 @@
 - **Effort:** L
 - **Dependencies:** none
 - **Requirements:** R1.1, R1.4, R1.6
-- [ ] Add `hexToTriple()` + `REQUIRED_TOKENS`/`hexToTriple` to a new `frontend/src/lib/themeTokens.ts`; keep `bh_themes.tokens_json` as **hex** (no DB format migration).
-- [ ] In `App.tsx` injection effect (`:42-110`), convert every injected color (incl. `surface-light`/`surface-dark` and the luminance-computed `on-primary`) to a space-separated `"R G B"` triple before `setProperty`.
-- [ ] In `tailwind.config.ts`, map every `colors` entry to `rgb(var(--color-x) / <alpha-value>)`; convert `index.css` `:root` first-paint defaults (`:20-33`) to triples.
-- [ ] **Wrap every direct color consumer** of `var(--color-*)` in `rgb(...)`: grep `var(--color-` across `frontend/src/**` + `index.css` (`.bh-*` rules, `App.tsx` Suspense inline styles, TopNav/ChatHeader/BottomTabBar/ConfirmDialog/db-browser inline styles) and fix each. This is the blast-radius of the format switch (R1.1: no second token authority introduced).
+- [x] Add `hexToTriple()` + `setColorVar()` to a new `frontend/src/lib/themeTokens.ts`; keep `bh_themes.tokens_json` as **hex** (no DB format migration).
+- [x] **Revised approach (Strategy B).** Implementation found **837 direct `var(--color-*)` usages across 59 files** — too large/risky to wrap in place. Instead of converting `--color-X` to a triple, keep `--color-X` as the full color (hex) and *additionally* inject a derived `--color-X-rgb` triple. So existing direct consumers need **zero edits** (they still read a full color), and Tailwind reads the `-rgb` triple. The triple is derived from the same `bh_themes` hex at injection (R1.1: a representation, not a second authority — like the existing `on-primary`/`surface-light` derivations).
+- [x] In `App.tsx` injection effect, set both vars per token via `setColorVar(root, cssVar, value)` (incl. `surface-light`/`surface-dark` and the luminance-computed `on-primary`).
+- [x] In `tailwind.config.ts`, map every `colors` entry to `rgb(var(--color-x-rgb) / <alpha-value>)`; add the `-rgb` triple first-paint defaults to `index.css` `:root` (Dark Navy), full-color hex defaults retained.
 - [ ] Confirm primitives/shell size **type** with scaling `text-*` (resolving to `--bh-text-base`) and **layout** with fixed-rem utilities; no hardcoded px font-size (R1.6).
 - [ ] **Tests:** unit `hexToTriple`; a **rendered** alpha assertion (computed style, not class compilation) proving `bg-primary/<n>` now renders its tint and the two known-broken call-sites (`MessageList`, `SearchOverlay`) render correctly; full-opacity color unchanged (`rgb(R G B / 1)` === old hex); exercise all four `--bh-text-base` levels for no overflow. `npx tsc --noEmit` clean.
 

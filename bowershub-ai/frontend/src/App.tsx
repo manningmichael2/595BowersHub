@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
+import { setColorVar } from './lib/themeTokens'
 import AppShell from './components/AppShell'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -84,18 +85,22 @@ function App() {
     const root = document.documentElement
     const tokens = effectiveTheme.tokens_json
     if (!tokens) return
+    // `setColorVar` sets both the full-color var (consumed by inline styles /
+    // index.css) AND a derived `--color-<name>-rgb` channel triple (consumed
+    // by the Tailwind utilities so `bg-primary/20` etc. compose alpha). See
+    // lib/themeTokens.ts.
     for (const [tokenKey, cssVar] of TOKEN_TO_CSS_VAR) {
       const value = tokens[tokenKey]
       if (typeof value === 'string' && value.length > 0) {
-        root.style.setProperty(cssVar, value)
+        setColorVar(root, cssVar, value)
       }
     }
     // Mirror `surface` to its light/dark convenience variants so any
     // surface-* utilities (used by older chrome) follow the active theme
     // instead of staying frozen at the index.css defaults.
     if (typeof tokens.surface === 'string') {
-      root.style.setProperty('--color-surface-light', tokens.surface)
-      root.style.setProperty('--color-surface-dark', tokens.background || tokens.surface)
+      setColorVar(root, '--color-surface-light', tokens.surface)
+      setColorVar(root, '--color-surface-dark', tokens.background || tokens.surface)
     }
 
     // Compute --color-on-primary: text color to use ON TOP of bg-primary.
@@ -107,7 +112,7 @@ function App() {
       const b = parseInt(hex.slice(4, 6), 16) / 255
       // Relative luminance (sRGB)
       const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-      root.style.setProperty('--color-on-primary', lum > 0.5 ? '#111111' : '#ffffff')
+      setColorVar(root, '--color-on-primary', lum > 0.5 ? '#111111' : '#ffffff')
     }
   }, [effectiveTheme])
 

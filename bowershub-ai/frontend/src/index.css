@@ -31,6 +31,29 @@
   --color-success: #22c55e;
   --color-warning: #eab308;
   --color-on-primary: #ffffff;
+
+  /*
+   * Derived channel triples for the Tailwind color utilities
+   * (rgb(var(--color-<name>-rgb) / <alpha-value>)). App.tsx recomputes these
+   * from the active theme's hex via lib/themeTokens.ts; these first-paint
+   * defaults match the Dark Navy hex values above so Tailwind utilities
+   * resolve correctly before /api/settings loads. Not a second source of
+   * authority — a derived representation of the same tokens.
+   */
+  --color-background-rgb: 15 15 26;
+  --color-surface-rgb: 26 26 46;
+  --color-surface-light-rgb: 22 33 62;
+  --color-surface-dark-rgb: 15 15 26;
+  --color-primary-rgb: 99 102 241;
+  --color-accent-rgb: 129 140 248;
+  --color-text-rgb: 229 231 235;
+  --color-text-muted-rgb: 148 163 184;
+  --color-border-rgb: 55 65 81;
+  --color-danger-rgb: 239 68 68;
+  --color-error-rgb: 239 68 68;
+  --color-success-rgb: 34 197 94;
+  --color-warning-rgb: 234 179 8;
+  --color-on-primary-rgb: 255 255 255;
 }
 
 /*

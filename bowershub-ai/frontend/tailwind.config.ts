@@ -7,25 +7,32 @@ export default {
     extend: {
       colors: {
         // Theme tokens — backed by CSS custom properties set on :root by
-        // the settings store from `effective_theme.tokens_json`.
-        // Defaults live in index.css so the very first paint (before the
-        // settings API resolves) uses the Dark Navy preset.
-        background: 'var(--color-background)',
+        // App.tsx from `effective_theme.tokens_json`. Defaults live in
+        // index.css so the very first paint (before the settings API
+        // resolves) uses the Dark Navy preset.
+        //
+        // Each color reads the DERIVED `--color-<name>-rgb` channel triple
+        // (set alongside the hex `--color-<name>` by App.tsx via
+        // lib/themeTokens.ts) and is wrapped in `rgb(… / <alpha-value>)` so
+        // Tailwind opacity modifiers (`bg-primary/20`, `border-border/40`)
+        // compose alpha — which is impossible against a hex-valued var in
+        // Tailwind v3. Full-opacity colors are unchanged.
+        background: 'rgb(var(--color-background-rgb) / <alpha-value>)',
         surface: {
-          DEFAULT: 'var(--color-surface)',
-          light: 'var(--color-surface-light)',
-          dark: 'var(--color-surface-dark)',
+          DEFAULT: 'rgb(var(--color-surface-rgb) / <alpha-value>)',
+          light: 'rgb(var(--color-surface-light-rgb) / <alpha-value>)',
+          dark: 'rgb(var(--color-surface-dark-rgb) / <alpha-value>)',
         },
-        primary: 'var(--color-primary)',
-        accent: 'var(--color-accent)',
-        'on-primary': 'var(--color-on-primary)',
+        primary: 'rgb(var(--color-primary-rgb) / <alpha-value>)',
+        accent: 'rgb(var(--color-accent-rgb) / <alpha-value>)',
+        'on-primary': 'rgb(var(--color-on-primary-rgb) / <alpha-value>)',
         text: {
-          DEFAULT: 'var(--color-text)',
-          muted: 'var(--color-text-muted)',
+          DEFAULT: 'rgb(var(--color-text-rgb) / <alpha-value>)',
+          muted: 'rgb(var(--color-text-muted-rgb) / <alpha-value>)',
         },
-        border: 'var(--color-border)',
-        danger: 'var(--color-danger)',
-        success: 'var(--color-success)',
+        border: 'rgb(var(--color-border-rgb) / <alpha-value>)',
+        danger: 'rgb(var(--color-danger-rgb) / <alpha-value>)',
+        success: 'rgb(var(--color-success-rgb) / <alpha-value>)',
 
         // Existing palette retained for backward compat with components
         // written before the token system. New code should prefer the
