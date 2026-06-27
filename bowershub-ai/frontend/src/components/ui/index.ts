@@ -22,6 +22,13 @@ export { Badge, badgeVariants, type BadgeProps } from './Badge'
 export { Label } from './Label'
 export { Separator, type SeparatorProps } from './Separator'
 
+// State primitives (R2.6)
+export { Spinner, type SpinnerProps } from './Spinner'
+export { Skeleton } from './Skeleton'
+export { EmptyState, type EmptyStateProps } from './EmptyState'
+export { ErrorState, type ErrorStateProps } from './ErrorState'
+export { FieldError } from './FieldError'
+
 // Radix-backed chrome primitives (R2.2)
 export * from './Dialog'
 export * from './AlertDialog'

@@ -69,8 +69,8 @@
 - **Effort:** M
 - **Dependencies:** Task 4
 - **Requirements:** R2.6
-- [ ] Add `Spinner`, `Skeleton`, `EmptyState`, `ErrorState` (carrying the "couldn't load — Retry" affordance), `FieldError`. Route the existing store `error` fields / Retry affordances through `ErrorState` rather than hand-rolling per surface.
-- [ ] **Tests:** ErrorState Retry invokes the callback; render tests; axe assertions.
+- [x] Added `Spinner` (role=status, reduced-motion aware), `Skeleton`, `EmptyState` (icon/title/description/action), `ErrorState` (the "couldn't load — Retry" affordance, reuses `Button`), `FieldError` (renders null when empty). All tokenized.
+- [x] **Tests:** `statePrimitives.test.tsx` (6) — Spinner label, Skeleton pulse, EmptyState content, ErrorState retry fires / omitted when no handler, FieldError empty-vs-populated. (Routing the existing store `error` fields through `ErrorState` happens during P4 surface migration; axe assertions added in T9.)
 
 ## Task 8: React Aria finance widgets (lazy, finance-chunk only)
 - **Effort:** L
