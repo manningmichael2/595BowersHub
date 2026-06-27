@@ -62,6 +62,57 @@ export default {
           900: '#1a237e',
         },
       },
+
+      // ---- Non-color design scales (R1.5) -------------------------------
+      // Code-level design constants (NOT user-facing config / DB rows) — the
+      // dimensions the app lacked, applied consistently by the primitives so
+      // call-sites inherit a coherent rhythm. Distinct from the DB-driven
+      // *color* tokens above.
+
+      // Single-knob radius family off `--radius` (index.css). shadcn-pattern,
+      // so vendored components inherit it. Chosen so lg/md/xl match the prior
+      // Tailwind defaults (8/6/12px); only `sm` shifts 2px→4px (imperceptible).
+      borderRadius: {
+        sm: 'calc(var(--radius) - 4px)',
+        md: 'calc(var(--radius) - 2px)',
+        lg: 'var(--radius)',
+        xl: 'calc(var(--radius) + 4px)',
+      },
+
+      // Elevation scale — additive new keys (shadow-elevation-1..4).
+      boxShadow: {
+        'elevation-1': '0 1px 2px 0 rgb(0 0 0 / 0.06)',
+        'elevation-2': '0 2px 8px -2px rgb(0 0 0 / 0.12)',
+        'elevation-3': '0 8px 24px -4px rgb(0 0 0 / 0.18)',
+        'elevation-4': '0 16px 48px -8px rgb(0 0 0 / 0.28)',
+      },
+
+      // Motion tokens — paired with the prefers-reduced-motion collapse in
+      // index.css (durations there go to ~0).
+      transitionDuration: {
+        fast: '120ms',
+        base: '200ms',
+        slow: '320ms',
+      },
+      transitionTimingFunction: {
+        standard: 'cubic-bezier(0.2, 0, 0, 1)',
+        emphasized: 'cubic-bezier(0.3, 0, 0, 1)',
+      },
+
+      // Named layering scale — replaces the scattered z-[9999]/z-[10000]/
+      // z-[998]/z-30/z-50 free-for-all. base < shell chrome < portals
+      // (dropdown/popover/tooltip) < modals/dialogs < toasts.
+      zIndex: {
+        base: '0',
+        shell: '30',
+        dropdown: '40',
+        modal: '50',
+        toast: '60',
+      },
+
+      // Note: `tabular-nums` for monetary/figure alignment is a built-in
+      // Tailwind utility (fontVariantNumeric) — no config needed; primitives
+      // and finance figure displays apply it directly.
     },
   },
   plugins: [],

@@ -32,10 +32,11 @@
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R1.5
-- [ ] Add to `tailwind.config.ts` (code-level design constants, **not** DB rows): radius family (`sm/md/lg/xl`), `boxShadow` `elevation-1..4`, `transitionDuration`+`transitionTimingFunction` motion tokens, a **named `zIndex` scale** (`base < shell < dropdown < modal < toast`) replacing the `z-[9999]`/`z-[10000]`/`z-[998]`/`z-30`/`z-50` ad-hoc values, and a tabular-nums utility.
-- [ ] Add a global `@media (prefers-reduced-motion: reduce)` rule in `index.css` collapsing motion tokens to no-op.
-- [ ] Keep spacing on the 4px base; avoid arbitrary `px-[14px]` (use scale steps).
-- [ ] **Tests:** snapshot/unit that the z-index scale orders correctly (portal < modal < toast); reduced-motion query collapses transitions; `tsc --noEmit` clean.
+- [x] Added to `tailwind.config.ts` (code-level constants): single-knob radius family (`sm/md/lg/xl` off `--radius`, shadcn-pattern; lg/md/xl match prior Tailwind defaults so only `rounded-sm` shifts 2→4px), `boxShadow` `elevation-1..4`, `transitionDuration` (`fast/base/slow`) + `transitionTimingFunction` (`standard/emphasized`), and the named `zIndex` scale (`base 0 < shell 30 < dropdown 40 < modal 50 < toast 60`). `tabular-nums` is a built-in Tailwind utility — no config; applied at call-sites.
+- [x] Added the global `@media (prefers-reduced-motion: reduce)` collapse in `index.css` (app had none); near-0 durations so `transitionend`/`animationend` still fire. Added `--radius: 0.5rem` base var.
+- [x] Spacing stays on the 4px base (Tailwind default); no scale override.
+- [x] **Tests:** `designScales.test.ts` (7 tests) — imports `tailwind.config.ts` and asserts z-index strict ordering, elevation/radius/motion keys present; reads `index.css` and asserts the reduced-motion collapse + `--radius`. `tsc --noEmit` clean; 282 frontend tests; build compiles the radius family.
+- [Note] Legacy `z-[9999]`/`z-[10000]`/etc. call-sites are migrated onto the named scale in P2/P3 (where the portals/modals/toasts are rebuilt); T3 only establishes the scale.
 
 ---
 

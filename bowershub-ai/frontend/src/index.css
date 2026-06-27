@@ -97,6 +97,9 @@
  */
 :root {
   --bh-text-base: 17px;
+  /* Single-knob base radius for the design-system radius family (R1.5);
+     consumed by tailwind.config.ts borderRadius (sm/md/lg/xl). */
+  --radius: 0.5rem;
 }
 
 .bh-text-small,
@@ -208,6 +211,23 @@ textarea::placeholder {
 .markdown-content th { background: #1e293b; font-weight: 600; }
 .markdown-content blockquote { border-left: 3px solid #6366f1; padding-left: 1rem; margin: 0.5rem 0; color: #94a3b8; }
 .markdown-content a { color: #818cf8; text-decoration: underline; }
+
+/*
+ * Reduced-motion (R1.5). The app had zero reduced-motion handling; this
+ * collapses all transitions/animations to near-instant for users who request
+ * it, while leaving layout/colors intact. Near-0 (not 0) so transitionend /
+ * animationend handlers still fire.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* Typing indicator animation */
 @keyframes typing-dot {
