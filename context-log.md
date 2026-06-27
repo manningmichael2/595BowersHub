@@ -1089,3 +1089,18 @@ Drove the `design-system-and-shell` spec to completion on `spec/design-system-an
 - Backend migration the spec introduces: `0043_theme_warning_error_tokens.sql` (backfills `warning`/`error` into the 10 preset `bh_themes` rows — they're frozen today; R1.2). Frontend deps to add: per-primitive `@radix-ui/react-*`, `react-aria-components` (lazy finance chunk only), `class-variance-authority`, `tailwind-merge`, `clsx`.
 
 - [Next] Implementation is a separate effort — work tasks one at a time, each verified against its DoD. **T1 (alpha-composable token format) is highest-risk** (the `var(--color-*)`→`rgb(var(...))` wrap touches many files) and carries a rendered-alpha verification gate. Spec on `spec/design-system-and-shell`; merge to `main` so Kiro sees it.
+
+---
+
+## [2026-06-27] design-system-and-shell — Phase 1 (token foundation) implemented — Claude Code
+
+Implemented Phase 1 (Tasks 1–3) on `spec/design-system-and-shell`, each committed + verified.
+
+- **T1 — alpha-composable tokens (`f692e0a`).** Tailwind v3 can't compose alpha against hex-valued vars, so `bg-primary/20` + ~40 token-opacity modifiers (incl. `MessageList`, `SearchOverlay`) silently rendered full-opacity. **Strategy B (revised from the design's in-place conversion):** discovered 837 direct `var(--color-*)` usages across 59 files — too risky to wrap. Instead keep `--color-X` as the full color and *additionally* inject a derived `--color-X-rgb` triple (`lib/themeTokens.ts` `setColorVar`); tailwind maps colors to `rgb(var(--color-X-rgb) / <alpha-value>)`. Zero direct-consumer edits; full-opacity colors unchanged. Verified in *compiled CSS* (13 alpha rules now emit, were 0).
+- **T2 — token contract + warning/error + foreground aliases (`3689458`).** `ThemeTokensSchema` is now an 11-key contract (`.catchall(string)`), `normalizeThemeTokens()` guarantees no undefined (`error`→`danger`). `warning`/`error` were frozen (index.css-only) — now real tokens, backfilled into all 10 presets by **migration `0043`** (per-theme). `on-*` foreground aliases derived via `readableForeground()` (max-WCAG-contrast), ≥4.5:1 across all 10 presets.
+- **Option 3 — indigo primary → indigo-600 (`40f7e6b`, migration `0044`).** indigo-500 `#6366f1` couldn't carry AA-normal text (white 4.47, would force black labels). Darkened Dark Navy + OLED Black primary to `#4f46e5` → white-on-primary 6.29:1 (conventional + AA-clean). Owner-approved.
+- **T3 — non-color design scales (`6e43ab1`).** radius family (single `--radius` knob, shadcn-pattern), `elevation-1..4`, motion duration/easing tokens, named z-index scale (`base<shell<dropdown<modal<toast`), global `prefers-reduced-motion` collapse (app had none). Code-level constants, not DB rows.
+
+**State:** `tsc` clean; **282 frontend tests** (255 baseline → +27); migrations `0043`+`0044` verified applying `0001`→`0044` on a throwaway `pgvector/pgvector:pg16`. Branch not yet merged to `main`.
+
+- [Next] **Phase 2 — primitives layer (`components/ui/`)**, Tasks 4–9: scaffold + hand-rolled (Button/Card/Input/Badge via cva), Radix chrome, themed toast, state primitives, React Aria finance widgets (lazy), a11y/matchMedia test baseline. Then P3 shell, P4 surface migration. Legacy `z-[9999]`/etc. call-sites migrate onto the named z-index scale during P2/P3.
