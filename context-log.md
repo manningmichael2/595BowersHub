@@ -1075,3 +1075,32 @@ Owner feedback: the app "looks and feels home built… doesn't feel hearty and s
 **Decision — layout/IA (for the spec):** promote the chat's shell concept to **one app-wide shell**. Desktop: persistent **left nav rail** (icon+label, collapsible) as primary nav + a *contextual* top bar (page title, global search, account menu, page actions). Mobile: keep the bottom tab bar (best-implemented piece) + secondary nav as scrollable segmented control / bottom sheet. Every section renders inside it via `<Outlet>`; `navItems.ts` is the nav source it consumes.
 
 - [Next] **`/spec design-system-and-shell`** (slug free; not among the 16 existing specs). Treat as a **deep** feature (touches routing + every page layout → run the design tournament). Two coupled deliverables: (1) primitives layer, (2) unified app shell. **Constraints to feed research:** respect the DB-driven theme-token system (no second source of truth for color/spacing); NO-HARDCODING; PWA; the `--bh-text-base` font-scaling override in `index.css`; the React-Aria-for-finance question. **Already done, don't re-plan:** the icon/token/confirm/nav-source quick-wins above (`navItems.ts` is the single nav source the shell will consume).
+
+---
+
+## [2026-06-27] `/spec design-system-and-shell` — full spec authored (requirements → design → tasks) — Claude Code
+
+Drove the `design-system-and-shell` spec to completion on `spec/design-system-and-shell`. Owner sequencing decision: **finish the UI/shell work before resuming the finance north star** — wants finance features used as-is for now and the heavy new finance UI built once on a stable shell, not on half-migrated chrome (see `ui-before-finance-priority` memory).
+
+- **Requirements** (`requirements.md`) were drafted in the 2026-06-26 session; reviewed + approved this session. 26 requirements across 4 features: token foundation (R1), primitives layer (R2), unified app shell (R3), surface migration + parity safety (R4).
+- **Design** (`design.md`) — deep feature; the tournament's three lenses are folded into the synthesis (each major decision names the winning lens). Key calls: (1) **token format = inject-time hex→channel-triple, DB stays hex** (minimal-change; satisfies R1.4 alpha-composability — `bg-primary/20` is silently broken today — without storing triples in the DB or touching ThemeBuilder; cost = wrap every direct `var(--color-*)` color consumer in `rgb(...)`); (2) **shell = a React-Router layout route via `<Outlet/>`** (ideal-arch); (3) **route refactor lands as its own revertable commit, chat as the named regression gate** (risk-first); (4) **one canonical breakpoint** closes the current 640–767px mixed-chrome band (nav switches at `sm`, chat sidebar at `md`). Grounded against `App.tsx:42-110`/`:176-224`, `tailwind.config`, `index.css:20-33`, `AppShell.tsx:32,55`, `bh_themes` seed in `0001_baseline.sql`.
+- **Open question recorded** (not blocking): global-search scope — design/tasks assume "existing chat/knowledge search made **reachable everywhere**, scope unchanged"; cross-domain search would be its own feature.
+- **Tasks** (`tasks.md`) — 15 tasks along the mandated P1→P2→P3→P4 phase order (deps chain the phases so structural changes never interleave with per-surface migration). `spec-validate.py` → **26/26 covered, fully traceable**.
+- Backend migration the spec introduces: `0043_theme_warning_error_tokens.sql` (backfills `warning`/`error` into the 10 preset `bh_themes` rows — they're frozen today; R1.2). Frontend deps to add: per-primitive `@radix-ui/react-*`, `react-aria-components` (lazy finance chunk only), `class-variance-authority`, `tailwind-merge`, `clsx`.
+
+- [Next] Implementation is a separate effort — work tasks one at a time, each verified against its DoD. **T1 (alpha-composable token format) is highest-risk** (the `var(--color-*)`→`rgb(var(...))` wrap touches many files) and carries a rendered-alpha verification gate. Spec on `spec/design-system-and-shell`; merge to `main` so Kiro sees it.
+
+---
+
+## [2026-06-27] design-system-and-shell — Phase 1 (token foundation) implemented — Claude Code
+
+Implemented Phase 1 (Tasks 1–3) on `spec/design-system-and-shell`, each committed + verified.
+
+- **T1 — alpha-composable tokens (`f692e0a`).** Tailwind v3 can't compose alpha against hex-valued vars, so `bg-primary/20` + ~40 token-opacity modifiers (incl. `MessageList`, `SearchOverlay`) silently rendered full-opacity. **Strategy B (revised from the design's in-place conversion):** discovered 837 direct `var(--color-*)` usages across 59 files — too risky to wrap. Instead keep `--color-X` as the full color and *additionally* inject a derived `--color-X-rgb` triple (`lib/themeTokens.ts` `setColorVar`); tailwind maps colors to `rgb(var(--color-X-rgb) / <alpha-value>)`. Zero direct-consumer edits; full-opacity colors unchanged. Verified in *compiled CSS* (13 alpha rules now emit, were 0).
+- **T2 — token contract + warning/error + foreground aliases (`3689458`).** `ThemeTokensSchema` is now an 11-key contract (`.catchall(string)`), `normalizeThemeTokens()` guarantees no undefined (`error`→`danger`). `warning`/`error` were frozen (index.css-only) — now real tokens, backfilled into all 10 presets by **migration `0043`** (per-theme). `on-*` foreground aliases derived via `readableForeground()` (max-WCAG-contrast), ≥4.5:1 across all 10 presets.
+- **Option 3 — indigo primary → indigo-600 (`40f7e6b`, migration `0044`).** indigo-500 `#6366f1` couldn't carry AA-normal text (white 4.47, would force black labels). Darkened Dark Navy + OLED Black primary to `#4f46e5` → white-on-primary 6.29:1 (conventional + AA-clean). Owner-approved.
+- **T3 — non-color design scales (`6e43ab1`).** radius family (single `--radius` knob, shadcn-pattern), `elevation-1..4`, motion duration/easing tokens, named z-index scale (`base<shell<dropdown<modal<toast`), global `prefers-reduced-motion` collapse (app had none). Code-level constants, not DB rows.
+
+**State:** `tsc` clean; **282 frontend tests** (255 baseline → +27); migrations `0043`+`0044` verified applying `0001`→`0044` on a throwaway `pgvector/pgvector:pg16`. Branch not yet merged to `main`.
+
+- [Next] **Phase 2 — primitives layer (`components/ui/`)**, Tasks 4–9: scaffold + hand-rolled (Button/Card/Input/Badge via cva), Radix chrome, themed toast, state primitives, React Aria finance widgets (lazy), a11y/matchMedia test baseline. Then P3 shell, P4 surface migration. Legacy `z-[9999]`/etc. call-sites migrate onto the named z-index scale during P2/P3.

@@ -21,7 +21,7 @@
   --color-surface: #1a1a2e;
   --color-surface-light: #16213e;
   --color-surface-dark: #0f0f1a;
-  --color-primary: #6366f1;
+  --color-primary: #4f46e5;
   --color-accent: #818cf8;
   --color-text: #e5e7eb;
   --color-text-muted: #94a3b8;
@@ -30,7 +30,49 @@
   --color-error: #ef4444;
   --color-success: #22c55e;
   --color-warning: #eab308;
+  /* Foreground aliases (R1.3) — Dark Navy first-paint defaults; App.tsx
+     recomputes them per theme (text-based reuse text; colored use max-contrast
+     black/white). on-primary is white over indigo-600 (#4f46e5 → 6.29:1). */
   --color-on-primary: #ffffff;
+  --color-on-background: #e5e7eb;
+  --color-on-surface: #e5e7eb;
+  --color-on-muted: #e5e7eb;
+  --color-on-accent: #000000;
+  --color-on-danger: #000000;
+  --color-on-success: #000000;
+  --color-on-warning: #000000;
+  --color-on-error: #000000;
+
+  /*
+   * Derived channel triples for the Tailwind color utilities
+   * (rgb(var(--color-<name>-rgb) / <alpha-value>)). App.tsx recomputes these
+   * from the active theme's hex via lib/themeTokens.ts; these first-paint
+   * defaults match the Dark Navy hex values above so Tailwind utilities
+   * resolve correctly before /api/settings loads. Not a second source of
+   * authority — a derived representation of the same tokens.
+   */
+  --color-background-rgb: 15 15 26;
+  --color-surface-rgb: 26 26 46;
+  --color-surface-light-rgb: 22 33 62;
+  --color-surface-dark-rgb: 15 15 26;
+  --color-primary-rgb: 79 70 229;
+  --color-accent-rgb: 129 140 248;
+  --color-text-rgb: 229 231 235;
+  --color-text-muted-rgb: 148 163 184;
+  --color-border-rgb: 55 65 81;
+  --color-danger-rgb: 239 68 68;
+  --color-error-rgb: 239 68 68;
+  --color-success-rgb: 34 197 94;
+  --color-warning-rgb: 234 179 8;
+  --color-on-primary-rgb: 255 255 255;
+  --color-on-background-rgb: 229 231 235;
+  --color-on-surface-rgb: 229 231 235;
+  --color-on-muted-rgb: 229 231 235;
+  --color-on-accent-rgb: 0 0 0;
+  --color-on-danger-rgb: 0 0 0;
+  --color-on-success-rgb: 0 0 0;
+  --color-on-warning-rgb: 0 0 0;
+  --color-on-error-rgb: 0 0 0;
 }
 
 /*
@@ -55,6 +97,9 @@
  */
 :root {
   --bh-text-base: 17px;
+  /* Single-knob base radius for the design-system radius family (R1.5);
+     consumed by tailwind.config.ts borderRadius (sm/md/lg/xl). */
+  --radius: 0.5rem;
 }
 
 .bh-text-small,
@@ -166,6 +211,23 @@ textarea::placeholder {
 .markdown-content th { background: #1e293b; font-weight: 600; }
 .markdown-content blockquote { border-left: 3px solid #6366f1; padding-left: 1rem; margin: 0.5rem 0; color: #94a3b8; }
 .markdown-content a { color: #818cf8; text-decoration: underline; }
+
+/*
+ * Reduced-motion (R1.5). The app had zero reduced-motion handling; this
+ * collapses all transitions/animations to near-instant for users who request
+ * it, while leaving layout/colors intact. Near-0 (not 0) so transitionend /
+ * animationend handlers still fire.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* Typing indicator animation */
 @keyframes typing-dot {

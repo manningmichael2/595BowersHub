@@ -1,6 +1,34 @@
 import { z } from 'zod'
 
-export const ThemeTokensSchema = z.record(z.string(), z.string())
+/**
+ * Token contract (R1.2). Replaces the old free-form `z.record(string,string)`
+ * with the enumerated keys a theme is expected to carry, so drift is *detected*
+ * (parseLoose logs a mismatch) rather than silently producing undefined tokens.
+ *
+ * Core keys are required (every preset and ThemeBuilder default has had them
+ * since launch). `warning`/`error` are `.optional()` because themes authored
+ * before migration 0043 (and custom themes) may lack them — they are filled at
+ * runtime by `normalizeThemeTokens` (the fallback half of the contract).
+ * `.passthrough()` keeps any extra keys a future theme might add.
+ */
+export const ThemeTokensSchema = z
+  .object({
+    background: z.string(),
+    surface: z.string(),
+    primary: z.string(),
+    accent: z.string(),
+    text: z.string(),
+    text_muted: z.string(),
+    border: z.string(),
+    danger: z.string(),
+    success: z.string(),
+    warning: z.string().optional(),
+    error: z.string().optional(),
+  })
+  // catchall(string), not passthrough(): a theme may carry extra keys, but they
+  // are still colors — this keeps the inferred type string-indexable (used by
+  // normalizeThemeTokens / ThemeBuilder) instead of `unknown`.
+  .catchall(z.string())
 
 export const EffectiveThemeSchema = z
   .object({
