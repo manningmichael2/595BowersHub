@@ -46,9 +46,9 @@
 - **Effort:** M
 - **Dependencies:** Task 3
 - **Requirements:** R2.1, R2.3
-- [ ] Create `frontend/src/components/ui/` with a `cn()` util (`clsx`+`tailwind-merge`); add deps `class-variance-authority`, `tailwind-merge`, `clsx` to `package.json`. Components are vendored/owned.
-- [ ] Hand-roll `Button`, `Card`, `Input`, `Textarea`, `Badge`, `Label`, `Separator` with `cva` variant maps reading token utilities + the R1.5 scales; one centralized variants source.
-- [ ] **Tests:** per-component render + variant tests; `tsc --noEmit` clean; zero direct vendor imports outside `components/ui/` (greppable).
+- [x] Created `frontend/src/components/ui/` with `cn()` (`clsx`+`tailwind-merge`) + barrel `index.ts`; added deps `class-variance-authority@0.7.1`, `tailwind-merge@3.6.0`, `clsx@2.1.1`. Owned/vendored.
+- [x] Hand-rolled `Button` (cva: primary/secondary/outline/ghost/danger × sm/md/lg/icon), `Card` (+Header/Title/Description/Content/Footer), `Input`, `Textarea`, `Badge` (cva), `Label`, `Separator` — all on token utilities (`bg-primary`/`text-on-*`/`bg-surface`/`border-border`) + R1.5 scales (`rounded-md/lg`, `shadow-elevation-1`, `duration-base`/`ease-standard`, tokenized focus ring).
+- [x] **Tests:** `primitives.test.tsx` (11 tests) — render, variant/size classes, ref forwarding, disabled, `cn` dedupe, className-override-wins. `tsc --noEmit` clean; 293 frontend tests; build compiles the newly-used token utilities (elevation-1, on-success/danger/warning). Native DOM assertions (project doesn't wire jest-dom). **Note:** no call-sites migrated yet (that's P4), so the "zero direct vendor imports outside components/ui/" check is trivially true today and re-checked as surfaces migrate.
 
 ## Task 5: Radix chrome primitives
 - **Effort:** L
