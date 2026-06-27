@@ -30,7 +30,18 @@
   --color-error: #ef4444;
   --color-success: #22c55e;
   --color-warning: #eab308;
-  --color-on-primary: #ffffff;
+  /* Foreground aliases (R1.3) — Dark Navy first-paint defaults; App.tsx
+     recomputes them per theme (text-based reuse text; colored use max-contrast
+     black/white, hence #000 on the indigo primary — 4.70:1 vs white's 4.47). */
+  --color-on-primary: #000000;
+  --color-on-background: #e5e7eb;
+  --color-on-surface: #e5e7eb;
+  --color-on-muted: #e5e7eb;
+  --color-on-accent: #000000;
+  --color-on-danger: #000000;
+  --color-on-success: #000000;
+  --color-on-warning: #000000;
+  --color-on-error: #000000;
 
   /*
    * Derived channel triples for the Tailwind color utilities
@@ -53,7 +64,15 @@
   --color-error-rgb: 239 68 68;
   --color-success-rgb: 34 197 94;
   --color-warning-rgb: 234 179 8;
-  --color-on-primary-rgb: 255 255 255;
+  --color-on-primary-rgb: 0 0 0;
+  --color-on-background-rgb: 229 231 235;
+  --color-on-surface-rgb: 229 231 235;
+  --color-on-muted-rgb: 229 231 235;
+  --color-on-accent-rgb: 0 0 0;
+  --color-on-danger-rgb: 0 0 0;
+  --color-on-success-rgb: 0 0 0;
+  --color-on-warning-rgb: 0 0 0;
+  --color-on-error-rgb: 0 0 0;
 }
 
 /*

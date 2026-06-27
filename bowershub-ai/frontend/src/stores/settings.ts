@@ -56,6 +56,8 @@ const FALLBACK_THEME: EffectiveTheme = {
     border: '#334155',
     danger: '#ef4444',
     success: '#10b981',
+    warning: '#eab308',
+    error: '#ef4444',
   },
 }
 

@@ -110,6 +110,26 @@ export function contrastDecision(textHex: string, bgHex: string): ContrastDecisi
 }
 
 /**
+ * Pick the more readable foreground (dark vs light) to place ON TOP of a given
+ * background color, by maximizing WCAG contrast ratio. Used to derive the
+ * `--color-on-*` foreground aliases (R1.3): a readable text/icon color for
+ * every colored surface (on-primary, on-danger, …).
+ *
+ * This supersedes the old 0.5-luminance cutoff (which was not a contrast
+ * computation) — choosing the higher-contrast option is what lets the aliases
+ * meet the 4.5:1 threshold across all presets (R2.6). Defaults to a near-black
+ * and pure white that match the prior on-primary outputs.
+ */
+export function readableForeground(
+  bgHex: string,
+  dark = '#000000',
+  light = '#ffffff',
+): string {
+  if (!isValidHex(bgHex)) return light
+  return contrastRatio(light, bgHex) >= contrastRatio(dark, bgHex) ? light : dark
+}
+
+/**
  * Normalize a hex value entered by the user: prepend `#`, lowercase.
  * Pass-through if invalid (caller checks separately via `isValidHex`).
  */

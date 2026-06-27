@@ -2,7 +2,13 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
-import { setColorVar } from './lib/themeTokens'
+import {
+  setColorVar,
+  normalizeThemeTokens,
+  FOREGROUND_TEXT_ALIASES,
+  FOREGROUND_COMPUTED_ALIASES,
+} from './lib/themeTokens'
+import { readableForeground } from './lib/contrast'
 import AppShell from './components/AppShell'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -49,6 +55,8 @@ const TOKEN_TO_CSS_VAR: Array<[keyof import('./stores/settings').ThemeTokens, st
   ['border', '--color-border'],
   ['danger', '--color-danger'],
   ['success', '--color-success'],
+  ['warning', '--color-warning'],
+  ['error', '--color-error'],
 ]
 
 function App() {
@@ -83,8 +91,11 @@ function App() {
   // resolve to the active palette.
   useEffect(() => {
     const root = document.documentElement
-    const tokens = effectiveTheme.tokens_json
-    if (!tokens) return
+    if (!effectiveTheme.tokens_json) return
+    // Normalize first so every contract key resolves to a real color even if
+    // the theme predates a key (e.g. custom themes without warning/error) —
+    // the runtime half of the R1.2 token contract.
+    const tokens = normalizeThemeTokens(effectiveTheme.tokens_json)
     // `setColorVar` sets both the full-color var (consumed by inline styles /
     // index.css) AND a derived `--color-<name>-rgb` channel triple (consumed
     // by the Tailwind utilities so `bg-primary/20` etc. compose alpha). See
@@ -98,21 +109,17 @@ function App() {
     // Mirror `surface` to its light/dark convenience variants so any
     // surface-* utilities (used by older chrome) follow the active theme
     // instead of staying frozen at the index.css defaults.
-    if (typeof tokens.surface === 'string') {
-      setColorVar(root, '--color-surface-light', tokens.surface)
-      setColorVar(root, '--color-surface-dark', tokens.background || tokens.surface)
-    }
+    setColorVar(root, '--color-surface-light', tokens.surface)
+    setColorVar(root, '--color-surface-dark', tokens.background || tokens.surface)
 
-    // Compute --color-on-primary: text color to use ON TOP of bg-primary.
-    // If primary is light (like Mono's #ffffff), text on it must be dark.
-    if (typeof tokens.primary === 'string' && tokens.primary.length >= 7) {
-      const hex = tokens.primary.replace('#', '')
-      const r = parseInt(hex.slice(0, 2), 16) / 255
-      const g = parseInt(hex.slice(2, 4), 16) / 255
-      const b = parseInt(hex.slice(4, 6), 16) / 255
-      // Relative luminance (sRGB)
-      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-      setColorVar(root, '--color-on-primary', lum > 0.5 ? '#111111' : '#ffffff')
+    // Foreground aliases (R1.3): a readable text/icon color for each surface.
+    // Neutral surfaces reuse the theme's text token; colored surfaces get the
+    // higher-contrast of dark/white (WCAG) so e.g. text on a button is legible.
+    for (const [cssVar, tokenKey] of Object.entries(FOREGROUND_TEXT_ALIASES)) {
+      setColorVar(root, cssVar, tokens[tokenKey])
+    }
+    for (const [cssVar, tokenKey] of Object.entries(FOREGROUND_COMPUTED_ALIASES)) {
+      setColorVar(root, cssVar, readableForeground(tokens[tokenKey]))
     }
   }, [effectiveTheme])
 

@@ -25,7 +25,6 @@ export default {
         },
         primary: 'rgb(var(--color-primary-rgb) / <alpha-value>)',
         accent: 'rgb(var(--color-accent-rgb) / <alpha-value>)',
-        'on-primary': 'rgb(var(--color-on-primary-rgb) / <alpha-value>)',
         text: {
           DEFAULT: 'rgb(var(--color-text-rgb) / <alpha-value>)',
           muted: 'rgb(var(--color-text-muted-rgb) / <alpha-value>)',
@@ -33,6 +32,19 @@ export default {
         border: 'rgb(var(--color-border-rgb) / <alpha-value>)',
         danger: 'rgb(var(--color-danger-rgb) / <alpha-value>)',
         success: 'rgb(var(--color-success-rgb) / <alpha-value>)',
+        warning: 'rgb(var(--color-warning-rgb) / <alpha-value>)',
+        error: 'rgb(var(--color-error-rgb) / <alpha-value>)',
+
+        // Foreground aliases (R1.3): readable text/icon color per surface.
+        'on-background': 'rgb(var(--color-on-background-rgb) / <alpha-value>)',
+        'on-surface': 'rgb(var(--color-on-surface-rgb) / <alpha-value>)',
+        'on-muted': 'rgb(var(--color-on-muted-rgb) / <alpha-value>)',
+        'on-primary': 'rgb(var(--color-on-primary-rgb) / <alpha-value>)',
+        'on-accent': 'rgb(var(--color-on-accent-rgb) / <alpha-value>)',
+        'on-danger': 'rgb(var(--color-on-danger-rgb) / <alpha-value>)',
+        'on-success': 'rgb(var(--color-on-success-rgb) / <alpha-value>)',
+        'on-warning': 'rgb(var(--color-on-warning-rgb) / <alpha-value>)',
+        'on-error': 'rgb(var(--color-on-error-rgb) / <alpha-value>)',
 
         // Existing palette retained for backward compat with components
         // written before the token system. New code should prefer the

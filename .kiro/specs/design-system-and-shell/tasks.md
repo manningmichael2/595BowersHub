@@ -22,11 +22,11 @@
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R1.2, R1.3
-- [ ] Replace the free-form `z.record(string,string)` `ThemeTokensSchema` with a `z.object({...})` listing the **11** required keys (adds `warning`, `error`), `.passthrough()` for extras; on a missing required key, apply a deterministic computed fallback (`warning`→default, `error`→`danger`) so no token resolves to `undefined`/transparent.
-- [ ] Add `warning`/`error` to the `App.tsx` token map and to `tailwind.config.ts`.
-- [ ] Define derived `-foreground`/`on-*` aliases (`on-surface`, `on-muted`, `on-danger`, `on-success`, `on-warning`, `on-error`; `on-primary` already exists) using the reused luminance helper — aliases only, no new authority (R1.1 respected).
-- [ ] **Migration:** `bowershub-ai/backend/migrations/0043_theme_warning_error_tokens.sql` — forward-only, parameterized per-preset `jsonb` merge adding `warning`/`error` to all 10 preset rows; resolved full-opacity colors unchanged; back up `bh_themes` first. Custom (non-preset) themes intentionally rely on the contract fallback.
-- [ ] **Tests:** schema unit test (missing key → fallback, never undefined); all 10 presets inject 11 keys; automated WCAG contrast check (≥4.5:1 text / ≥3:1 UI) for the `on-*` aliases across all 10 presets; migration verified applying on a from-empty DB (throwaway `pgvector/pgvector:pg16`) with the boot self-check green.
+- [x] Replaced the free-form `z.record(string,string)` `ThemeTokensSchema` with a `z.object({...})` of the **11** keys (core required, `warning`/`error` optional), `.catchall(z.string())` (not `.passthrough()` — keeps the inferred type string-indexable instead of `unknown`). `normalizeThemeTokens()` (lib/themeTokens.ts) is the runtime fallback half: missing key → `TOKEN_FALLBACKS`, `error`→`danger`, so no token is ever `undefined`. (`parseLoose` already never throws, so a strict object is safe.)
+- [x] Added `warning`/`error` to the `App.tsx` token map, `tailwind.config.ts`, and the store `FALLBACK_THEME`.
+- [x] Derived `on-*` aliases injected in `App.tsx`: text-based (`on-background`/`on-surface`/`on-muted` → `text`) and **computed via `readableForeground()`** (max-WCAG-contrast black/white) for `on-primary`/`on-accent`/`on-danger`/`on-success`/`on-warning`/`on-error`. Added to tailwind + index.css first-paint defaults. **Note:** max-contrast picks **black** on the indigo `#6366f1` primary (4.70:1 > white's 4.47:1), so `on-primary` is black for dark-navy/oled-black — required to clear the 4.5:1 bar.
+- [x] **Migration:** `0043_theme_warning_error_tokens.sql` — forward-only per-preset `jsonb` merge (`error`=theme's danger; `warning`=theme-native amber where available). Scoped to `is_preset` so custom themes are untouched (they rely on the contract fallback).
+- [x] **Tests:** `themeContract.test.ts` (14 tests) — contract fallback incl. `error`→`danger`; all 10 presets resolve 11 keys; WCAG **≥4.5:1** for every computed `on-*` alias across all 10 presets (worst case 4.63). Migration verified applying 0001→0043 on a from-empty throwaway `pgvector/pgvector:pg16` (all 10 presets carry warning/error).
 
 ## Task 3: Non-color design scales (spacing/radius/elevation/motion/z-index/tabular)
 - **Effort:** M
