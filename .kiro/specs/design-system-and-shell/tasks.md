@@ -62,8 +62,8 @@
 - **Effort:** S
 - **Dependencies:** Task 4
 - **Requirements:** R2.4
-- [ ] Re-skin `Toaster.tsx` off `bg-red-600`/`bg-green-600`/`bg-neutral-800` to `bg-danger`/`bg-success`/`bg-surface` + `on-*` foregrounds; preserve the imperative API, queue/auto-dismiss, and the `action` button (PWA "Reload"). Closes the C6 global-toast tail.
-- [ ] **Tests:** existing toast tests stay green; theme-switch restyles the toast; `action` button still fires.
+- [x] Re-skinned `Toaster.tsx` off `bg-red-600`/`bg-green-600`/`bg-neutral-800` to `bg-danger`/`bg-success`/`bg-surface` + `on-*` foregrounds + Lucide status icons; action/close buttons tinted via alpha-composable `on-*` tokens. Imperative API, queue/auto-dismiss, and `action` button (PWA "Reload") preserved; layers at `z-toast`. Closes the C6 global-toast tail.
+- [x] **Tests:** `Toaster.test.tsx` (3) — tokenized container (asserts no `bg-(red|green|neutral)-*`), action fires + dismisses, close removes. 302 tests; build compiles the `on-danger/20`-style alpha utilities.
 
 ## Task 7: State primitives (loading / empty / error / validation)
 - **Effort:** M
