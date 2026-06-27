@@ -54,9 +54,9 @@
 - **Effort:** L
 - **Dependencies:** Task 4
 - **Requirements:** R2.2
-- [ ] Vendor Radix-based wrappers styled to tokens: `Dialog`/`AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`, `Select`, `Tabs`, `Switch`, `ScrollArea` (per-primitive `@radix-ui/react-*` deps, tree-shakeable). Portalled content inherits theme (vars on `documentElement`).
-- [ ] Re-point the `confirm()` store/`ConfirmDialog` onto Radix `AlertDialog` (API preserved); consolidate the hand-rolled focus/keyboard handling duplicated in `AppShell`/`SearchOverlay`/`ConfirmDialog` where sensible.
-- [ ] **Tests:** keyboard/focus-trap/focus-return/ESC/scroll-lock per primitive; axe assertion; portal stacking respects the z-index scale (popover above chrome, below modal/toast).
+- [x] Vendored Radix wrappers styled to tokens + z-index/elevation scales: `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`, `Select`, `Tabs`, `Switch`, `ScrollArea` (per-primitive `@radix-ui/react-*` deps). Portalled content inherits theme (vars on `documentElement`); content uses `z-modal` (dialogs) / `z-dropdown` (menus/popover/tooltip/select). No animation plugin → no entrance animations (motion polish deferred; reduced-motion already satisfied).
+- [x] Re-pointed `ConfirmDialog` onto Radix `AlertDialog` (confirm store API unchanged) — Radix now provides the focus trap/return, ESC, and scroll-lock that were hand-rolled. (Folding `SearchOverlay`/`AppShell` Cmd+K handling happens in P3 when those move to the shell.)
+- [x] **Tests:** `radix.test.tsx` (6) — confirm() resolves true/false/ESC via AlertDialog, Dialog opens from trigger, Switch toggles, Tabs structure/active-panel. Added test-harness shims to `src/test/setup.ts`: `matchMedia` (+ `setMatchMedia` helper, R2.7), pointer-capture, `scrollIntoView`. tsc clean; 299 tests; build green. (Per-primitive axe assertions + portal-stacking land in T9.)
 
 ## Task 6: Themed global toast
 - **Effort:** S
