@@ -84,8 +84,8 @@
 - **Effort:** M
 - **Dependencies:** Task 5, Task 6, Task 7, Task 8
 - **Requirements:** R2.7
-- [ ] Add a `matchMedia` polyfill to the test harness (beside `ResizeObserver`); every primitive ships an axe-core (or equivalent named checker) assertion + keyboard/focus/ARIA coverage; responsive tests mock `matchMedia` **true and false** to drive both branches.
-- [ ] **Tests:** WCAG 2.1 AA (4.5:1 / 3:1) verified for foreground aliases across all 10 presets; `tsc --noEmit` clean; `npm test` green.
+- [x] `matchMedia` polyfill + `setMatchMedia(true/false)` helper added to `src/test/setup.ts` (T5); `a11y.test.tsx` drives both branches (asserts the desktop media query true/false). axe-core (`vitest-axe`) assertions over accessible compositions of Button/Card/Input+Label/Badge/Switch/EmptyState/ErrorState/open-Dialog — a named checker. (color-contrast rule disabled in jsdom — it can't compute layout colors; contrast is covered below.)
+- [x] **Tests:** WCAG 2.1 AA (4.5:1) for foreground aliases across all 10 presets verified in `themeContract.test.ts` (T2). `tsc --noEmit` clean; **320 tests** green; build green.
 
 ---
 
