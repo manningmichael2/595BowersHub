@@ -1,9 +1,9 @@
 import type { WidgetProps } from '../WidgetRegistry'
 
 function getColor(percent: number): string {
-  if (percent >= 90) return '#ef4444'
-  if (percent >= 70) return '#eab308'
-  return '#22c55e'
+  if (percent >= 90) return 'var(--color-danger)'
+  if (percent >= 70) return 'var(--color-warning)'
+  return 'var(--color-success)'
 }
 
 function formatBytes(bytes: number): string {

@@ -19,7 +19,7 @@ export default function BalancesWidget({ data }: WidgetProps) {
       {/* Net Worth */}
       <div className="text-center pb-2" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <p className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>Net Worth</p>
-        <p className="text-2xl font-bold" style={{ color: '#22c55e' }}>{fmtCurrency(net_worth)}</p>
+        <p className="text-2xl font-bold" style={{ color: 'var(--color-success)' }}>{fmtCurrency(net_worth)}</p>
       </div>
 
       {/* Accounts by group */}
@@ -32,7 +32,7 @@ export default function BalancesWidget({ data }: WidgetProps) {
               {accounts.map(a => (
                 <div key={a.name} className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm">
                   <span className="min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{a.name}</span>
-                  <span className="shrink-0 font-medium tabular-nums" style={{ color: a.balance < 0 ? '#ef4444' : 'var(--color-text)' }}>{fmtCurrency(a.balance)}</span>
+                  <span className="shrink-0 font-medium tabular-nums" style={{ color: a.balance < 0 ? 'var(--color-danger)' : 'var(--color-text)' }}>{fmtCurrency(a.balance)}</span>
                 </div>
               ))}
             </div>

@@ -11,12 +11,12 @@ export default function TailscaleWidget({ data }: WidgetProps) {
     <div className="flex flex-col gap-1">
       {d.devices?.map(device => (
         <div key={device.name} className="flex items-center gap-3 rounded-md px-3 py-2" style={{ backgroundColor: 'color-mix(in srgb, var(--color-border) 20%, transparent)' }}>
-          <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: device.online ? '#22c55e' : 'var(--color-text-muted)' }} />
+          <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: device.online ? 'var(--color-success)' : 'var(--color-text-muted)' }} />
           <div className="flex-1 min-w-0">
             <span className="truncate text-sm font-medium block" style={{ color: device.online ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{device.name}</span>
             <span className="text-xs font-mono block" style={{ color: 'var(--color-text-muted)' }}>{device.ip}</span>
           </div>
-          <span className="text-xs flex-shrink-0" style={{ color: device.online ? '#22c55e' : 'var(--color-text-muted)' }}>{device.online ? 'online' : 'offline'}</span>
+          <span className="text-xs flex-shrink-0" style={{ color: device.online ? 'var(--color-success)' : 'var(--color-text-muted)' }}>{device.online ? 'online' : 'offline'}</span>
         </div>
       ))}
     </div>

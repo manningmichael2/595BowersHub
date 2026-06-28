@@ -16,7 +16,7 @@ export default function RecentEmailsWidget({ data }: WidgetProps) {
     <div className="flex flex-col gap-3">
       {d.unread_count != null && (
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ backgroundColor: d.unread_count > 0 ? 'var(--color-primary)' : 'var(--color-border)', color: d.unread_count > 0 ? '#fff' : 'var(--color-text-muted)' }}>{d.unread_count}</span>
+          <span className="inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ backgroundColor: d.unread_count > 0 ? 'var(--color-primary)' : 'var(--color-border)', color: d.unread_count > 0 ? 'var(--color-on-primary)' : 'var(--color-text-muted)' }}>{d.unread_count}</span>
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>unread</span>
         </div>
       )}
