@@ -47,6 +47,16 @@ export interface ReconcileResult {
   in_sync: boolean
 }
 
+/** An account with its household owner tag (display/filter only — not access). */
+export interface AccountOwner {
+  id: string
+  name: string | null
+  org: string | null
+  account_type: string | null
+  owner_id: number | null
+  owner_name: string | null
+}
+
 export const ACCOUNT_TYPES = ['checking', 'savings', 'credit_card', 'loan', 'mortgage', 'brokerage'] as const
 
 export const financeAccounting = {
@@ -67,6 +77,15 @@ export const financeAccounting = {
 
   async setAccountType(accountId: string, accountType: string): Promise<void> {
     await api.put(`/api/finance/accounts/${encodeURIComponent(accountId)}/type`, { account_type: accountType })
+  },
+
+  async listAccounts(): Promise<AccountOwner[]> {
+    const { data } = await api.get('/api/finance/accounts')
+    return data as AccountOwner[]
+  },
+
+  async setAccountOwner(accountId: string, ownerId: number | null): Promise<void> {
+    await api.put(`/api/finance/accounts/${encodeURIComponent(accountId)}/owner`, { owner_id: ownerId })
   },
 
   async reconcile(accountId: string, statementDate: string, statementBalance: number): Promise<ReconcileResult> {

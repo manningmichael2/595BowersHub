@@ -32,6 +32,7 @@ async def list_transactions(
     start: Optional[date] = None,
     end: Optional[date] = None,
     account_id: Optional[str] = None,
+    owner: Optional[str] = None,
     status: str = "all",
     sort: str = "date",
     order: str = "desc",
@@ -47,7 +48,8 @@ async def list_transactions(
                 conn, q=q, category_id=category_id,
                 month=month.replace(day=1) if month else None,
                 start=start, end=end,
-                account_id=account_id, status=status, sort=sort, order=order,
+                account_id=account_id, owner=owner, status=status,
+                sort=sort, order=order,
                 limit=limit, offset=offset)
     except (asyncpg.PostgresError, OSError, RuntimeError) as e:
         logger.warning("finance_transactions: DB unavailable: %s", e)

@@ -12,9 +12,14 @@ import {
   financeAccounting,
   ACCOUNT_TYPES,
   type AccountBalance,
+  type AccountOwner,
   type NetWorth,
   type NetWorthPoint,
 } from '../services/financeAccounting'
+import { api } from '../services/api'
+import { useHasRole } from '../hooks/useHasRole'
+
+interface HouseholdUser { id: number; display_name: string }
 
 function money(n: number): string {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n)
@@ -45,9 +50,13 @@ function Sparkline({ points }: { points: NetWorthPoint[] }) {
 
 export default function NetWorthPage() {
   const navigate = useNavigate()
+  const isAdmin = useHasRole('admin')
   const [nw, setNw] = useState<NetWorth | null>(null)
   const [history, setHistory] = useState<NetWorthPoint[]>([])
   const [loading, setLoading] = useState(true)
+  // Owner assignment is an admin setup task (household): tag whose account it is.
+  const [accounts, setAccounts] = useState<AccountOwner[]>([])
+  const [users, setUsers] = useState<HouseholdUser[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -55,12 +64,21 @@ export default function NetWorthPage() {
       const [n, h] = await Promise.all([financeAccounting.getNetWorth(), financeAccounting.getHistory()])
       setNw(n)
       setHistory(h)
+      if (isAdmin) {
+        const [accts, usersRes] = await Promise.all([
+          financeAccounting.listAccounts(),
+          api.get('/api/admin/users'),
+        ])
+        setAccounts(accts)
+        const rows = usersRes.data as HouseholdUser[]
+        setUsers(rows.map((u) => ({ id: u.id, display_name: u.display_name })))
+      }
     } catch (e) {
       toast.error(errorMessage(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => { void load() }, [load])
 
@@ -68,6 +86,14 @@ export default function NetWorthPage() {
     try {
       await financeAccounting.setAccountType(id, type)
       toast.success('Account type set')
+      await load()
+    } catch (e) { toast.error(errorMessage(e)) }
+  }
+
+  const setOwner = async (id: string, ownerId: number | null) => {
+    try {
+      await financeAccounting.setAccountOwner(id, ownerId)
+      toast.success('Account owner set')
       await load()
     } catch (e) { toast.error(errorMessage(e)) }
   }
@@ -132,6 +158,34 @@ export default function NetWorthPage() {
           <Section title="Liabilities">
             {liabilities.map((a) => <Row key={a.id} acc={a}><ReconcileInline onReconcile={(v) => reconcile(a.id, v)} /></Row>)}
           </Section>
+
+          {isAdmin && accounts.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-sm font-semibold text-text-muted mb-1">Account owners</h2>
+              <p className="text-xs text-text-muted mb-1.5">
+                Tag whose account each is (for filtering). Display only — everyone still sees all finances.
+              </p>
+              <ul className="list-none p-0 flex flex-col gap-1.5">
+                {accounts.map((a) => (
+                  <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 p-2.5 rounded-lg border border-border">
+                    <div className="flex-1 min-w-[10rem]">
+                      <div className="font-semibold text-text break-words">{a.name}</div>
+                      <div className="text-xs text-text-muted">{a.org}</div>
+                    </div>
+                    <select
+                      aria-label={`Owner for ${a.name}`}
+                      className="text-xs rounded border border-border bg-surface px-2 py-1 text-text"
+                      value={a.owner_id == null ? '' : String(a.owner_id)}
+                      onChange={(e) => setOwner(a.id, e.target.value === '' ? null : Number(e.target.value))}
+                    >
+                      <option value="">Joint / Shared</option>
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.display_name}</option>)}
+                    </select>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -77,6 +77,20 @@ class SetAccountTypeRequest(BaseModel):
     account_type: str = Field(pattern="^(checking|savings|credit_card|loan|mortgage|brokerage)$")
 
 
+class AccountOwner(BaseModel):
+    id: str
+    name: Optional[str] = None
+    org: Optional[str] = None
+    account_type: Optional[str] = None
+    owner_id: Optional[int] = None
+    owner_name: Optional[str] = None
+
+
+class SetAccountOwnerRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    owner_id: Optional[int] = None    # None = Joint/Shared (un-owned)
+
+
 # --------------------------------------------------------------------------- helpers
 def _db_error(e: Exception) -> HTTPException:
     logger.warning("finance_accounting: DB unavailable: %s", e)
@@ -182,3 +196,41 @@ async def set_account_type(account_id: str, body: SetAccountTypeRequest,
     if not res.endswith(" 1"):
         raise HTTPException(status_code=404, detail="Account not found")
     return {"account_id": account_id, "account_type": body.account_type}
+
+
+@router.get("/accounts", response_model=list[AccountOwner])
+async def list_accounts(user: dict = Depends(require_capability("finance.read"))) -> list[AccountOwner]:
+    """All accounts with their owner tag (household), for the owner-assignment UI."""
+    try:
+        async with get_pool().acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT a.id, a.account_name, a.org_name, a.account_type,
+                          a.owner_id, u.display_name AS owner_name
+                   FROM finance.accounts a
+                   LEFT JOIN public.bh_users u ON u.id = a.owner_id
+                   ORDER BY a.org_name, a.account_name""")
+    except (asyncpg.PostgresError, OSError, RuntimeError) as e:
+        raise _db_error(e)
+    return [AccountOwner(id=r["id"], name=r["account_name"], org=r["org_name"],
+                         account_type=r["account_type"], owner_id=r["owner_id"],
+                         owner_name=r["owner_name"]) for r in rows]
+
+
+@router.put("/accounts/{account_id}/owner")
+async def set_account_owner(account_id: str, body: SetAccountOwnerRequest,
+                            user: dict = Depends(require_capability("finance.delete"))) -> dict:
+    """Tag which household member an account belongs to (None = Joint/Shared).
+    Display/filter only — does not restrict who can see the account's data."""
+    try:
+        async with get_pool().acquire() as conn:
+            if body.owner_id is not None and not await conn.fetchval(
+                    "SELECT 1 FROM public.bh_users WHERE id = $1", body.owner_id):
+                raise HTTPException(status_code=400, detail="Unknown owner_id")
+            res = await conn.execute(
+                "UPDATE finance.accounts SET owner_id = $2 WHERE id = $1",
+                account_id, body.owner_id)
+    except (asyncpg.PostgresError, OSError, RuntimeError) as e:
+        raise _db_error(e)
+    if not res.endswith(" 1"):
+        raise HTTPException(status_code=404, detail="Account not found")
+    return {"account_id": account_id, "owner_id": body.owner_id}
