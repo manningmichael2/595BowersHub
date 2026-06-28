@@ -116,7 +116,7 @@ function UserMessage({ message }: { message: Message }) {
         <div className="bg-primary rounded-2xl rounded-br-md px-4 py-2.5 text-sm text-on-primary">
           {message.content}
         </div>
-        <div className="text-xs text-gray-500 mt-1 text-right">
+        <div className="text-xs text-text-muted mt-1 text-right">
           {formatRelativeTime(message.created_at)}
         </div>
       </div>
@@ -165,7 +165,7 @@ function AssistantMessage({ message }: { message: Message }) {
 
   return (
     <div className="group flex gap-3">
-      <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-xs shrink-0 mt-1">
+      <div className="w-7 h-7 rounded-full bg-success flex items-center justify-center text-xs shrink-0 mt-1">
         AI
       </div>
       <div className="flex-1 min-w-0 max-w-[85%]">
@@ -177,18 +177,18 @@ function AssistantMessage({ message }: { message: Message }) {
             <LayerBadge layer={message.routing_layer} />
           )}
           {message.cost_usd != null && message.cost_usd > 0 && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-text-muted">
               ${message.cost_usd < 0.01 ? message.cost_usd.toFixed(4) : message.cost_usd.toFixed(2)}
             </span>
           )}
           {message.model_used && (
-            <span className="text-xs text-gray-600">
+            <span className="text-xs text-text-muted">
               {message.model_used.includes('haiku') ? 'Haiku' :
                message.model_used.includes('sonnet') ? 'Sonnet' :
                message.model_used.includes('opus') ? 'Opus' : ''}
             </span>
           )}
-          <span className="text-xs text-gray-600">
+          <span className="text-xs text-text-muted">
             {formatRelativeTime(message.created_at)}
           </span>
           {/* Read aloud button — visible on hover (desktop) or always (mobile) */}
@@ -199,8 +199,8 @@ function AssistantMessage({ message }: { message: Message }) {
               className={
                 'text-xs px-1.5 py-0.5 rounded transition-colors ' +
                 (isReading
-                  ? 'text-amber-300 bg-amber-600/20'
-                  : 'text-gray-500 hover:text-gray-300 opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-60')
+                  ? 'text-warning bg-warning/20'
+                  : 'text-text-muted hover:text-text opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-60')
               }
               title={isReading ? 'Stop reading' : 'Read aloud'}
               aria-label={isReading ? 'Stop reading' : 'Read aloud'}
@@ -217,7 +217,7 @@ function AssistantMessage({ message }: { message: Message }) {
 function SystemMessage({ message }: { message: Message }) {
   return (
     <div className="flex justify-center">
-      <div className="bg-gray-800/50 rounded-lg px-4 py-2 text-xs text-gray-400 max-w-[80%]">
+      <div className="bg-surface rounded-lg px-4 py-2 text-xs text-text-muted max-w-[80%]">
         <ChatMarkdown content={message.content} />
       </div>
     </div>
@@ -226,12 +226,12 @@ function SystemMessage({ message }: { message: Message }) {
 
 function LayerBadge({ layer }: { layer: string }) {
   const colors: Record<string, string> = {
-    L1: 'bg-green-900/50 text-green-400',
-    L2: 'bg-blue-900/50 text-blue-400',
+    L1: 'bg-success/20 text-success',
+    L2: 'bg-primary/20 text-primary',
     L3: 'bg-primary/20 text-accent',
   }
   return (
-    <span className={`text-xs px-1.5 py-0.5 rounded ${colors[layer] || 'bg-gray-800 text-gray-400'}`}>
+    <span className={`text-xs px-1.5 py-0.5 rounded ${colors[layer] || 'bg-surface text-text-muted'}`}>
       {layer}
     </span>
   )

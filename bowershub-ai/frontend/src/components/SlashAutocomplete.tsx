@@ -120,7 +120,7 @@ export default function SlashAutocomplete({ input, onSelect, onClose }: Props) {
             onClick={() => onSelect(item.value, item.shouldSend)}
             className={`
               w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm
-              ${i === selectedIndex ? 'bg-primary/20 text-text' : 'text-text hover:bg-gray-800/50'}
+              ${i === selectedIndex ? 'bg-primary/20 text-text' : 'text-text hover:bg-surface'}
             `}
           >
             <span className="font-mono text-primary shrink-0">{item.display}</span>

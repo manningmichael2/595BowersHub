@@ -58,16 +58,16 @@ export default function SystemPromptViewer({
     >
       {isEmpty ? (
         <div
-          className="rounded-lg border border-gray-800 bg-gray-900/40 p-4"
+          className="rounded-lg border border-border bg-surface p-4"
           role="status"
         >
-          <p className="text-sm text-gray-500 italic">
+          <p className="text-sm text-text-muted italic">
             No system prompt set for this workspace
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
-          <div className="markdown-content text-gray-200 text-sm">
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="markdown-content text-text text-sm">
             <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
               {trimmed}
             </ReactMarkdown>
@@ -75,9 +75,9 @@ export default function SystemPromptViewer({
         </div>
       )}
 
-      <div className="text-xs text-gray-500" aria-live="polite">
+      <div className="text-xs text-text-muted" aria-live="polite">
         {trimmed.length.toLocaleString()} characters
-        <span className="text-gray-600"> · </span>
+        <span className="text-text-muted"> · </span>
         ~{approxTokenCount(trimmed).toLocaleString()} tokens
       </div>
     </div>

@@ -310,7 +310,7 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); reorder(img.asset_id, 'up') }}
-                      className="w-5 h-5 flex items-center justify-center rounded text-white text-[10px] hover:bg-white/20"
+                      className="w-5 h-5 flex items-center justify-center rounded text-on-primary text-[10px] hover:bg-surface/20"
                       title="Move left"
                     >
                       ←
@@ -322,7 +322,7 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); reorder(img.asset_id, 'down') }}
-                      className="w-5 h-5 flex items-center justify-center rounded text-white text-[10px] hover:bg-white/20"
+                      className="w-5 h-5 flex items-center justify-center rounded text-on-primary text-[10px] hover:bg-surface/20"
                       title="Move right"
                     >
                       →
@@ -334,7 +334,7 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setPrimary(img.asset_id) }}
-                      className="w-5 h-5 flex items-center justify-center rounded text-white text-[10px] hover:bg-white/20"
+                      className="w-5 h-5 flex items-center justify-center rounded text-on-primary text-[10px] hover:bg-surface/20"
                       title="Set as primary"
                     >
                       ★
@@ -345,7 +345,7 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setConfirmUnlink(img.asset_id) }}
-                    className="w-5 h-5 flex items-center justify-center rounded text-white text-[10px] hover:bg-white/20"
+                    className="w-5 h-5 flex items-center justify-center rounded text-on-primary text-[10px] hover:bg-surface/20"
                     title="Unlink image"
                   >
                     ✕
@@ -482,7 +482,7 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
                 className="absolute bottom-0 left-0 right-0 p-3 rounded-b-lg"
                 style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.7))' }}
               >
-                <p className="text-white text-sm truncate">
+                <p className="text-on-primary text-sm truncate">
                   {previewImage.original_name || previewImage.ai_summary}
                 </p>
               </div>

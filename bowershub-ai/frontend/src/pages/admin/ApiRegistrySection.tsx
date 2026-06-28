@@ -91,7 +91,7 @@ export default function ApiRegistrySection() {
               <button onClick={() => toggle(a)} className={`text-xs px-2 py-1 ${a.is_active ? 'text-success' : 'text-danger'}`}>
                 {a.is_active ? 'ON' : 'OFF'}
               </button>
-              <button onClick={() => setEditing(a)} className="text-xs text-text-muted hover:text-white px-2 py-1">
+              <button onClick={() => setEditing(a)} className="text-xs text-text-muted hover:text-on-primary px-2 py-1">
                 Edit
               </button>
               <button onClick={() => remove(a.id, a.name)} className="text-xs text-danger hover:text-danger px-2 py-1">
@@ -126,7 +126,7 @@ function ApiEditor({ entry, onSave, onClose }: { entry: any, onSave: (e: any) =>
   }
 
   return (
-    <div className="fixed inset-0 bg-background/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-surface rounded-xl p-6 w-full max-w-xl space-y-4 max-h-[90vh] overflow-y-auto">
         <h3 className="text-lg font-medium">{entry.id ? 'Edit API' : 'Register New API'}</h3>
 
@@ -199,7 +199,7 @@ function ApiEditor({ entry, onSave, onClose }: { entry: any, onSave: (e: any) =>
         </div>
 
         <div className="flex gap-2 justify-end pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-text-muted hover:text-white">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-text-muted hover:text-on-primary">
             Cancel
           </button>
           <button onClick={handleSave} className="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm hover:bg-primary/90">

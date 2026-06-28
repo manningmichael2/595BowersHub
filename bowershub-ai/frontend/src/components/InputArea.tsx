@@ -338,7 +338,7 @@ export default function InputArea() {
         {/* File attach button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 shrink-0 mb-0.5 transition-colors"
+          className="p-2 rounded-lg hover:bg-surface text-text-muted hover:text-text shrink-0 mb-0.5 transition-colors"
           title="Attach photo or file"
           disabled={isStreaming}
         >
@@ -363,7 +363,7 @@ export default function InputArea() {
                   )}
                   <button
                     onClick={() => removeAttachment(idx)}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-danger text-on-primary text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Remove"
                   >
                     ✕
@@ -397,7 +397,7 @@ export default function InputArea() {
         {isStreaming ? (
           <button
             onClick={handleStop}
-            className="p-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white shrink-0 mb-0.5 transition-colors"
+            className="p-2.5 rounded-xl bg-danger hover:bg-danger/90 text-on-primary shrink-0 mb-0.5 transition-colors"
             title="Stop response"
             aria-label="Stop response"
           >
@@ -409,7 +409,7 @@ export default function InputArea() {
           <button
             onClick={() => handleSend()}
             disabled={!input.trim() && attachments.length === 0}
-            className="p-2.5 rounded-xl bg-primary hover:brightness-110 disabled:bg-gray-700 disabled:cursor-not-allowed text-on-primary shrink-0 mb-0.5 transition-colors"
+            className="p-2.5 rounded-xl bg-primary hover:brightness-110 disabled:bg-surface-light disabled:cursor-not-allowed text-on-primary shrink-0 mb-0.5 transition-colors"
             title="Send"
             aria-label="Send message"
           >

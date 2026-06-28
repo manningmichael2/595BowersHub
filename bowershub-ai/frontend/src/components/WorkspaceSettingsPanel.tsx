@@ -185,8 +185,8 @@ export default function WorkspaceSettingsPanel({
       {/* Right-side panel (full-screen on mobile, centered overlay on desktop) */}
       <div
         className="
-          relative mx-auto w-full sm:max-w-4xl bg-[#1a1a2e]
-          border border-gray-700 shadow-2xl rounded-lg sm:rounded-xl
+          relative mx-auto w-full sm:max-w-4xl bg-surface
+          border border-border shadow-2xl rounded-lg sm:rounded-xl
           flex flex-col h-full sm:h-[90vh] sm:my-auto
         "
         role="dialog"
@@ -194,18 +194,18 @@ export default function WorkspaceSettingsPanel({
         aria-label="Workspace settings"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-gray-400 shrink-0">⚙</span>
-            <h2 className="text-sm font-medium text-gray-100 truncate">
+            <span className="text-text-muted shrink-0">⚙</span>
+            <h2 className="text-sm font-medium text-text truncate">
               Workspace settings
-              <span className="text-gray-500"> · </span>
-              <span className="text-gray-300">{workspaceName}</span>
+              <span className="text-text-muted"> · </span>
+              <span className="text-text-muted">{workspaceName}</span>
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 shrink-0"
+            className="p-1.5 rounded-lg hover:bg-surface text-text-muted shrink-0"
             aria-label="Close"
           >
             <svg
@@ -226,7 +226,7 @@ export default function WorkspaceSettingsPanel({
 
         {/* Tabs */}
         <div
-          className="flex gap-1 px-4 py-2 border-b border-gray-800 shrink-0"
+          className="flex gap-1 px-4 py-2 border-b border-border shrink-0"
           role="tablist"
           aria-label="Workspace settings tabs"
         >
@@ -245,7 +245,7 @@ export default function WorkspaceSettingsPanel({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-4 min-h-0">
           {error && (
-            <div className="mb-4 rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+            <div className="mb-4 rounded-lg border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger">
               {error}
             </div>
           )}
@@ -271,9 +271,9 @@ export default function WorkspaceSettingsPanel({
         </div>
 
         {/* Footer hint */}
-        <div className="px-4 py-2 border-t border-gray-800 text-xs text-gray-500 shrink-0">
+        <div className="px-4 py-2 border-t border-border text-xs text-text-muted shrink-0">
           {canEdit ? (
-            <>Editing as <span className="text-gray-400">admin</span></>
+            <>Editing as <span className="text-text-muted">admin</span></>
           ) : (
             <>Read-only view{!isAdmin && ' (admin role required to edit)'}</>
           )}
@@ -302,8 +302,8 @@ function TabButton({
       className={
         'px-3 py-1.5 rounded text-sm font-medium transition-colors ' +
         (active
-          ? 'bg-indigo-600/20 text-indigo-300'
-          : 'text-gray-500 hover:text-gray-300')
+          ? 'bg-primary/20 text-primary'
+          : 'text-text-muted hover:text-text-muted')
       }
     >
       {label}
@@ -327,7 +327,7 @@ function SystemPromptTab({
   editor: LoadedComponent<SystemPromptEditorProps>
 }) {
   if (loading) {
-    return <div className="text-sm text-gray-500">Loading system prompt…</div>
+    return <div className="text-sm text-text-muted">Loading system prompt…</div>
   }
 
   // Editor path: only when caller is in edit mode AND we have admin role
@@ -352,26 +352,26 @@ function SystemPromptTab({
   // ---- Placeholder until tasks 22.2 / 22.3 ship --------------------------
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-3">
-        <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">
+      <div className="rounded-lg border border-border bg-surface p-3">
+        <div className="text-xs uppercase tracking-wider text-text-muted mb-2">
           {prompt ? 'System prompt (raw)' : 'No system prompt'}
         </div>
         {prompt ? (
-          <pre className="whitespace-pre-wrap break-words text-sm text-gray-200 font-mono">
+          <pre className="whitespace-pre-wrap break-words text-sm text-text font-mono">
             {prompt}
           </pre>
         ) : (
-          <p className="text-sm text-gray-500 italic">
+          <p className="text-sm text-text-muted italic">
             No system prompt set for this workspace
           </p>
         )}
-        <div className="mt-3 text-xs text-gray-500">
+        <div className="mt-3 text-xs text-text-muted">
           {prompt.length.toLocaleString()} characters · ~
           {Math.ceil(prompt.length / 4).toLocaleString()} tokens
         </div>
       </div>
 
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-text-muted">
         {/* TODO(task 22.2): replace placeholder with <SystemPromptViewer>. */}
         {/* TODO(task 22.3): replace placeholder with <SystemPromptEditor> when canEdit. */}
         Rich markdown rendering and editor ship with tasks 22.2 and 22.3.
@@ -397,16 +397,16 @@ function PinnedContextTab({
   // ---- Placeholder until task 23.1 ships --------------------------------
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
-        <div className="text-sm text-gray-300 font-medium mb-1">
+      <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="text-sm text-text-muted font-medium mb-1">
           Pinned context
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-text-muted">
           Static and dynamic entries that get prepended to every request in
           this workspace.
         </p>
       </div>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-text-muted">
         {/* TODO(task 23.1): replace placeholder with <PinnedContextManager>. */}
         The full list, add/edit form, and refresh-now control ship with task
         23.1.

@@ -33,7 +33,7 @@ export default function ChatHeader() {
             </>
           )}
           {activeConversation?.title && (
-            <span className="text-sm text-gray-500 truncate hidden sm:inline">
+            <span className="text-sm text-text-muted truncate hidden sm:inline">
               / {activeConversation.title}
             </span>
           )}

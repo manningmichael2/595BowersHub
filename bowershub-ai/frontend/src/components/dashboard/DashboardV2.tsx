@@ -15,7 +15,7 @@ export default function DashboardV2() {
           Keys in Cache: {Object.keys(widgetData).length}
         </p>
       </div>
-      <div className="text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+      <div className="text-[10px] uppercase tracking-widest font-bold px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20">
         Experimental Mode
       </div>
     </div>

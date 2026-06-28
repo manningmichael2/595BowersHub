@@ -114,8 +114,8 @@ export default function VoiceInputButton({
       className={`
         p-2 rounded-lg transition-all shrink-0
         ${isRecording
-          ? 'bg-red-500/20 text-red-400 animate-pulse'
-          : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'
+          ? 'bg-danger/20 text-danger animate-pulse'
+          : 'text-text-muted hover:text-text hover:bg-surface'
         }
       `}
       title={isRecording ? 'Stop recording' : 'Voice input'}

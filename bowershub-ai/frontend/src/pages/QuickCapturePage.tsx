@@ -227,7 +227,7 @@ export default function QuickCapturePage() {
   if (state.kind === 'claiming' || state.kind === 'uploading') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-        <div className="rounded-xl bg-gray-900 border border-gray-700 px-6 py-4 text-sm text-gray-300">
+        <div className="rounded-xl bg-surface border border-border px-6 py-4 text-sm text-text-muted">
           {state.kind === 'claiming'
             ? 'Loading shared content…'
             : 'Uploading shared image…'}

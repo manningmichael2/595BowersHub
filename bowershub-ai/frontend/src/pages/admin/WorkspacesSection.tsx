@@ -76,7 +76,7 @@ export default function WorkspacesSection() {
 
           {editing && (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-background/60"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
               onClick={() => setEditing(null)}
             >
               <div
@@ -87,7 +87,7 @@ export default function WorkspacesSection() {
                   <h3 className="font-medium">Edit Skills: {editing.name}</h3>
                   <button
                     onClick={() => setEditing(null)}
-                    className="text-text-muted hover:text-white"
+                    className="text-text-muted hover:text-on-primary"
                   >
                     ×
                   </button>

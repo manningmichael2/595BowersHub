@@ -211,8 +211,8 @@ export default function VoicePanel() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-medium text-gray-100">Voice</h2>
-        <p className="text-sm text-gray-400 mt-1">
+        <h2 className="text-lg font-medium text-text">Voice</h2>
+        <p className="text-sm text-text-muted mt-1">
           Voice mode preferences for speech-to-text input and text-to-speech
           replies. Audio never leaves your browser.
         </p>
@@ -220,7 +220,7 @@ export default function VoicePanel() {
 
       {/* Browser-capability badge (R10.8) */}
       {!caps.stt && (
-        <div className="rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-sm text-amber-200">
+        <div className="rounded-lg border border-warning/40 bg-warning/20 px-3 py-2 text-sm text-warning">
           <span className="font-medium">Voice unavailable in this browser.</span>{' '}
           Speech-to-text input requires the Web Speech API (Chrome, Edge, or
           Safari). Your TTS output preferences below still apply when the app
@@ -229,14 +229,14 @@ export default function VoicePanel() {
       )}
 
       {!caps.tts && (
-        <div className="rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-sm text-amber-200">
+        <div className="rounded-lg border border-warning/40 bg-warning/20 px-3 py-2 text-sm text-warning">
           Text-to-speech is not supported in this browser. Output controls are
           disabled.
         </div>
       )}
 
       {errorMsg && (
-        <div className="rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-lg border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger">
           {errorMsg}
         </div>
       )}
@@ -245,10 +245,10 @@ export default function VoicePanel() {
       <section className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-medium text-gray-200">
+            <h3 className="text-sm font-medium text-text">
               Read replies aloud
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-text-muted mt-0.5">
               When on, assistant responses are spoken as they stream. Code
               blocks, tables, and images are skipped.
             </p>
@@ -265,8 +265,8 @@ export default function VoicePanel() {
       {/* ---------------- Voice picker ---------------- */}
       <section className="space-y-3">
         <div>
-          <h3 className="text-sm font-medium text-gray-200">Voice</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h3 className="text-sm font-medium text-text">Voice</h3>
+          <p className="text-xs text-text-muted mt-0.5">
             Voices are provided by your browser/OS.
             {voices.length === 0 && caps.tts && ' Loading…'}
           </p>
@@ -279,7 +279,7 @@ export default function VoicePanel() {
             disabled={
               !caps.tts || !voice.output_enabled || pendingKey === 'voice_name'
             }
-            className="flex-1 rounded-lg border border-gray-700 bg-gray-800/40 px-3 py-2 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:border-primary focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <option value="">(Browser default)</option>
             {voices.map(v => (
@@ -293,7 +293,7 @@ export default function VoicePanel() {
             type="button"
             onClick={onPreviewVoice}
             disabled={!caps.tts || !voice.output_enabled}
-            className="px-3 py-2 rounded-lg bg-gray-800 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-2 rounded-lg bg-surface text-sm text-text hover:bg-surface-light disabled:opacity-40 disabled:cursor-not-allowed"
             title="Preview the selected voice"
           >
             Preview
@@ -305,12 +305,12 @@ export default function VoicePanel() {
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-medium text-gray-200">Speech rate</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <h3 className="text-sm font-medium text-text">Speech rate</h3>
+            <p className="text-xs text-text-muted mt-0.5">
               How fast the assistant speaks (0.5× – 2.0×).
             </p>
           </div>
-          <div className="text-sm font-medium text-gray-100 tabular-nums w-12 text-right">
+          <div className="text-sm font-medium text-text tabular-nums w-12 text-right">
             {rateValue.toFixed(1)}×
           </div>
         </div>
@@ -326,9 +326,9 @@ export default function VoicePanel() {
           onKeyUp={onRateCommit}
           disabled={!caps.tts || !voice.output_enabled}
           aria-label="Speech rate"
-          className="w-full accent-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="w-full accent-primary disabled:opacity-40 disabled:cursor-not-allowed"
         />
-        <div className="flex justify-between text-[10px] uppercase tracking-wider text-gray-500">
+        <div className="flex justify-between text-[10px] uppercase tracking-wider text-text-muted">
           <span>Slow</span>
           <span>Normal</span>
           <span>Fast</span>
@@ -340,10 +340,10 @@ export default function VoicePanel() {
         <>
           <section className="space-y-3">
             <div>
-              <h3 className="text-sm font-medium text-gray-200">
+              <h3 className="text-sm font-medium text-text">
                 Auto-submit pause
               </h3>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-xs text-text-muted mt-0.5">
                 Length of silence (in milliseconds) before your transcript is
                 finalized and sent.
               </p>
@@ -363,12 +363,12 @@ export default function VoicePanel() {
                   }
                 }}
                 disabled={voice.manual_send}
-                className="w-32 rounded-lg border border-gray-700 bg-gray-800/40 px-3 py-2 text-sm text-gray-100 focus:border-indigo-500 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-32 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:border-primary focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label="Auto-submit pause threshold (ms)"
               />
-              <span className="text-sm text-gray-400">ms</span>
+              <span className="text-sm text-text-muted">ms</span>
               {pendingKey === 'auto_submit_pause_ms' && (
-                <span className="text-xs text-gray-500">Saving…</span>
+                <span className="text-xs text-text-muted">Saving…</span>
               )}
             </div>
           </section>
@@ -376,10 +376,10 @@ export default function VoicePanel() {
           <section className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-medium text-gray-200">
+                <h3 className="text-sm font-medium text-text">
                   Manual send
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-xs text-text-muted mt-0.5">
                   Don't auto-submit on pause. You'll press send yourself after
                   speaking.
                 </p>
@@ -421,13 +421,13 @@ function ToggleSwitch({
       disabled={disabled}
       className={
         'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ' +
-        (checked ? 'bg-indigo-500' : 'bg-gray-700') +
+        (checked ? 'bg-primary' : 'bg-surface-light') +
         (disabled ? ' opacity-40 cursor-not-allowed' : ' cursor-pointer')
       }
     >
       <span
         className={
-          'inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ' +
+          'inline-block h-5 w-5 transform rounded-full bg-on-primary shadow transition-transform ' +
           (checked ? 'translate-x-5' : 'translate-x-0.5')
         }
       />

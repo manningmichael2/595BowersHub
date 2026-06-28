@@ -57,7 +57,7 @@ export default function ModelPicker() {
         className="flex items-center gap-1.5 text-xs px-2 py-1 rounded bg-surface hover:brightness-110 text-text-muted transition-colors"
         title="Select model"
       >
-        {modelLocked && <span className="text-yellow-400">🔒</span>}
+        {modelLocked && <span className="text-warning">🔒</span>}
         <span>{currentLabel}</span>
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -83,7 +83,7 @@ export default function ModelPicker() {
           </button>
 
           {loading && (
-            <div className="text-center text-gray-500 py-4 text-sm">Loading...</div>
+            <div className="text-center text-text-muted py-4 text-sm">Loading...</div>
           )}
 
           {!loading && Object.entries(groupedModels).map(([provider, providerModels]) => (

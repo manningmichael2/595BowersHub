@@ -58,10 +58,10 @@ export default function ChatArea() {
       {/* Messages area */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {!activeConversation ? (
-          <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="flex items-center justify-center h-full text-text-muted">
             <div className="text-center max-w-md">
               <div className="text-4xl mb-4">{activeWorkspace.icon || '💬'}</div>
-              <h3 className="text-lg font-medium text-gray-300 mb-2">
+              <h3 className="text-lg font-medium text-text-muted mb-2">
                 {activeWorkspace.name}
               </h3>
               <p className="text-sm">
@@ -76,7 +76,7 @@ export default function ChatArea() {
               <div className="mb-4">
                 {streamingContent ? (
                   <div className="flex gap-3">
-                    <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center text-xs shrink-0 mt-1">
+                    <div className="w-7 h-7 rounded-full bg-success flex items-center justify-center text-xs shrink-0 mt-1">
                       AI
                     </div>
                     <div className="flex-1 min-w-0">

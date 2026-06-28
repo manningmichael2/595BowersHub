@@ -400,7 +400,7 @@ export default function QuickCaptureOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-background/60 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="quick-capture-title"

@@ -58,7 +58,7 @@ export default function SearchOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-background/60" onClick={() => setSearchOpen(false)} />
+      <div className="absolute inset-0 bg-black/60" onClick={() => setSearchOpen(false)} />
 
       {/* Search panel */}
       <div className="relative w-full max-w-2xl mx-4 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden">

@@ -2,12 +2,12 @@ import type { WidgetProps } from '../WidgetRegistry'
 
 export default function SportsScoresWidget({ data, widgetDef }: WidgetProps) {
   if (!data) {
-    return <div className="p-4 text-sm text-gray-400">Loading scores...</div>
+    return <div className="p-4 text-sm text-text-muted">Loading scores...</div>
   }
 
   const display = data.display || data._display || ''
   if (data.error) {
-    return <div className="p-4 text-sm text-red-400">⚠️ {data.error}</div>
+    return <div className="p-4 text-sm text-danger">⚠️ {data.error}</div>
   }
 
   // Parse the display markdown into structured sections
@@ -18,7 +18,7 @@ export default function SportsScoresWidget({ data, widgetDef }: WidgetProps) {
       {sections.map((section, i) => (
         <div key={i}>
           {section.title && (
-            <h3 className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-1.5">
+            <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-1.5">
               {section.emoji} {section.title}
             </h3>
           )}
@@ -29,7 +29,7 @@ export default function SportsScoresWidget({ data, widgetDef }: WidgetProps) {
           </div>
         </div>
       ))}
-      {!sections.length && <p className="text-sm text-gray-500">No games today.</p>}
+      {!sections.length && <p className="text-sm text-text-muted">No games today.</p>}
     </div>
   )
 }
@@ -46,20 +46,20 @@ interface GameInfo {
 }
 
 function GameLine({ game }: { game: GameInfo }) {
-  const statusColor = game.isLive ? 'text-red-400' : game.isFinal ? 'text-gray-500' : 'text-blue-400'
+  const statusColor = game.isLive ? 'text-danger' : game.isFinal ? 'text-text-muted' : 'text-primary'
   
   return (
-    <div className="flex items-center justify-between text-sm py-1 border-b border-gray-800/50 last:border-0">
+    <div className="flex items-center justify-between text-sm py-1 border-b border-border last:border-0">
       <div className="flex-1 min-w-0">
-        <span className={game.winner === 'away' ? 'font-semibold text-gray-100' : 'text-gray-300'}>
+        <span className={game.winner === 'away' ? 'font-semibold text-text' : 'text-text-muted'}>
           {game.away}
         </span>
         {(game.awayScore !== undefined || game.homeScore !== undefined) && (
-          <span className="text-gray-400 mx-1.5">
+          <span className="text-text-muted mx-1.5">
             {game.awayScore ?? 0} – {game.homeScore ?? 0}
           </span>
         )}
-        <span className={game.winner === 'home' ? 'font-semibold text-gray-100' : 'text-gray-300'}>
+        <span className={game.winner === 'home' ? 'font-semibold text-text' : 'text-text-muted'}>
           {game.home}
         </span>
       </div>

@@ -40,12 +40,12 @@ export default function ToolFramePage() {
 
   if (!tool) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-surface text-gray-200">
+      <div className="fixed inset-0 flex items-center justify-center bg-surface text-text">
         <div className="text-center">
           <p className="text-lg">Unknown tool: {toolId}</p>
           <button
             onClick={() => navigate(-1)}
-            className="mt-4 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500"
+            className="mt-4 px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary/90"
           >
             Go back
           </button>
@@ -57,22 +57,22 @@ export default function ToolFramePage() {
   return (
     <div className="fixed inset-0 flex flex-col bg-surface">
       {/* Minimal header bar */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 shrink-0 bg-background">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-border shrink-0 bg-background">
         <button
           onClick={() => navigate(-1)}
-          className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 text-sm"
+          className="p-1.5 rounded-lg hover:bg-surface text-text-muted text-sm"
           aria-label="Back to chat"
         >
           ← Back
         </button>
-        <span className="text-sm text-gray-200">
+        <span className="text-sm text-text">
           {tool.icon} {tool.label}
         </span>
         <a
           href={tool.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto text-xs text-gray-500 hover:text-gray-300"
+          className="ml-auto text-xs text-text-muted hover:text-text-muted"
           title="Open in new tab"
         >
           ↗ Open in tab
