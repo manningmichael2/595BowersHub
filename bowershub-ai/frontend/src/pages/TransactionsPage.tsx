@@ -8,7 +8,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../stores/toast'
 import SplitEditor from '../components/finance/SplitEditor'
-import { Combobox } from '../components/ui/finance'
+import { Combobox, DateRangePicker } from '../components/ui/finance'
+import { parseDate } from '@internationalized/date'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { financeReview, type CategoryOption } from '../services/financeReview'
 import {
@@ -69,6 +70,16 @@ export default function TransactionsPage() {
     () => categories.map((c) => ({ id: c.id, label: c.name })),
     [categories],
   )
+
+  // Bridge the string ('YYYY-MM-DD') date state to the DateRangePicker's
+  // CalendarDate range. Empty bounds ("All time") → no range selected.
+  const dateRange = useMemo(() => {
+    try {
+      return start && end ? { start: parseDate(start), end: parseDate(end) } : null
+    } catch {
+      return null
+    }
+  }, [start, end])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -196,11 +207,19 @@ export default function TransactionsPage() {
           )
         })}
         <span className="text-text-muted text-xs">·</span>
-        <input className={`${INPUT_CLS} text-xs`} type="date" aria-label="Start date"
-          value={start} max={end || undefined} onChange={(e) => setStart(e.target.value)} />
-        <span className="text-text-muted text-xs">to</span>
-        <input className={`${INPUT_CLS} text-xs`} type="date" aria-label="End date"
-          value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />
+        <DateRangePicker
+          aria-label="Custom date range"
+          value={dateRange}
+          onChange={(range) => {
+            if (range) {
+              setStart(range.start.toString())
+              setEnd(range.end.toString())
+            } else {
+              setStart('')
+              setEnd('')
+            }
+          }}
+        />
       </div>
 
       {/* Bulk action bar */}
