@@ -1205,3 +1205,19 @@ Continued the finance UI build (owner thumbs-up) — extended the widgets to the
 - **NetWorthPage — skipped:** grouped accounts-by-type display list with subtotals; a flat sortable DataGrid isn't clearly better for net worth (no editing).
 
 - [Next] Finance-widget adoption is substantially complete. Owner to validate the finance pages live (still needs the backend redeploy). Open options: a generic NumberField widget to unify RetirementPlanner; bundle-ceiling decision; then merge `spec/design-system-and-shell` → `main` after the desktop pass.
+
+---
+
+## [2026-06-28] Household pass — workspace sharing UI + per-account owner + context attribution — Claude Code
+
+Owner-directed "pass on the multiuser component". The `multiuser-household` spec (PR #48) is merged — authz ladder, capabilities, per-user features, attribution columns all on `main` — but three real gaps remained. Branch `feat/household-sharing-owner-attribution` (3 commits, each tested). Throwaway `pgvector/pgvector:pg16` on host port 5455 for DB-backed tests.
+
+- **Workspace sharing (the "can't give users access to workspaces" symptom).** The membership backend existed (`POST /api/workspaces/{id}/users`) but had no admin UI — the logged "workspace membership management gap" (`bead5c1`). Added admin-scoped, `users.manage`-gated routes `GET/PUT/DELETE /api/admin/users/{id}/workspaces[/{ws}]` (list every workspace + the user's membership flag; grant/revoke) and a per-user **"Workspaces" expander in the Users console** (checklist toggles membership). Also **hardened** the pre-existing `POST/DELETE /api/workspaces/{id}/users`: they were membership-gated (any member could add anyone) → now `users.manage`. Tests: grant→revoke, member 403 on all three, invalid role 400, unknown user/ws 404.
+
+- **Per-account owner + filter (new — Manon's accounts).** `finance.accounts.owner_id` (migration `0045`, FK→`bh_users` ON DELETE SET NULL, nullable = Joint/Shared). **Owner-decision: DISPLAY/FILTER ONLY** — finance stays fully shared (no per-user silos, per the spec); owner is a label, not an access boundary. **Manon's accounts flow in via the existing single SimpleFin bridge** — no new sync plumbing, just tag + filter. Backend: owner filter in `transactions_query` (subquery on `account_id`, composes with list + aggregates; `owner=joint` = unowned), `?owner=` on `GET /finance/transactions`, `GET /finance/accounts` (list w/ owner, `finance.read`) + `PUT /finance/accounts/{id}/owner` (`finance.delete` — same admin gate as set-account-type). Frontend: owner `<select>` on Transactions (shows only once any account is tagged) + admin-only **"Account owners"** assignment section on NetWorthPage. Tests: assign→filter, joint filter, bad owner 400, member read-but-not-assign.
+
+- **Context-capture attribution ("know from whom context was captured").** `context_capture.py` appended `- [date] statement` to per-workspace knowledge `.md` with no author. Threaded the capturing user's `display_name` (already on `HookEventContext.user_id`) through `evaluate()`→`_persist()`; line is now `- [date] (Name) statement`, NULL/system runs stay unstamped. Statement text untouched so the dedup substring check holds. Tests: stamped when known, clean when unknown.
+
+**State:** frontend `tsc` clean; touched-area backend suite **184 passed**; new FE owner filter exercised via existing TransactionsPage test (still 3 passed). Migration `0045` applies clean on `fresh_db`.
+
+- [Next] Owner to: link Manon's bank under the existing SimpleFin bridge, then (as admin) tag her accounts on NetWorthPage → the owner filter appears on Transactions. **Note (latent, not fixed here):** `GET /api/finance/transactions` is gated `get_current_user`, not `require_capability("finance.read")` like its siblings — a pre-existing T-AUDIT-1 gap worth a follow-up. Branch not yet merged to `main`.
