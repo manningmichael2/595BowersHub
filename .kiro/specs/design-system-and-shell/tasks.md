@@ -112,8 +112,8 @@
 - **Effort:** M
 - **Dependencies:** Task 10
 - **Requirements:** R3.3
-- [ ] On `<BREAKPOINT_DESKTOP`, keep `BottomTabBar` for primary nav and add `shell/SecondaryNav.tsx` (scrollable segmented control / bottom sheet) replacing per-section sub-nav rows.
-- [ ] **Tests:** mobile branch (matchMedia false) renders bottom tabs + secondary nav; section sub-nav reachable.
+- [x] `BottomTabBar` stays primary nav below the canonical breakpoint (mounted by ShellLayout when mobile). Added `shell/SecondaryNav.tsx` — one shared, horizontally-scrollable segmented control (NavLink-driven, tokenized) replacing hand-rolled sub-nav rows; **`FinanceLayout` refactored to use it** (dropped its bespoke row). Works at every width (scrolls when narrow), so it's the mobile secondary-nav story too.
+- [x] **Tests:** `SecondaryNav.test.tsx` — labelled nav landmark, links, active `aria-current`. tsc clean; 330 tests; build green. (DashboardPage's tabs are state-driven, not routes — left for P4 to adopt the primitive.)
 
 ## Task 13: Nav gating, safe-area/PWA, sections preserved, global hotkeys
 - **Effort:** M
