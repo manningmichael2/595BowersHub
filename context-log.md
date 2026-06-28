@@ -1176,3 +1176,18 @@ Live mobile validation pass with the owner (dev server over Tailscale) surfaced 
 **Verified already-good (no change):** TransactionsPage is responsive (stacked cards vs table at `isMobile`, R5.3); dashboard widgets already use `ErrorState`+retry (`WidgetShell`).
 
 - [Next] Owner to: **redeploy backend** (the real Finance/Database fix), do a **desktop visual pass**, then merge `spec/design-system-and-shell` → `main`. Deferred (not blockers): finance-widget adoption in finance pages (north-star work — re-check React-Aria main-chunk ceiling then); chat Sidebar account/Settings/Admin footer still duplicates the drawer on mobile (owner undecided — Admin is the one non-redundant shortcut); DashboardNav stays state-driven (doesn't map to the route-based SecondaryNav without making dashboard pages routes).
+
+---
+
+## [2026-06-28] Finance UI build started — React-Aria widgets into Transactions — Claude Code
+
+With the shell stable, began the finance UI build (owner-directed) by adopting the T8 React-Aria finance widgets into the flagship Transactions page. 3 increments on `spec/design-system-and-shell`, each its own commit; tsc + 340 frontend tests + build green throughout. **Bundle isolation holds**: react-aria-components stays OUT of the main chunk and lands only in the lazy `/finance/transactions` chunk.
+
+- **#1 (b0b4dfd)** — filter + bulk category `<select>` → searchable `Combobox`. Combobox primitive gained `aria-label` passthrough (use without a visible label).
+- **#2 (2c19871)** — date filter → `DateRangePicker` (presets still drive start/end); a useMemo bridges the 'YYYY-MM-DD' string state ↔ CalendarDate (`parseDate`).
+- **#3 (73f339f)** — the centerpiece: desktop table → `DataGrid` with **click-to-edit category cells** (display → Combobox on click → categorize). Bulk-select preserved via plain checkboxes in render-cells + the page's own `selected` set (not RAC selection). Sorting wired to the existing sort/order query via `onSortChange`. DataGrid primitive extended (ReactNode headers, per-col width, rowTestId).
+  - **Two deliberate, revertable tradeoffs:** splits now open a **modal Dialog** (React Aria tables can't host inline detail rows — SplitEditor reused as-is); the **DataGrid is desktop-only**, mobile keeps the validated stacked-card list.
+
+- **Bundle ceiling watch:** the lazy TransactionsPage chunk grew 200KB→357KB→444KB (≈110→136KB gzip) across #1→#3 as Table/ComboBox/Calendar/NumberField landed. Loaded only on the finance route + cached; acceptable for a power-tool, but flagged for an owner decision if it matters.
+
+- [Next] **Owner to redeploy backend + validate the finance pages live** (finance data won't load against the stale backend; the new controls render regardless but filtering/categorizing needs data). Confirm the two #3 tradeoffs feel right. Then: extend widgets to the other finance pages (CurrencyInput in Budgets/SplitEditor; possibly DataGrid for NetWorth/holdings), and decide on the bundle ceiling. Still pending from earlier: backend redeploy is ALSO the real fix for the Finance/Database nav gating (the /api/me/features 404).
