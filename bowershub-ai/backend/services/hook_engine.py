@@ -613,10 +613,15 @@ class HookEngine:
             captured_by = None
             if context.user_id:
                 u = await conn.fetchrow(
-                    "SELECT display_name FROM public.bh_users WHERE id = $1",
+                    "SELECT display_name, settings_json FROM public.bh_users WHERE id = $1",
                     context.user_id,
                 )
-                captured_by = u["display_name"] if u else None
+                if u:
+                    captured_by = u["display_name"]
+                    # Per-user privacy opt-out (Settings → Context Capture).
+                    settings = u["settings_json"] or {}
+                    if settings.get("context_capture_disabled"):
+                        return {"skipped": True, "reason": "User opted out of context capture"}
 
         workspace_name = ws["name"] if ws else "general"
         facts = await capture.evaluate(

@@ -27,7 +27,7 @@
 // change makes the browser detect an updated worker; install() skipWaiting +
 // activate() (cache wipe + clients.claim) then dislodge any older worker still
 // pinning an installed app to a stale bundle.
-const SW_VERSION = '2026-06-22-2';
+const SW_VERSION = '2026-06-28-1';
 
 const SHARE_TARGET_URL = '/quick-capture';
 
@@ -112,6 +112,45 @@ async function _handleShareTarget(request) {
   // the SW for the payload via postMessage.
   return Response.redirect(`${SHARE_TARGET_URL}?share=${token}`, 303);
 }
+
+// Web Push: the backend (services/notifications.py) sends a JSON payload of
+// { title, body, icon }. Show it as a notification; clicking focuses/opens the
+// app (optionally at a `url` the payload may carry).
+self.addEventListener('push', (event) => {
+  let data = { title: 'BowersHub', body: '', icon: '/icons/icon-192.png' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch (err) {
+    // Non-JSON payload — fall back to the raw text as the body.
+    if (event.data) data.body = event.data.text();
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon || '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { url: data.url || '/' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Focus an existing tab if one is open; otherwise open a new one.
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.focus();
+          if ('navigate' in client && target !== '/') client.navigate(target);
+          return;
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+    })
+  );
+});
 
 // SPA-side handshake: the Quick Capture page posts
 // `{ type: 'share-target:claim', token }` to the SW; we reply with the

@@ -1257,3 +1257,19 @@ Owner usability pass: the DB-browser schema sidebar listed every table under eve
 Pure helpers `buildFavoriteEntries`/`buildSchemaGroups` extracted from `SchemaSidebar.tsx` + unit-tested; settings round-trip test added. tsc + 85 FE db-browser tests + 5 settings-router tests green. Merged `feat/db-sidebar-usability` → `main` (`0427319`), pushed, **redeployed** (no migration; rebuilt app, health ok).
 
 - [Next] Owner to try the sidebar live (star a few finance tables, hide the `*_files` link tables). Continuing the broader usability pass.
+
+## [2026-06-28] Settings full pass — wired the placeholder sections + real web push — Claude Code
+
+Owner usability pass on Settings ("still seem outdated despite the vgu"). Root finding: three Settings sections were `PlaceholderSection` "Coming soon" stubs whose **backends already existed and were unconnected** — not stale, unwired. Did a full pass on branch `feat/settings-full-pass` (3 commits, each tested). Throwaway `bh-pgvec-test` postgres on host port 55433 for DB-backed tests.
+
+- **Briefing** (`BriefingPanel`) — show/hide the morning card + workspace picker. The `settings_json.morning_card_workspace_id`/`morning_card_disabled` knobs were already honored end-to-end (routers/briefing.py + MorningCard); pure FE wiring.
+- **Notifications** (`NotificationsPanel` + new `GET/PUT /api/me/notifications`) — web push / Pushover toggles + quiet hours over `bh_notification_prefs` (global `default` row). `NotificationService._get_preferences` now falls back to that row for any event_type (`ORDER BY (event_type=$specific) DESC`), so one global row steers delivery. Channels the server can't deliver render disabled with a reason.
+- **Context Capture** (`ContextCapturePanel` + `settings_json.context_capture_disabled`) — privacy opt-out, short-circuits `hook_engine._action_capture_context` **before** the model call.
+- **Profile editable** — inline display-name edit (`PATCH /api/auth/me`) + change-password (`POST /api/auth/change-password`: verifies current pw, enforces policy, revokes other refresh tokens). auth store gained `updateUser()`. Was read-only.
+- **Real web push (going deeper)** — the toggle was previously a bare pref with no subscription flow, so it could never deliver. Added `push`+`notificationclick` handlers to `public/sw.js` (SW_VERSION→`2026-06-28-1`); backend `GET /api/me/push/key`, `POST /api/me/push/subscribe` (dedupes by endpoint), `POST /api/me/push/unsubscribe`; FE `services/push.ts` (`enableWebPush`/`disableWebPush`) run the permission→PushManager→register handshake before persisting the pref, gated on browser support **and** server VAPID config.
+
+**State:** frontend tsc clean, 351 FE tests (5 new for the panels + handshake); backend touched-area + authz/IDOR sweep green, 13 new DB-backed tests in `test_settings_full_pass.py`. **No migration** (all tables pre-existed). Branch **not merged to `main`**, not deployed.
+
+- **Known follow-ups (not blockers):** web push only delivers where the server has VAPID keys (none configured on the deployed server today → the toggle correctly shows web push *unavailable*; **Pushover is the channel that works once its keys are set**). Quiet hours are interpreted in **server local time**, not the user's timezone (pre-existing in `_in_quiet_hours`) — a gotcha for a multi-timezone household. Notifications are a single global pref; per-event granularity is possible later (the table is keyed by event_type).
+
+- [Next] Owner to: do a live pass on the four sections (Settings → Briefing/Notifications/Context Capture/Profile), then merge `feat/settings-full-pass` → `main` + redeploy (FE+BE, no migration). To actually exercise web push, set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` (+ `ADMIN_EMAIL`) in the backend env. Smaller tail still open from the foundation list: DB-driven per-skill `min_role` (replace `ADMIN_ONLY_SKILLS`), C6 `any`-at-API-boundary cleanup.

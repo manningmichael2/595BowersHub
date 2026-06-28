@@ -60,6 +60,8 @@ export const UserSettingsSchema = z
     morning_card_disabled: z.boolean().optional(),
     voice: VoiceSettingsSchema.optional(),
     use_experimental_dashboard: z.boolean().optional(),
+    // Privacy opt-out for the background context-capture pass.
+    context_capture_disabled: z.boolean().optional(),
     // DB Browser sidebar prefs: "schema.table" keys for favorites/hidden, and
     // the set of expanded schema names (collapse-by-default otherwise).
     db_favorites: z.array(z.string()).optional(),

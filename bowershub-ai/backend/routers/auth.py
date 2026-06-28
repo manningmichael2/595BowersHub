@@ -200,9 +200,98 @@ async def get_me(user: dict = Depends(get_current_user)):
     )
 
 
-# ---- Password Recovery ----
+# ---- Self-service profile (authenticated) ----
 
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel as PydanticBaseModel, Field
+
+
+class ProfileUpdate(PydanticBaseModel):
+    model_config = {"extra": "forbid"}
+    display_name: str = Field(min_length=1, max_length=80)
+
+
+class ChangePassword(PydanticBaseModel):
+    model_config = {"extra": "forbid"}
+    current_password: str
+    new_password: str
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    body: ProfileUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """Update the current user's own profile. Display name only — email and role
+    are not self-editable (role escalation must go through an admin)."""
+    from backend.database import get_pool
+    from backend.middleware.audit import AuditLogger
+
+    name = body.display_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Display name cannot be empty.")
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE public.bh_users SET display_name = $1 WHERE id = $2",
+            name, user["id"],
+        )
+    await AuditLogger.log(user["id"], "profile_updated", "user", user["id"])
+
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        display_name=name,
+        role=user["role"],
+        is_active=user["is_active"],
+        created_at=user["created_at"],
+        last_login_at=user["last_login_at"],
+    )
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePassword,
+    user: dict = Depends(get_current_user),
+):
+    """Change the current user's password. Requires the current password, and
+    enforces the same policy as register/reset. Revokes all refresh tokens so
+    other sessions must re-login."""
+    from backend.database import get_pool
+    from backend.middleware.audit import AuditLogger
+
+    # Same password policy as register/reset (R2.3).
+    policy_error = AuthService.check_password_policy(body.new_password)
+    if policy_error:
+        raise HTTPException(status_code=400, detail=policy_error)
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        current_hash = await conn.fetchval(
+            "SELECT password_hash FROM public.bh_users WHERE id = $1", user["id"]
+        )
+        if not current_hash or not AuthService.verify_password(
+            body.current_password, current_hash
+        ):
+            raise HTTPException(status_code=400, detail="Current password is incorrect.")
+
+        new_hash = AuthService.hash_password(body.new_password)
+        await conn.execute(
+            "UPDATE public.bh_users SET password_hash = $1 WHERE id = $2",
+            new_hash, user["id"],
+        )
+        # Force re-login everywhere else.
+        await conn.execute(
+            "UPDATE public.bh_refresh_tokens SET revoked_at = NOW() "
+            "WHERE user_id = $1 AND revoked_at IS NULL",
+            user["id"],
+        )
+
+    await AuditLogger.log(user["id"], "password_changed", "user", user["id"])
+    return {"ok": True, "message": "Password changed. Other sessions have been signed out."}
+
+
+# ---- Password Recovery ----
 
 
 class PasswordResetRequest(PydanticBaseModel):

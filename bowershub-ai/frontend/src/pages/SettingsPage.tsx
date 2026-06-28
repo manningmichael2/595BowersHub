@@ -25,7 +25,10 @@ import { api } from '../services/api'
 import { toast } from '../stores/toast'
 import AppearancePanel from '../components/AppearancePanel'
 import VoicePanel from '../components/VoicePanel'
-import { Button, Badge, Switch } from '../components/ui'
+import BriefingPanel from '../components/BriefingPanel'
+import NotificationsPanel from '../components/NotificationsPanel'
+import ContextCapturePanel from '../components/ContextCapturePanel'
+import { Button, Badge, Switch, Input } from '../components/ui'
 
 type SectionId =
   | 'profile'
@@ -72,26 +75,11 @@ function SectionPane({ id }: { id: SectionId }) {
     case 'voice':
       return <VoicePanel />
     case 'notifications':
-      return (
-        <PlaceholderSection
-          title="Notifications"
-          description="Daily briefing and budget alert preferences. Coming soon."
-        />
-      )
+      return <NotificationsPanel />
     case 'briefing':
-      return (
-        <PlaceholderSection
-          title="Briefing"
-          description="Morning card workspace and briefing schedule. Coming soon."
-        />
-      )
+      return <BriefingPanel />
     case 'context-capture':
-      return (
-        <PlaceholderSection
-          title="Context Capture"
-          description="Background context-capture preferences. Coming soon."
-        />
-      )
+      return <ContextCapturePanel />
     case 'labs':
       return <LabsSection />
     default:
@@ -214,51 +202,127 @@ export default function SettingsPage() {
 // ---------------------------------------------------------------------------
 
 function ProfileSection() {
-  const { user } = useAuthStore()
+  const user = useAuthStore((s) => s.user)
+  const updateUser = useAuthStore((s) => s.updateUser)
+
+  // ---- Display name (inline edit) ----
+  const [name, setName] = useState(user?.display_name ?? '')
+  const [savingName, setSavingName] = useState(false)
+  const nameDirty = name.trim() !== (user?.display_name ?? '') && name.trim().length > 0
+
+  const saveName = async () => {
+    setSavingName(true)
+    try {
+      const res = await api.patch('/api/auth/me', { display_name: name.trim() })
+      updateUser({ display_name: res.data.display_name })
+      toast.success('Display name updated.')
+    } catch (err: any) {
+      toast.error(`Couldn't update name: ${err.response?.data?.detail || 'Unknown error'}`)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
+  // ---- Change password ----
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [savingPw, setSavingPw] = useState(false)
+  const pwMismatch = confirm.length > 0 && next !== confirm
+  const pwReady = current.length > 0 && next.length > 0 && next === confirm && !savingPw
+
+  const changePassword = async () => {
+    setSavingPw(true)
+    try {
+      await api.post('/api/auth/change-password', {
+        current_password: current,
+        new_password: next,
+      })
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      toast.success('Password changed. Other sessions have been signed out.')
+    } catch (err: any) {
+      toast.error(`Couldn't change password: ${err.response?.data?.detail || 'Unknown error'}`)
+    } finally {
+      setSavingPw(false)
+    }
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h2 className="text-lg font-medium text-text">Profile</h2>
         <p className="mt-1 text-sm text-text-muted">Your account details.</p>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between py-2">
-          <span className="text-sm">Display Name</span>
-          <span className="text-sm text-text-muted">{user?.display_name}</span>
+      {/* Display name — editable */}
+      <div className="space-y-2">
+        <label htmlFor="profile-name" className="text-sm font-medium text-text">
+          Display Name
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id="profile-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={80}
+            className="w-full sm:w-64"
+          />
+          <Button size="sm" onClick={saveName} disabled={!nameDirty || savingName}>
+            {savingName ? 'Saving…' : 'Save'}
+          </Button>
         </div>
-        <div className="flex items-center justify-between py-2">
+      </div>
+
+      {/* Read-only identity */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between py-1">
           <span className="text-sm">Email</span>
           <span className="text-sm text-text-muted">{user?.email}</span>
         </div>
-        <div className="flex items-center justify-between py-2">
+        <div className="flex items-center justify-between py-1">
           <span className="text-sm">Role</span>
           <Badge variant="secondary">{user?.role}</Badge>
         </div>
       </div>
-    </div>
-  )
-}
 
-// ---------------------------------------------------------------------------
-// Lightweight placeholder for sections whose dedicated components have not
-// been built yet. Keeps the navigation working end-to-end.
-// ---------------------------------------------------------------------------
-
-function PlaceholderSection({
-  title,
-  description,
-}: {
-  title: string
-  description: string
-}) {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-medium text-text">{title}</h2>
-        <p className="mt-1 text-sm text-text-muted">{description}</p>
+      {/* Change password */}
+      <div className="space-y-3 border-t border-border pt-6">
+        <div>
+          <h3 className="text-sm font-medium text-text">Change password</h3>
+          <p className="mt-1 text-xs text-text-muted">
+            At least 10 characters. Changing it signs out your other sessions.
+          </p>
+        </div>
+        <div className="max-w-sm space-y-2">
+          <Input
+            type="password"
+            placeholder="Current password"
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+          <Input
+            type="password"
+            placeholder="New password"
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
+          <Input
+            type="password"
+            placeholder="Confirm new password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+          {pwMismatch && <p className="text-xs text-danger">Passwords don't match.</p>}
+          <Button size="sm" onClick={changePassword} disabled={!pwReady}>
+            {savingPw ? 'Changing…' : 'Change password'}
+          </Button>
+        </div>
       </div>
-      <div className="text-sm italic text-text-muted">Coming soon.</div>
     </div>
   )
 }
