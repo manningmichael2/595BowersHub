@@ -8,6 +8,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../stores/toast'
 import SplitEditor from '../components/finance/SplitEditor'
+import { Combobox } from '../components/ui/finance'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { financeReview, type CategoryOption } from '../services/financeReview'
 import {
@@ -62,6 +63,12 @@ export default function TransactionsPage() {
   const isMobile = useIsMobile()
 
   useEffect(() => { financeReview.getCategories().then(setCategories).catch(() => {}) }, [])
+
+  // Searchable-combobox options for category pickers (filter + bulk).
+  const categoryOptions = useMemo(
+    () => categories.map((c) => ({ id: c.id, label: c.name })),
+    [categories],
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -163,11 +170,14 @@ export default function TransactionsPage() {
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <input className={`${INPUT_CLS} flex-1 min-w-[160px]`} placeholder="Search description / merchant…"
           value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search transactions" />
-        <select className={INPUT_CLS} value={categoryId} aria-label="Filter category"
-          onChange={(e) => setCategoryId(e.target.value === '' ? '' : Number(e.target.value))}>
-          <option value="">All categories</option>
-          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <Combobox
+          className="min-w-[180px]"
+          aria-label="Filter category"
+          options={categoryOptions}
+          selectedKey={categoryId === '' ? null : categoryId}
+          onSelectionChange={(k) => setCategoryId(k == null ? '' : Number(k))}
+          placeholder="All categories"
+        />
         <select className={INPUT_CLS} value={status} aria-label="Filter status"
           onChange={(e) => setStatus(e.target.value as TxnStatus)}>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -197,11 +207,14 @@ export default function TransactionsPage() {
       {selected.size > 0 && (
         <div data-testid="bulk-bar" className="flex flex-wrap items-center gap-2 mb-2.5">
           <span className="text-xs text-text">{selected.size} selected</span>
-          <select className={`${INPUT_CLS} text-xs`} aria-label="Bulk category" value={bulkCat}
-            onChange={(e) => setBulkCat(e.target.value === '' ? '' : Number(e.target.value))}>
-            <option value="">Choose category…</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <Combobox
+            className="min-w-[180px]"
+            aria-label="Bulk category"
+            options={categoryOptions}
+            selectedKey={bulkCat === '' ? null : bulkCat}
+            onSelectionChange={(k) => setBulkCat(k == null ? '' : Number(k))}
+            placeholder="Choose category…"
+          />
           <button className="text-xs text-text-muted hover:text-text disabled:opacity-50" disabled={bulkCat === ''} onClick={applyBulk}>Apply to selected</button>
           <button className="text-xs text-text-muted hover:text-text" onClick={() => setSelected(new Set())}>Clear</button>
         </div>
