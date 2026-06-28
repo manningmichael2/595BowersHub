@@ -1234,3 +1234,14 @@ Owner signed in as a test **member** and had no workspace access / couldn't star
 **Consequence for prior work:** the per-user **"Workspaces" grant UI** added earlier this session (Admin → Users) is now **redundant for access** — membership no longer gates visibility. Left in place (harmless, admin-only, sets `owner` role); **owner to decide** whether to remove it or keep for a future private-workspace (`is_shared=false`) concept.
 
 - [Next] Owner: redeploy backend (these are backend changes; the member's live app needs the new build), then re-test the member account. Branch `feat/household-sharing-owner-attribution` now carries 5 commits (context attribution, workspace-grant UI, account owner, shared-workspaces+finance.read, + logs). Not merged to `main`.
+
+## [2026-06-28] Shipped — merged household pass to main + redeployed — Claude Code
+
+Merged `feat/household-sharing-owner-attribution` → `main` (`326eb57`, --no-ff), pushed to origin, and **redeployed** `bowershub-ai` (`./scripts/deploy.sh bowershub-ai` — frontend+backend rebuilt, container recreated). **This also un-stales the backend** that had been running since ~2026-06-25 (the `/api/me/features` 404 source). Verified live:
+- Migration `0045_account_owner.sql` applied on startup; `finance.accounts.owner_id` confirmed present in the live `finance` DB.
+- `/api/me/features` now **401 (registered)**, was 404 on the stale build → role-aware nav (Finance/Database) works again.
+- `/api/finance/transactions` + `/api/finance/accounts` registered (401, gated). Health `ok`, `database: true`.
+
+Everything built this session (+ the previously-merged design-system/finance-UI on main) is now LIVE.
+
+- [Next] Owner to log in as the member (sees all workspaces, can start a chat now) and as admin tag a couple of Manon's accounts on NetWorthPage → confirm the Transactions owner filter end-to-end. Then pick the next feature (finance north-star insights is the stated #1).
