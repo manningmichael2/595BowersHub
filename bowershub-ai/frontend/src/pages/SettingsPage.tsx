@@ -16,10 +16,11 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
 import { useFeatures } from '../hooks/useFeatures'
+import { useBreakpoint } from '../hooks/useBreakpoint'
 import { api } from '../services/api'
 import { toast } from '../stores/toast'
 import AppearancePanel from '../components/AppearancePanel'
@@ -58,10 +59,53 @@ const BASE_SECTIONS: SectionDef[] = [
 
 const ADMIN_SECTION: SectionDef = { id: 'admin', label: 'Admin', icon: '🛠️' }
 
+/** Renders the active section's pane. Sections that link out (scheduled
+ * prompts, admin) never reach here — handleSelect navigates away instead. */
+function SectionPane({ id }: { id: SectionId }) {
+  switch (id) {
+    case 'profile':
+      return <ProfileSection />
+    case 'appearance':
+      return <AppearancePanel />
+    case 'navigation':
+      return <NavigationSection />
+    case 'voice':
+      return <VoicePanel />
+    case 'notifications':
+      return (
+        <PlaceholderSection
+          title="Notifications"
+          description="Daily briefing and budget alert preferences. Coming soon."
+        />
+      )
+    case 'briefing':
+      return (
+        <PlaceholderSection
+          title="Briefing"
+          description="Morning card workspace and briefing schedule. Coming soon."
+        />
+      )
+    case 'context-capture':
+      return (
+        <PlaceholderSection
+          title="Context Capture"
+          description="Background context-capture preferences. Coming soon."
+        />
+      )
+    case 'labs':
+      return <LabsSection />
+    default:
+      return null
+  }
+}
+
 export default function SettingsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const [activeSection, setActiveSection] = useState<SectionId>('profile')
+  const { isDesktop } = useBreakpoint()
+  // null = no section drilled into. On desktop a pane is always shown (defaults
+  // to Profile); on mobile null means the section LIST is shown (master-detail).
+  const [activeSection, setActiveSection] = useState<SectionId | null>(null)
 
   // R12.5 — append Admin entry only when user has admin role.
   const sections: SectionDef[] =
@@ -81,73 +125,85 @@ export default function SettingsPage() {
     setActiveSection(id)
   }
 
+  const paneSection = activeSection ?? 'profile' // desktop always shows a pane
+  // Mobile drills into a single section; back returns to the list.
+  const mobilePaneOpen = !isDesktop && activeSection !== null
+
   return (
     // The app body is locked to `overflow: hidden` (see index.css); this page
     // manages its own scroll within the shell content area.
     <div className="flex h-full flex-col bg-surface text-text">
-      {/* Header */}
+      {/* Header — on a mobile drill-in, the back returns to the section LIST
+          (not browser-back); otherwise just the title. App-level navigation is
+          owned by the shell chrome (rail / drawer / top bar). */}
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft size={16} aria-hidden />
-          Back
-        </Button>
-        <h1 className="text-lg font-medium">Settings</h1>
+        {mobilePaneOpen ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveSection(null)}
+            aria-label="Back to settings list"
+          >
+            <ArrowLeft size={16} aria-hidden />
+            Settings
+          </Button>
+        ) : (
+          <h1 className="text-lg font-medium">Settings</h1>
+        )}
       </div>
 
-      {/* Body: nav (left on desktop, top on mobile) + active section pane. */}
-      <div className="mx-auto flex w-full max-w-5xl flex-1 min-h-0 flex-col overflow-y-auto p-4 md:flex-row md:gap-6 md:p-6">
-        {/* Section nav */}
-        <nav
-          className="mb-4 flex gap-1 overflow-x-auto md:mb-0 md:w-56 md:shrink-0 md:flex-col md:overflow-visible"
-          aria-label="Settings sections"
-        >
-          {sections.map((s) => {
-            const isActive = s.id === activeSection
-            return (
+      {!isDesktop ? (
+        // ---- Mobile: master-detail (full-width list → drilled-in pane) ----
+        activeSection === null ? (
+          <nav className="flex-1 overflow-y-auto" aria-label="Settings sections">
+            {sections.map((s) => (
               <button
                 key={s.id}
                 onClick={() => handleSelect(s.id)}
-                className={
-                  'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors md:w-full ' +
-                  (isActive
-                    ? 'bg-surface-light text-text'
-                    : 'text-text-muted hover:bg-surface-light/60 hover:text-text')
-                }
+                className="flex w-full items-center gap-3 border-b border-border px-4 py-3.5 text-left text-sm text-text transition-colors hover:bg-surface-light/60"
               >
-                <span aria-hidden="true">{s.icon}</span>
-                <span>{s.label}</span>
+                <span aria-hidden="true" className="text-base">
+                  {s.icon}
+                </span>
+                <span className="flex-1">{s.label}</span>
+                <ChevronRight size={16} className="shrink-0 text-text-muted" aria-hidden />
               </button>
-            )
-          })}
-        </nav>
+            ))}
+          </nav>
+        ) : (
+          <main className="flex-1 overflow-y-auto p-4">
+            <SectionPane id={paneSection} />
+          </main>
+        )
+      ) : (
+        // ---- Desktop: persistent sidebar + pane ----
+        <div className="mx-auto flex w-full max-w-5xl flex-1 min-h-0 gap-6 overflow-y-auto p-6">
+          <nav className="flex w-56 shrink-0 flex-col gap-1" aria-label="Settings sections">
+            {sections.map((s) => {
+              const isActive = s.id === paneSection
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => handleSelect(s.id)}
+                  className={
+                    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ' +
+                    (isActive
+                      ? 'bg-surface-light text-text'
+                      : 'text-text-muted hover:bg-surface-light/60 hover:text-text')
+                  }
+                >
+                  <span aria-hidden="true">{s.icon}</span>
+                  <span>{s.label}</span>
+                </button>
+              )
+            })}
+          </nav>
 
-        {/* Active section pane */}
-        <main className="min-w-0 flex-1">
-          {activeSection === 'profile' && <ProfileSection />}
-          {activeSection === 'appearance' && <AppearancePanel />}
-          {activeSection === 'navigation' && <NavigationSection />}
-          {activeSection === 'voice' && <VoicePanel />}
-          {activeSection === 'notifications' && (
-            <PlaceholderSection
-              title="Notifications"
-              description="Daily briefing and budget alert preferences. Coming soon."
-            />
-          )}
-          {activeSection === 'briefing' && (
-            <PlaceholderSection
-              title="Briefing"
-              description="Morning card workspace and briefing schedule. Coming soon."
-            />
-          )}
-          {activeSection === 'context-capture' && (
-            <PlaceholderSection
-              title="Context Capture"
-              description="Background context-capture preferences. Coming soon."
-            />
-          )}
-          {activeSection === 'labs' && <LabsSection />}
-        </main>
-      </div>
+          <main className="min-w-0 flex-1">
+            <SectionPane id={paneSection} />
+          </main>
+        </div>
+      )}
     </div>
   )
 }
