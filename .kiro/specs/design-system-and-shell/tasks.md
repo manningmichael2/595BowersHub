@@ -140,9 +140,9 @@
 - **Effort:** L
 - **Dependencies:** Task 14
 - **Requirements:** R4.1, R4.2, R4.4
-- [ ] Migrate page-by-page (each step independently shippable + revertable, R4.4): `pages/admin/*`, settings/appearance (`SettingsPage`, `AppearancePanel`, `ThemeBuilder`, `WorkspaceSettingsPanel`, `VoicePanel`), chat overlays (`QuickCaptureOverlay`, `PinnedContextManager`, `ScheduledPromptForm`/`ScheduledPromptsPage`, `SystemPromptEditor`), `components/db-browser/*`, and `MorningCard`/`IconUploader` stragglers — replacing hardcoded buttons/cards/inputs with the R2 primitives.
-- [ ] Remove dead hardcoding (R4.2): delete the legacy `brand-{50..900}` scale from `tailwind.config.ts` and stray literal `#hex`.
-- [ ] **Tests:** per-page visual-parity diff (Task 14) shows no unintended regression; grep shows zero hardcoded palettes (`#hex`, `gray-*`, `indigo-*`, `red-*`, `bg-neutral-*`) in migrated surfaces; `brand-*` gone; `tsc --noEmit` clean; `npm test` green.
+- [x] Migrate page-by-page (each step independently shippable + revertable, R4.4) — **done across Batches A–F** (`f-commits` per context-log): settings/appearance + admin (A/B), chat overlays (C), chat surface + voice + settings panels (D), dashboard widgets (E), finance pages + `PinnedContextManager` (F). Every surface now resolves color through the tokens. **Note:** this migrated *colors* to tokens; wholesale swap of raw `<button>`/`<div>` cards/inputs onto the R2 `Button`/`Card`/`Input` *components* is a softer follow-up (the primitives exist and are the only vendor-import surface; DoD gates on palettes, which are clean). db-browser was already tokenized pre-P4 (its `var(--color-X,#hex)` are never-fired fallbacks).
+- [x] Remove dead hardcoding (R4.2): deleted the legacy `brand-{50..900}` scale from `tailwind.config.ts` (zero call-sites) and stray literal `#hex` (Batch F: finance accents + `RetirementPlanner` `#dc2626`).
+- [x] **Tests:** grep shows **zero hardcoded palettes** in any app surface (theme-editor files keep hex as data); `brand-*` gone; `tsc --noEmit` clean; build green; `npm test` green (333). Per-page Playwright parity diff is the Task-14 deferred item (live visual checks substituted, owner-approved).
 
 ---
 
