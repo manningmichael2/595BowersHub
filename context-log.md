@@ -1121,3 +1121,18 @@ Built the owned `components/ui/` primitives layer (Tasks 4–9) on `spec/design-
 **State:** `tsc` clean; **320 frontend tests** (282 after Phase 1 → +38); build green. Branch `spec/design-system-and-shell` ahead of `main` by the Phase 2 commits (Phase 1 already merged).
 
 - [Next] **Phase 3 — unified app shell** (Tasks 10–13): shell layout route + canonical breakpoint + `App.tsx` route refactor (own revertable commit, chat = regression gate) → desktop nav rail + contextual top bar + offset consolidation → mobile chrome → nav gating/safe-area/hotkeys. Then P4 surface migration (where the primitives/state-primitives/finance-widgets get wired into real pages, legacy `z-[9999]` + hardcoded palettes get migrated, and the React-Aria bundle ceiling is re-checked).
+
+---
+
+## [2026-06-28] design-system-and-shell — Phase 3 (unified app shell) complete — Claude Code
+
+Built the unified app shell (Tasks 10–13) on `spec/design-system-and-shell`. Phase 2 was merged to `main` (then this continued on the branch). IA confirmed with owner: persistent left nav rail on every section; chat keeps its conversation list as a second panel (Slack/Discord pattern).
+
+- **T10 (`df60230`)** — shell layout route + canonical breakpoint. `App.tsx`'s loose `<TopNav>`/`<Routes>`/`<BottomTabBar>` → `<Route element={<ShellLayout/>}>` wrapping all sections via `<Outlet/>` (own revertable commit). `hooks/useBreakpoint.ts` `BREAKPOINT_DESKTOP=640`; re-pointed chat `AppShell` sidebar `md:`→`sm:` (closes the 640–767 band). Chat invariants (fixed inset:0, scroll-lock, offsets) verified untouched.
+- **T11 (`cbe26d9`)** — desktop chrome + offset consolidation. `shell/NavRail` (collapsible, persisted via `useRailCollapsed`, role-filtered) + `shell/TopBar` (title + account menu). Offsets consolidated into CSS vars (`--shell-rail-w`/`--shell-top-h`/`--shell-bottom-h`) consumed by new `.shell-content` + rewritten `.bh-app-shell`; removed `sm:pt-11/pb-14` from Dashboard/Finance. **Deleted the old `TopNav`.** `BottomTabBar` → `z-shell`. (Sidebar `pb-14` kept — mobile sidebar is viewport-fixed.)
+- **T12 (`529bcb2`)** — `shell/SecondaryNav` shared segmented-control primitive; `FinanceLayout` refactored onto it. (Dashboard's state-driven tabs deferred to P4.)
+- **T13 (`87ef909`)** — global hotkeys + search moved into `ShellLayout` (Cmd/Ctrl+K search, Cmd+Shift+K quick capture; `isModalOpen()` guard; Escape closes search; SearchOverlay+QuickCapture render at shell level; result-click `navigate('/chat')` so global search works anywhere). `viewport-fit=cover` + `env(safe-area-inset-*)` on all chrome. Nav gating (R3.5) already satisfied by `isFeatureVisible` (permitted ∩ not-hidden_nav).
+
+**State:** `tsc` clean; **333 frontend tests** (320 after Phase 2 → +13); build green. Desktop now: persistent left nav rail + contextual top bar across all sections. **Owner has NOT yet done a live desktop+mobile visual pass** (no reachable backend in this checkout) — chat regression gate + rail/offsets best confirmed in the running app. Branch ahead of `main` by Phase 3.
+
+- [Next] **Phase 4 — surface migration & visual-parity safety** (Tasks 14–15): stand up the Playwright screenshot-diff harness (390px/1024px baselines, R4.3) → migrate the ~40 un-tokenized surfaces (admin console, settings/appearance incl. ThemeBuilder, chat overlays, db-browser) onto the tokens + primitives page-by-page, wire store `error` fields through `ErrorState`, adopt the finance widgets in the finance pages (re-check the React-Aria main-chunk ceiling then), migrate Dashboard tabs to SecondaryNav, and remove the dead `brand-*` Tailwind scale + stray hex (R4.1/R4.2/R4.4).
