@@ -601,16 +601,28 @@ class HookEngine:
         from backend.services.context_capture import ContextCapture
         capture = ContextCapture(self.model_provider, self.config)
 
-        # Get workspace name
+        # Get workspace name + the capturing user's display name (household
+        # attribution — facts record from whom they were captured; NULL for
+        # system/automated runs with no associated user).
         pool = get_pool()
         async with pool.acquire() as conn:
             ws = await conn.fetchrow(
                 "SELECT name FROM public.bh_workspaces WHERE id = $1",
                 context.workspace_id,
             )
+            captured_by = None
+            if context.user_id:
+                u = await conn.fetchrow(
+                    "SELECT display_name FROM public.bh_users WHERE id = $1",
+                    context.user_id,
+                )
+                captured_by = u["display_name"] if u else None
 
         workspace_name = ws["name"] if ws else "general"
-        facts = await capture.evaluate(context.user_message, context.assistant_message, workspace_name)
+        facts = await capture.evaluate(
+            context.user_message, context.assistant_message, workspace_name,
+            captured_by=captured_by,
+        )
         return {"facts_captured": len(facts), "facts": [f.statement for f in facts]}
 
     async def _action_notify(self, config: dict, context: Optional[HookEventContext]) -> dict:

@@ -226,6 +226,82 @@ async def set_user_feature(user_id: int, feature_key: str, body: FeatureAccessUp
     return {"user_id": user_id, "feature_key": feature_key, "enabled": body.enabled}
 
 
+# --- Per-user workspace membership (admin provisioning surface) ---
+# The backend join (POST /api/workspaces/{id}/users) existed but had no admin UI
+# to drive it ("workspace membership management gap"). These admin-scoped routes
+# let an admin grant/revoke a user's access to shared workspaces from the Users
+# console. Workspace roles match the bh_workspace_users CHECK.
+_VALID_WS_ROLES = {"owner", "member", "viewer"}
+
+
+class WorkspaceMembershipUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    role: str = "member"
+
+
+@router.get("/users/{user_id}/workspaces")
+async def get_user_workspaces(user_id: int,
+                              user: dict = Depends(require_capability("users.manage"))):
+    """Every workspace plus this user's membership role (None = not a member),
+    so the admin UI can render a per-workspace add/remove toggle."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        if not await conn.fetchval("SELECT 1 FROM public.bh_users WHERE id = $1", user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+        rows = await conn.fetch(
+            """SELECT w.id, w.name, w.icon, wu.role AS member_role
+               FROM public.bh_workspaces w
+               LEFT JOIN public.bh_workspace_users wu
+                 ON wu.workspace_id = w.id AND wu.user_id = $1
+               ORDER BY w.id""",
+            user_id)
+    return [
+        {"id": r["id"], "name": r["name"], "icon": r["icon"],
+         "member": r["member_role"] is not None, "role": r["member_role"]}
+        for r in rows
+    ]
+
+
+@router.put("/users/{user_id}/workspaces/{workspace_id}")
+async def set_user_workspace(user_id: int, workspace_id: int,
+                             body: WorkspaceMembershipUpdate,
+                             user: dict = Depends(require_capability("users.manage"))):
+    """Add/update a user's membership in a workspace (shared-workspace grant)."""
+    if body.role not in _VALID_WS_ROLES:
+        raise HTTPException(status_code=400,
+                            detail=f"role must be one of {sorted(_VALID_WS_ROLES)}")
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        if not await conn.fetchval("SELECT 1 FROM public.bh_users WHERE id = $1", user_id):
+            raise HTTPException(status_code=404, detail="User not found")
+        if not await conn.fetchval("SELECT 1 FROM public.bh_workspaces WHERE id = $1", workspace_id):
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        await conn.execute(
+            """INSERT INTO public.bh_workspace_users (workspace_id, user_id, role)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role""",
+            workspace_id, user_id, body.role)
+    from backend.middleware.audit import AuditLogger
+    await AuditLogger.log(user["id"], "add_workspace_member", "workspace", workspace_id,
+                          {"user_id": user_id, "role": body.role})
+    return {"user_id": user_id, "workspace_id": workspace_id, "role": body.role, "member": True}
+
+
+@router.delete("/users/{user_id}/workspaces/{workspace_id}")
+async def remove_user_workspace(user_id: int, workspace_id: int,
+                                user: dict = Depends(require_capability("users.manage"))):
+    """Revoke a user's membership in a workspace."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM public.bh_workspace_users WHERE workspace_id = $1 AND user_id = $2",
+            workspace_id, user_id)
+    from backend.middleware.audit import AuditLogger
+    await AuditLogger.log(user["id"], "remove_workspace_member", "workspace", workspace_id,
+                          {"user_id": user_id})
+    return {"user_id": user_id, "workspace_id": workspace_id, "member": False}
+
+
 @router.get("/cost")
 async def cost_dashboard(
     days: int = Query(default=7, ge=1, le=90),

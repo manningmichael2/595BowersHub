@@ -18,6 +18,23 @@ _SORTS = {
 }
 
 
+def _owner_clause(owner, account_col: str, p) -> str | None:
+    """A WHERE fragment filtering by account owner (household display filter), or
+    None for 'all'. owner is 'joint'/'none'/'unassigned' for unowned accounts, or
+    a user id (int or numeric str). Implemented as a subquery on account_id so it
+    composes with both the list (t.account_id) and aggregates (ra.account_id)
+    without adding a join. Unparseable owner → no filter (treated as 'all')."""
+    if owner in (None, "", "all"):
+        return None
+    if owner in ("joint", "none", "unassigned"):
+        return f"{account_col} IN (SELECT id FROM finance.accounts WHERE owner_id IS NULL)"
+    try:
+        uid = int(owner)
+    except (TypeError, ValueError):
+        return None
+    return f"{account_col} IN (SELECT id FROM finance.accounts WHERE owner_id = {p(uid)})"
+
+
 def _list_filters(f: dict) -> tuple[list[str], list]:
     """WHERE fragments + params for the transaction LIST (on finance.transactions t)."""
     where = ["t.parent_id IS NULL"]   # top-level rows only (children nest under parents)
@@ -40,6 +57,9 @@ def _list_filters(f: dict) -> tuple[list[str], list]:
         where.append(f"t.posted_date <= {p(f['end'])}")
     if f.get("account_id"):
         where.append(f"t.account_id = {p(f['account_id'])}")
+    owner_clause = _owner_clause(f.get("owner"), "t.account_id", p)
+    if owner_clause:
+        where.append(owner_clause)
 
     status = f.get("status") or "all"
     if status == "uncategorized":
@@ -55,10 +75,11 @@ def _list_filters(f: dict) -> tuple[list[str], list]:
 
 
 async def search_transactions(conn, *, q=None, category_id=None, month=None,
-                              start=None, end=None, account_id=None, status="all",
-                              sort="date", order="desc", limit=100, offset=0) -> dict:
+                              start=None, end=None, account_id=None, owner=None,
+                              status="all", sort="date", order="desc",
+                              limit=100, offset=0) -> dict:
     f = {"q": q, "category_id": category_id, "month": month, "start": start,
-         "end": end, "account_id": account_id, "status": status}
+         "end": end, "account_id": account_id, "owner": owner, "status": status}
     where, params = _list_filters(f)
     where_sql = " AND ".join(where)
     sort_col = _SORTS.get(sort, "t.posted_date")
@@ -117,6 +138,9 @@ async def _aggregates(conn, f: dict) -> tuple[list[dict], dict]:
         where.append(f"ra.posted_date <= {p(f['end'])}")
     if f.get("account_id"):
         where.append(f"ra.account_id = {p(f['account_id'])}")
+    owner_clause = _owner_clause(f.get("owner"), "ra.account_id", p)
+    if owner_clause:
+        where.append(owner_clause)
     if f.get("status") == "income":
         where.append("ra.amount > 0")
     elif f.get("status") in ("spending", "uncategorized"):

@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { parseDate } from '@internationalized/date'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { financeReview, type CategoryOption } from '../services/financeReview'
+import { financeAccounting } from '../services/financeAccounting'
 import {
   financeTransactions,
   attributionHint,
@@ -110,6 +111,8 @@ export default function TransactionsPage() {
   const [start, setStart] = useState(yearStart())   // default: this year to date
   const [end, setEnd] = useState(todayStr())
   const [status, setStatus] = useState<TxnStatus>('all')
+  const [owner, setOwner] = useState('')          // '', 'joint', or a user id
+  const [ownerOpts, setOwnerOpts] = useState<{ value: string; label: string }[]>([])
   const [sort, setSort] = useState<NonNullable<TxnQuery['sort']>>('date')
   const [order, setOrder] = useState<NonNullable<TxnQuery['order']>>('desc')
   const [splittingId, setSplittingId] = useState<string | null>(null)
@@ -118,6 +121,24 @@ export default function TransactionsPage() {
   const isMobile = useIsMobile()
 
   useEffect(() => { financeReview.getCategories().then(setCategories).catch(() => {}) }, [])
+
+  // Owner filter options, derived from the accounts' owner tags: distinct named
+  // owners + "Joint" when any account is un-owned. Absent if nothing is tagged
+  // (single-person household), so the control only appears once it's useful.
+  useEffect(() => {
+    financeAccounting.listAccounts().then((accts) => {
+      const named = new Map<string, string>()
+      let hasJoint = false
+      for (const a of accts) {
+        if (a.owner_id != null) named.set(String(a.owner_id), a.owner_name ?? `User ${a.owner_id}`)
+        else hasJoint = true
+      }
+      if (named.size === 0) { setOwnerOpts([]); return }
+      const opts = [...named].map(([value, label]) => ({ value, label }))
+      if (hasJoint) opts.push({ value: 'joint', label: 'Joint' })
+      setOwnerOpts(opts)
+    }).catch(() => {})
+  }, [])
 
   // Searchable-combobox options for category pickers (filter + bulk).
   const categoryOptions = useMemo(
@@ -143,6 +164,7 @@ export default function TransactionsPage() {
         category_id: categoryId === '' ? undefined : categoryId,
         start: start || undefined,
         end: end || undefined,
+        owner: owner || undefined,
         status, sort, order, limit: 200,
       }))
     } catch (e) {
@@ -150,7 +172,7 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [q, categoryId, start, end, status, sort, order])
+  }, [q, categoryId, start, end, owner, status, sort, order])
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 250)  // debounce text input
@@ -301,7 +323,14 @@ export default function TransactionsPage() {
           onChange={(e) => setStatus(e.target.value as TxnStatus)}>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <button className="text-xs text-text-muted hover:text-text" onClick={() => { setQ(''); setCategoryId(''); setStart(''); setEnd(''); setStatus('all') }}>Clear</button>
+        {ownerOpts.length > 0 && (
+          <select className={INPUT_CLS} value={owner} aria-label="Filter by account owner"
+            onChange={(e) => setOwner(e.target.value)}>
+            <option value="">All owners</option>
+            {ownerOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+        <button className="text-xs text-text-muted hover:text-text" onClick={() => { setQ(''); setCategoryId(''); setStart(''); setEnd(''); setStatus('all'); setOwner('') }}>Clear</button>
       </div>
 
       {/* Date range: presets + custom start/end slicer */}

@@ -46,14 +46,13 @@ async def list_conversations(
     """List conversations for a workspace, sorted by last activity."""
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Verify workspace access
-        if user["role"] != "admin":
-            access = await conn.fetchval("""
-                SELECT 1 FROM public.bh_workspace_users
-                WHERE workspace_id = $1 AND user_id = $2
-            """, workspace_id, user["id"])
-            if not access:
-                raise HTTPException(status_code=403, detail="Access denied")
+        # Workspaces are shared household-wide — any active user may list a
+        # workspace's conversations. They only ever see their OWN (the
+        # c.user_id filter below keeps conversations private-per-user, D3).
+        if not await conn.fetchval(
+            "SELECT 1 FROM public.bh_workspaces WHERE id = $1", workspace_id
+        ):
+            raise HTTPException(status_code=404, detail="Workspace not found")
 
         query = """
             SELECT c.*,
@@ -86,14 +85,12 @@ async def create_conversation(body: ConversationCreate, user: dict = Depends(get
     """Create a new conversation in a workspace."""
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Verify workspace access
-        if user["role"] != "admin":
-            access = await conn.fetchval("""
-                SELECT 1 FROM public.bh_workspace_users
-                WHERE workspace_id = $1 AND user_id = $2
-            """, body.workspace_id, user["id"])
-            if not access:
-                raise HTTPException(status_code=403, detail="Access denied to workspace")
+        # Shared household workspaces — any active user may start a conversation
+        # in any workspace (the conversation is owned by them, user_id below).
+        if not await conn.fetchval(
+            "SELECT 1 FROM public.bh_workspaces WHERE id = $1", body.workspace_id
+        ):
+            raise HTTPException(status_code=404, detail="Workspace not found")
 
         row = await conn.fetchrow("""
             INSERT INTO public.bh_conversations (workspace_id, user_id, title)

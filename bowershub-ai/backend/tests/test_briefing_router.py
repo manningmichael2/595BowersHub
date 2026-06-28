@@ -358,15 +358,14 @@ async def test_fresh_briefing_returns_parsed_sections_with_dash_for_missing_weat
     assert by_key["anything_else"]["content"] == "Nothing notable."
 
 
-async def test_non_member_workspace_returns_403(briefing_app):
-    """Bob is a member of ``ws_other`` but NOT ``ws_target``. Requesting a
-    briefing for ``ws_target`` must return 403 — workspace membership is
-    enforced through ``_check_workspace_access`` (R8.1).
+async def test_other_household_member_can_access_shared_workspace(briefing_app):
+    """Workspaces are shared household-wide: Bob (not in ws_target's
+    membership rows) can still read ws_target's briefing. The old
+    membership-gated 403 was removed when workspaces became shared — content
+    privacy is enforced per-conversation, not per-workspace.
     """
     app, pool, seeds, _config = briefing_app
 
-    # Seed a fresh briefing in ws_target so the 403 isn't masked by an
-    # earlier "no briefing" return path.
     await _insert_briefing_message(
         pool,
         workspace_id=seeds["ws_target"],
@@ -383,7 +382,8 @@ async def test_non_member_workspace_returns_403(briefing_app):
             f"/api/briefing/latest?workspace_id={seeds['ws_target']}"
         )
 
-    assert resp.status_code == 403
+    # Access is allowed (no longer 403); shared-workspace read succeeds.
+    assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

@@ -48,11 +48,16 @@ Assistant: {assistant_message}"""
         self.knowledge_root = config.KNOWLEDGE_ROOT
 
     async def evaluate(
-        self, user_msg: str, assistant_msg: str, workspace_name: str
+        self, user_msg: str, assistant_msg: str, workspace_name: str,
+        captured_by: Optional[str] = None,
     ) -> List[CapturedFact]:
         """
         Evaluate a conversation exchange for capturable facts.
         Returns list of persisted facts (empty if nothing captured).
+
+        captured_by: the display name of the user whose exchange this was, so the
+        stored fact records *from whom* it was captured (household attribution).
+        None for system/automated runs with no associated user.
         """
         # Skip very short exchanges (unlikely to contain facts)
         if len(user_msg) < 20:
@@ -76,7 +81,7 @@ Assistant: {assistant_message}"""
             for fact in facts:
                 topic = f"{workspace_name.lower()}/{fact.topic}"
                 if not await self._is_duplicate(topic, fact.statement):
-                    await self._persist(topic, fact.statement)
+                    await self._persist(topic, fact.statement, captured_by)
                     persisted.append(fact)
 
             if persisted:
@@ -121,15 +126,19 @@ Assistant: {assistant_message}"""
 
         return False
 
-    async def _persist(self, topic: str, statement: str):
-        """Append fact to /knowledge/<topic>.md"""
+    async def _persist(self, topic: str, statement: str,
+                       captured_by: Optional[str] = None):
+        """Append fact to /knowledge/<topic>.md, recording the capturing user."""
         file_path = self._get_knowledge_path(topic)
 
         # Ensure directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
         date = datetime.now().strftime("%Y-%m-%d")
-        line = f"- [{date}] {statement}\n"
+        # Stamp the author when known so a shared household knows from whom a fact
+        # came; statement stays intact so the _is_duplicate substring check holds.
+        who = f" ({captured_by})" if captured_by else ""
+        line = f"- [{date}]{who} {statement}\n"
 
         # Create file with header if new
         if not file_path.exists():

@@ -60,6 +60,7 @@ export interface TxnQuery {
   start?: string          // YYYY-MM-DD (inclusive)
   end?: string            // YYYY-MM-DD (inclusive)
   status?: TxnStatus
+  owner?: string          // '' = all, 'joint' = unowned accounts, or a user id
   sort?: 'date' | 'amount' | 'category' | 'description'
   order?: 'asc' | 'desc'
   limit?: number
@@ -75,6 +76,7 @@ export const financeTransactions = {
     if (query.start) p.set('start', query.start)
     if (query.end) p.set('end', query.end)
     if (query.status && query.status !== 'all') p.set('status', query.status)
+    if (query.owner) p.set('owner', query.owner)
     if (query.sort) p.set('sort', query.sort)
     if (query.order) p.set('order', query.order)
     if (query.limit != null) p.set('limit', String(query.limit))

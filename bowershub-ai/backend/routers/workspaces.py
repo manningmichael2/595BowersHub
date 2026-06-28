@@ -12,7 +12,7 @@ from backend.models.workspace import (
     WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse,
     WorkspaceUserAssignment, PinnedContextCreate, PinnedContextUpdate, PinnedContextResponse,
 )
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import get_current_user, require_admin, require_capability
 from backend.middleware.audit import AuditLogger
 from backend.database import get_pool
 
@@ -28,52 +28,38 @@ router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
 
 
 async def _check_workspace_access(workspace_id: int, user: dict) -> dict:
-    """Verify user has access to workspace. Returns workspace row or raises 403."""
+    """Resolve a workspace for any active user. Workspaces are shared
+    household-wide (a trusted 2–5 person household), so access is not gated by
+    bh_workspace_users membership — every authenticated user can reach every
+    workspace. Returns the workspace row or 404 if it doesn't exist.
+
+    (Conversation *content* stays private-per-user — that's enforced in the
+    conversations router via the owner-or-admin _check_conversation_access, not
+    here. Destructive ops like delete_workspace keep their own require_admin.)"""
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Admins can access all workspaces
-        if user["role"] == "admin":
-            ws = await conn.fetchrow(
-                "SELECT * FROM public.bh_workspaces WHERE id = $1", workspace_id
-            )
-            if not ws:
-                raise HTTPException(status_code=404, detail="Workspace not found")
-            return dict(ws)
-
-        # Check membership
-        ws = await conn.fetchrow("""
-            SELECT w.* FROM public.bh_workspaces w
-            JOIN public.bh_workspace_users wu ON wu.workspace_id = w.id
-            WHERE w.id = $1 AND wu.user_id = $2
-        """, workspace_id, user["id"])
-
+        ws = await conn.fetchrow(
+            "SELECT * FROM public.bh_workspaces WHERE id = $1", workspace_id
+        )
         if not ws:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=404, detail="Workspace not found")
         return dict(ws)
 
 
 @router.get("", response_model=List[WorkspaceResponse])
 async def list_workspaces(user: dict = Depends(get_current_user)):
-    """List workspaces the current user has access to."""
+    """List all workspaces. Workspaces are **shared household-wide** — every
+    active user sees them all (conversations within them stay private-per-user,
+    filtered by user_id in the conversations router). The bh_workspace_users
+    table now only carries the `owner` role + skill scoping, not visibility."""
     pool = get_pool()
     async with pool.acquire() as conn:
-        if user["role"] == "admin":
-            rows = await conn.fetch("""
-                SELECT w.*,
-                    (SELECT COUNT(*) FROM bh_workspace_users wu WHERE wu.workspace_id = w.id) as user_count,
-                    (SELECT COUNT(*) FROM bh_workspace_skills ws WHERE ws.workspace_id = w.id) as skill_count
-                FROM public.bh_workspaces w ORDER BY w.name
-            """)
-        else:
-            rows = await conn.fetch("""
-                SELECT w.*,
-                    (SELECT COUNT(*) FROM bh_workspace_users wu WHERE wu.workspace_id = w.id) as user_count,
-                    (SELECT COUNT(*) FROM bh_workspace_skills ws WHERE ws.workspace_id = w.id) as skill_count
-                FROM public.bh_workspaces w
-                JOIN public.bh_workspace_users wu ON wu.workspace_id = w.id
-                WHERE wu.user_id = $1
-                ORDER BY w.name
-            """, user["id"])
+        rows = await conn.fetch("""
+            SELECT w.*,
+                (SELECT COUNT(*) FROM bh_workspace_users wu WHERE wu.workspace_id = w.id) as user_count,
+                (SELECT COUNT(*) FROM bh_workspace_skills ws WHERE ws.workspace_id = w.id) as skill_count
+            FROM public.bh_workspaces w ORDER BY w.name
+        """)
 
     return [
         WorkspaceResponse(
@@ -234,10 +220,10 @@ async def delete_workspace(workspace_id: int, user: dict = Depends(require_admin
 
 @router.post("/{workspace_id}/users")
 async def add_user_to_workspace(
-    workspace_id: int, body: WorkspaceUserAssignment, user: dict = Depends(get_current_user)
+    workspace_id: int, body: WorkspaceUserAssignment,
+    user: dict = Depends(require_capability("users.manage")),
 ):
-    """Add a user to a workspace."""
-    await _check_workspace_access(workspace_id, user)
+    """Add a user to a workspace (provisioning — admin/users.manage only)."""
     pool = get_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -248,9 +234,11 @@ async def add_user_to_workspace(
 
 
 @router.delete("/{workspace_id}/users/{uid}")
-async def remove_user_from_workspace(workspace_id: int, uid: int, user: dict = Depends(get_current_user)):
-    """Remove a user from a workspace."""
-    await _check_workspace_access(workspace_id, user)
+async def remove_user_from_workspace(
+    workspace_id: int, uid: int,
+    user: dict = Depends(require_capability("users.manage")),
+):
+    """Remove a user from a workspace (provisioning — admin/users.manage only)."""
     pool = get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
