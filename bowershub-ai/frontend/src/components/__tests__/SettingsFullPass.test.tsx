@@ -14,6 +14,15 @@ vi.mock('../../services/api', () => ({
 }))
 import { api } from '../../services/api'
 
+// jsdom exposes none of the Push APIs; mock the push handshake so the panel
+// treats web push as browser-supported and we can assert it's invoked.
+vi.mock('../../services/push', () => ({
+  browserSupportsWebPush: () => true,
+  enableWebPush: vi.fn().mockResolvedValue(undefined),
+  disableWebPush: vi.fn().mockResolvedValue(undefined),
+}))
+import { enableWebPush, disableWebPush } from '../../services/push'
+
 import NotificationsPanel from '../NotificationsPanel'
 import BriefingPanel from '../BriefingPanel'
 import ContextCapturePanel from '../ContextCapturePanel'
@@ -24,6 +33,8 @@ beforeEach(() => {
   ;(api.get as any).mockReset()
   ;(api.put as any).mockReset()
   ;(api.put as any).mockResolvedValue({ data: {} })
+  ;(enableWebPush as any).mockClear()
+  ;(disableWebPush as any).mockClear()
 
   useSettingsStore.setState({
     settings: {},
@@ -71,6 +82,27 @@ describe('NotificationsPanel', () => {
       expect(api.put).toHaveBeenCalledWith(
         '/api/me/notifications',
         expect.objectContaining({ quiet_start: '22:00' }),
+      ),
+    )
+  })
+
+  it('runs the subscribe handshake before persisting web push on', async () => {
+    ;(api.get as any).mockResolvedValue({
+      data: {
+        prefs: { web_push: false, pushover: false, quiet_start: null, quiet_end: null },
+        available: { web_push: true, pushover: true },
+      },
+    })
+    render(<NotificationsPanel />)
+    const webPush = await screen.findByRole('switch', { name: 'Web push' })
+
+    fireEvent.click(webPush)
+
+    await waitFor(() => expect(enableWebPush).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith(
+        '/api/me/notifications',
+        expect.objectContaining({ web_push: true }),
       ),
     )
   })

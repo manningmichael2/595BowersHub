@@ -4,11 +4,12 @@ nav self-hide (R5.4 — hiding a button NEVER restricts the route)."""
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import time as dt_time
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
 from backend.database import get_pool
@@ -162,3 +163,77 @@ async def set_notification_prefs(
             "quiet_end": body.quiet_end or None,
         }
     }
+
+
+# ---- Web Push subscriptions ----------------------------------------------
+#
+# The Notifications "web push" preference is the user's intent; it only delivers
+# if THIS browser has registered a Push subscription. These endpoints carry the
+# subscribe/unsubscribe handshake the frontend performs when the toggle flips.
+
+class PushSubscriptionIn(BaseModel):
+    # The browser PushSubscription JSON: { endpoint, expirationTime, keys }.
+    # `extra="allow"` keeps `keys`/`expirationTime` so pywebpush can sign for it.
+    model_config = {"extra": "allow"}
+    endpoint: str
+
+
+class PushUnsubscribeIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    endpoint: str
+
+
+@router.get("/push/key")
+async def get_push_key(request: Request, user: dict = Depends(get_current_user)) -> dict:
+    """The VAPID public key the browser needs to create a push subscription, plus
+    whether web push is configured server-side at all."""
+    config = request.app.state.config
+    return {
+        "enabled": config.webpush_enabled,
+        "public_key": config.VAPID_PUBLIC_KEY if config.webpush_enabled else None,
+    }
+
+
+@router.post("/push/subscribe")
+async def push_subscribe(
+    body: PushSubscriptionIn, request: Request, user: dict = Depends(get_current_user)
+) -> dict:
+    """Register this browser's push subscription. Idempotent per endpoint: a
+    re-subscribe (same endpoint) replaces the prior row rather than duplicating."""
+    config = request.app.state.config
+    if not config.webpush_enabled:
+        raise HTTPException(status_code=503, detail="Web push is not configured on this server.")
+
+    subscription = body.model_dump()
+    user_agent = request.headers.get("user-agent", "")
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        # Dedupe by endpoint (no unique constraint on the table) so repeat
+        # subscriptions from the same device don't pile up.
+        await conn.execute(
+            "DELETE FROM public.bh_push_subscriptions "
+            "WHERE user_id = $1 AND subscription->>'endpoint' = $2",
+            user["id"], body.endpoint,
+        )
+        await conn.execute(
+            "INSERT INTO public.bh_push_subscriptions (user_id, subscription, user_agent) "
+            "VALUES ($1, $2::jsonb, $3)",
+            user["id"], json.dumps(subscription), user_agent,
+        )
+    return {"ok": True}
+
+
+@router.post("/push/unsubscribe")
+async def push_unsubscribe(
+    body: PushUnsubscribeIn, user: dict = Depends(get_current_user)
+) -> dict:
+    """Remove this browser's push subscription (the user turned web push off, or
+    the browser revoked it)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM public.bh_push_subscriptions "
+            "WHERE user_id = $1 AND subscription->>'endpoint' = $2",
+            user["id"], body.endpoint,
+        )
+    return {"ok": True}

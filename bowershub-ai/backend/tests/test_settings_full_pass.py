@@ -70,9 +70,21 @@ async def env(fresh_db, db_settings) -> AsyncIterator[dict]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         try:
             yield {"client": client, "pool": pool, "headers": headers,
-                   "member_id": member_id, "config": config}
+                   "member_id": member_id, "config": config,
+                   "fresh_db": fresh_db, "db_settings": db_settings}
         finally:
             await close_pool()
+
+
+def _webpush_client(env) -> AsyncClient:
+    """A client whose app has web push configured (VAPID keys set), sharing the
+    same DB pool + JWT secret as the fixture so the member token still validates."""
+    config = _config(
+        env["fresh_db"], env["db_settings"],
+        VAPID_PUBLIC_KEY="test-vapid-public", VAPID_PRIVATE_KEY="test-vapid-private",
+    )
+    app = _build_app(config)
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 # ---- Notifications --------------------------------------------------------
@@ -123,6 +135,54 @@ async def test_notification_service_falls_back_to_default_row(env):
     prefs = await svc._get_preferences(env["member_id"], "budget_alert")
     assert prefs["web_push"] is False
     assert prefs["pushover"] is True
+
+
+# ---- Web push subscriptions -----------------------------------------------
+
+_SUB = {
+    "endpoint": "https://push.example.com/abc123",
+    "expirationTime": None,
+    "keys": {"p256dh": "key-p256dh", "auth": "key-auth"},
+}
+
+
+async def test_push_key_unconfigured(env):
+    r = await env["client"].get("/api/me/push/key", headers=env["headers"]["member"])
+    assert r.status_code == 200
+    assert r.json() == {"enabled": False, "public_key": None}
+
+
+async def test_push_subscribe_503_when_unconfigured(env):
+    r = await env["client"].post(
+        "/api/me/push/subscribe", json=_SUB, headers=env["headers"]["member"])
+    assert r.status_code == 503
+
+
+async def test_push_subscribe_dedupes_then_unsubscribe(env):
+    async with _webpush_client(env) as client:
+        h = env["headers"]["member"]
+        # Key is now exposed.
+        key = await client.get("/api/me/push/key", headers=h)
+        assert key.json() == {"enabled": True, "public_key": "test-vapid-public"}
+
+        # Subscribe twice with the same endpoint → exactly one row (dedupe).
+        assert (await client.post("/api/me/push/subscribe", json=_SUB, headers=h)).status_code == 200
+        assert (await client.post("/api/me/push/subscribe", json=_SUB, headers=h)).status_code == 200
+        async with env["pool"].acquire() as conn:
+            n = await conn.fetchval(
+                "SELECT count(*) FROM public.bh_push_subscriptions WHERE user_id=$1",
+                env["member_id"])
+        assert n == 1
+
+        # Unsubscribe removes it.
+        assert (await client.post(
+            "/api/me/push/unsubscribe", json={"endpoint": _SUB["endpoint"]},
+            headers=h)).status_code == 200
+        async with env["pool"].acquire() as conn:
+            n = await conn.fetchval(
+                "SELECT count(*) FROM public.bh_push_subscriptions WHERE user_id=$1",
+                env["member_id"])
+        assert n == 0
 
 
 # ---- Profile: display name ------------------------------------------------

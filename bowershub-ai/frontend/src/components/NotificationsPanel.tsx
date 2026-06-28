@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import { toast } from '../stores/toast'
+import { enableWebPush, disableWebPush, browserSupportsWebPush } from '../services/push'
 import { Switch, Spinner } from './ui'
 
 interface Prefs {
@@ -97,6 +98,27 @@ export default function NotificationsPanel() {
   const setQuiet = (which: 'quiet_start' | 'quiet_end', value: string) =>
     save({ [which]: value || null } as Partial<Prefs>)
 
+  // Web push is special: the preference only delivers if THIS browser holds a
+  // push subscription. Enabling runs the subscribe handshake (permission +
+  // PushManager + register) before persisting; disabling unsubscribes too. We
+  // only persist the pref once the side-effect succeeds.
+  const webPushAvailable = available.web_push && browserSupportsWebPush()
+  const onToggleWebPush = async (v: boolean) => {
+    if (v) {
+      try {
+        await enableWebPush()
+      } catch (err: any) {
+        toast.error(`Couldn't enable web push: ${err?.message || 'Unknown error'}`)
+        return // leave the toggle off
+      }
+      await save({ web_push: true })
+      toast.success('Web push enabled on this device.')
+    } else {
+      await save({ web_push: false })
+      await disableWebPush()
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Header />
@@ -104,11 +126,15 @@ export default function NotificationsPanel() {
       <div className="space-y-4">
         <ChannelRow
           title="Web push"
-          description="Browser/desktop push notifications on this and other signed-in devices."
+          description="Browser/desktop push notifications on this device."
           checked={prefs.web_push}
-          available={available.web_push}
-          unavailableNote="Web push isn't configured on the server (no VAPID keys)."
-          onChange={(v) => save({ web_push: v })}
+          available={webPushAvailable}
+          unavailableNote={
+            available.web_push
+              ? "This browser doesn't support web push."
+              : "Web push isn't configured on the server (no VAPID keys)."
+          }
+          onChange={onToggleWebPush}
         />
         <ChannelRow
           title="Pushover"
