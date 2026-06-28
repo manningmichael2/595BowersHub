@@ -52,7 +52,7 @@ describe('ShellLayout', () => {
     setMatchMedia(true)
     renderShell()
     const root = document.documentElement.style
-    expect(root.getPropertyValue('--shell-top-h')).toBe('2.75rem')
+    expect(root.getPropertyValue('--shell-top-h')).toContain('2.75rem') // + safe-area inset
     expect(root.getPropertyValue('--shell-rail-w')).not.toBe('0px')
   })
 })

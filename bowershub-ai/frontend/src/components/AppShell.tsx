@@ -5,12 +5,11 @@ import { useUIStore } from '../stores/ui'
 import { wsClient } from '../services/websocket'
 import Sidebar from './Sidebar'
 import ChatArea from './ChatArea'
-import SearchOverlay from './SearchOverlay'
 
 export default function AppShell() {
   const { fetchWorkspaces, activeWorkspace } = useWorkspaceStore()
   const { fetchConversations } = useConversationStore()
-  const { sidebarOpen, searchOpen, setSearchOpen } = useUIStore()
+  const { sidebarOpen } = useUIStore()
 
   // Initialize on mount
   useEffect(() => {
@@ -25,21 +24,6 @@ export default function AppShell() {
       fetchConversations(activeWorkspace.id)
     }
   }, [activeWorkspace?.id])
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        setSearchOpen(!searchOpen)
-      }
-      if (e.key === 'Escape') {
-        setSearchOpen(false)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [searchOpen])
 
   return (
     <div
@@ -70,9 +54,6 @@ export default function AppShell() {
       <div className="flex-1 flex flex-col min-w-0">
         <ChatArea />
       </div>
-
-      {/* Search overlay */}
-      {searchOpen && <SearchOverlay />}
     </div>
   )
 }

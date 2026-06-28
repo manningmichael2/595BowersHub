@@ -60,6 +60,11 @@ export default function NavRail({ collapsed, onToggle }: NavRailProps) {
         'fixed left-0 top-0 bottom-0 z-shell flex flex-col border-r border-border bg-surface transition-[width] duration-base ease-standard',
         collapsed ? 'w-16' : 'w-60',
       )}
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+      }}
     >
       <div className="flex h-11 items-center px-4">
         {!collapsed && <span className="text-sm font-semibold text-text">BowersHub</span>}

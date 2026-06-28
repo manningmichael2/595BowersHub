@@ -20,6 +20,8 @@ export default function BottomTabBar() {
         backgroundColor: 'var(--color-surface)',
         borderTop: '1px solid var(--color-border)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
       }}
     >
       {tabs.map(tab => {

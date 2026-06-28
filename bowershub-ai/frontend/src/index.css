@@ -305,6 +305,10 @@ textarea::placeholder {
   left: var(--shell-rail-w, 0px);
   right: 0;
   bottom: var(--shell-bottom-h, 0px);
+  /* Clear side notches in landscape (R3.6); 0 on normal screens. On desktop the
+     rail covers the left, so this mainly affects mobile/installed-PWA. */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   overflow: hidden; /* sections own their internal scroll (h-full overflow-y-auto) */
 }
 

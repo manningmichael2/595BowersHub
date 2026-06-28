@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../services/api'
 import { useUIStore } from '../stores/ui'
 import { useConversationStore } from '../stores/conversation'
@@ -24,6 +25,7 @@ export default function SearchOverlay() {
   const inputRef = useRef<HTMLInputElement>(null)
   const { setSearchOpen } = useUIStore()
   const { setActive } = useConversationStore()
+  const navigate = useNavigate()
 
   // Focus input on mount
   useEffect(() => {
@@ -105,9 +107,11 @@ export default function SearchOverlay() {
             <button
               key={`msg-${i}`}
               onClick={() => {
-                // Navigate to conversation
+                // Navigate to the conversation — and route to chat so this
+                // works when search is opened from any section (R3.9).
                 if (r.conversation_id) {
                   setActive({ id: r.conversation_id } as any)
+                  navigate('/chat')
                 }
                 setSearchOpen(false)
               }}

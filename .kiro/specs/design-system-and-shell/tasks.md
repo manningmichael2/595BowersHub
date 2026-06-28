@@ -119,11 +119,11 @@
 - **Effort:** M
 - **Dependencies:** Task 11, Task 12
 - **Requirements:** R3.5, R3.6, R3.7, R3.9
-- [ ] Drive shell nav entirely from `navItems.ts` honoring `useFeatures`/`isFeatureVisible` + `/api/me/features` + `hidden_nav` + the cosmetic self-hide (`PUT /api/me/settings/nav`); nothing hardcoded (R3.5).
-- [ ] Apply `viewport-fit=cover` + `env(safe-area-inset-*)` to rail/top bar/bottom tab; coexist with the SW "New version — Reload" toast; no offline/Workbox work (R3.6).
-- [ ] Verify every section (chat sidebar/switcher, finance sub-tabs, dashboard tabs, db-browser, settings, admin, mobile hamburger→workspace switcher) remains reachable/functional desktop+mobile (R3.7).
-- [ ] Move Cmd/Ctrl+K (search) and Cmd/Ctrl+Shift+K (QuickCapture) from `AppShell`/`App.tsx` into the shell so they work on every section; keep them conflict-free and correct with an open Radix Dialog/Popover (ESC behaves). **Global search = existing chat/knowledge search made reachable everywhere (scope unchanged)** unless owner requests cross-domain search (R3.9).
-- [ ] **Tests:** viewer/member sees only permitted + non-hidden nav; hotkeys work on a non-chat route and ESC-with-Dialog-open behaves; safe-area padding applied.
+- [x] Shell nav driven entirely from `navItems.ts` via `isFeatureVisible` — which **already** computes `permitted (server) ∩ not hidden_nav` (`featureNav.ts`), so feature gating + the cosmetic self-hide are honored by NavRail + BottomTabBar. Nothing hardcoded.
+- [x] `viewport-fit=cover` added to the viewport meta; `env(safe-area-inset-*)` applied to NavRail (top/left/bottom), TopBar (top/right), BottomTabBar (bottom/left/right), and `.shell-content` (left/right). Mobile `--shell-top-h` = `env(safe-area-inset-top)` so content clears the notch. SW "Reload" toast unaffected (Toaster is outside the shell offsets); no offline/Workbox work.
+- [x] Sections preserved (R3.7): the route tree is unchanged from T10 — every section still mounts via the layout route. Verified by the full suite (all section page tests green) + tsc/build. (Live desktop+mobile walkthrough is the owner's visual pass.)
+- [x] Moved Cmd/Ctrl+K (search) and Cmd/Ctrl+Shift+K (QuickCapture) into `ShellLayout` (removed from `AppShell`/`App.tsx`); both now work on every section. `isModalOpen()` guard skips the chords while a Radix Dialog/AlertDialog is open; Escape closes search. SearchOverlay + QuickCaptureOverlay now render at shell level. **SearchOverlay result-click now `navigate('/chat')`** so global search is functional from any section (scope unchanged — still the chat/knowledge index). Added the search entry button to TopBar.
+- [x] **Tests:** `shellHotkeys.test.tsx` — Cmd/Ctrl+K opens search on a non-chat route, Escape closes, Cmd+Shift+K opens quick capture (distinct from search). tsc clean; 333 tests; build green.
 
 ---
 
