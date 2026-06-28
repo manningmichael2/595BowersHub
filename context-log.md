@@ -1221,3 +1221,16 @@ Owner-directed "pass on the multiuser component". The `multiuser-household` spec
 **State:** frontend `tsc` clean; touched-area backend suite **184 passed**; new FE owner filter exercised via existing TransactionsPage test (still 3 passed). Migration `0045` applies clean on `fresh_db`.
 
 - [Next] Owner to: link Manon's bank under the existing SimpleFin bridge, then (as admin) tag her accounts on NetWorthPage → the owner filter appears on Transactions. **Note (latent, not fixed here):** `GET /api/finance/transactions` is gated `get_current_user`, not `require_capability("finance.read")` like its siblings — a pre-existing T-AUDIT-1 gap worth a follow-up. Branch not yet merged to `main`.
+
+## [2026-06-28] Household pass — shared workspaces + finance.read gate (follow-up) — Claude Code
+
+Owner signed in as a test **member** and had no workspace access / couldn't start a conversation. **Root cause:** the seeded workspaces (1–5) predate the membership model — only the admin got `bh_workspace_users` rows (first-run seed), so a non-admin member JOINed to zero workspaces in `list_workspaces`/`list_conversations`/`create_conversation` → 403/empty.
+
+**Fix — workspaces are SHARED household-wide** (matches the explicit design; the seed workspaces literally say "Both Michael and Manon have access"), not per-workspace membership-gated:
+- `list_workspaces` → every active user sees all; `_check_workspace_access` → any active user resolves any workspace (404 if absent); conversations list/create gate on "workspace exists" (content stays private-per-user via `c.user_id`, D3 intact); `skills` list → member sees skills on any shared workspace (per-skill `min_role` still enforced at exec). `bh_workspace_users` now only carries the `owner` role + skill scoping.
+- Also closed the **finance.read** gap flagged last entry: `GET /api/finance/transactions` was on bare `get_current_user` → now `require_capability("finance.read")`.
+- Tests: `test_shared_workspaces.py` (member w/ no membership rows sees workspaces + starts a conversation; unknown ws still 404); briefing membership-403 test updated to the shared model; finance/IDOR/authz-matrix suites green (183 passed in the affected sweep).
+
+**Consequence for prior work:** the per-user **"Workspaces" grant UI** added earlier this session (Admin → Users) is now **redundant for access** — membership no longer gates visibility. Left in place (harmless, admin-only, sets `owner` role); **owner to decide** whether to remove it or keep for a future private-workspace (`is_shared=false`) concept.
+
+- [Next] Owner: redeploy backend (these are backend changes; the member's live app needs the new build), then re-test the member account. Branch `feat/household-sharing-owner-attribution` now carries 5 commits (context attribution, workspace-grant UI, account owner, shared-workspaces+finance.read, + logs). Not merged to `main`.
