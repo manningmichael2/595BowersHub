@@ -100,6 +100,12 @@
   /* Single-knob base radius for the design-system radius family (R1.5);
      consumed by tailwind.config.ts borderRadius (sm/md/lg/xl). */
   --radius: 0.5rem;
+  /* App-shell chrome geometry (R3.4). ShellLayout overwrites these per
+     breakpoint + nav-rail collapse; defaults are the mobile/no-chrome case so
+     first paint and unauthenticated routes are unaffected. */
+  --shell-rail-w: 0px;
+  --shell-top-h: 0px;
+  --shell-bottom-h: 0px;
 }
 
 .bh-text-small,
@@ -286,16 +292,25 @@ textarea::placeholder {
   border-radius: 0.5rem;
 }
 
-/* Bottom padding to clear the mobile tab bar (52px + safe area) */
-@media (max-width: 639px) {
-  .bh-app-shell {
-    bottom: calc(52px + env(safe-area-inset-bottom, 0px)) !important;
-  }
+/*
+ * App-shell content geometry (R3.4). The shell publishes its chrome sizes as
+ * --shell-rail-w / --shell-top-h / --shell-bottom-h (ShellLayout). Both the
+ * section content area (.shell-content) and the chat shell (.bh-app-shell,
+ * position:fixed) consume them, so chrome offsets live in ONE place instead of
+ * each section hand-managing sm:pt-11/pb-14.
+ */
+.shell-content {
+  position: fixed;
+  top: var(--shell-top-h, 0px);
+  left: var(--shell-rail-w, 0px);
+  right: 0;
+  bottom: var(--shell-bottom-h, 0px);
+  overflow: hidden; /* sections own their internal scroll (h-full overflow-y-auto) */
 }
 
-/* Offset fixed-position app shells for the top nav bar on desktop */
-@media (min-width: 640px) {
-  .bh-app-shell {
-    top: 44px !important;
-  }
+.bh-app-shell {
+  top: var(--shell-top-h, 0px) !important;
+  left: var(--shell-rail-w, 0px) !important;
+  right: 0 !important;
+  bottom: var(--shell-bottom-h, 0px) !important;
 }

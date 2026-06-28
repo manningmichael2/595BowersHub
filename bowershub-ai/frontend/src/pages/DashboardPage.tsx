@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const widgets = activeLayout?.widgets || []
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden pb-14 sm:pb-0 sm:pt-11" style={{ backgroundColor: 'var(--color-background)' }}>
+    <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden" style={{ backgroundColor: 'var(--color-background)' }}>
       {/* Header: nav tabs + action buttons in one row */}
       <div className="flex items-center gap-2 px-3 py-2 shrink-0" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <div className="flex-1 overflow-x-auto">

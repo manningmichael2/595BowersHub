@@ -104,9 +104,9 @@
 - **Effort:** L
 - **Dependencies:** Task 10
 - **Requirements:** R3.2, R3.4
-- [ ] Build `shell/NavRail.tsx` (icon+label, collapsible to icon-only; collapsed state persisted via the `settings` store pattern, survives reload/PWA) + `shell/TopBar.tsx` (page title, page-actions slot, account menu, global-search entry).
-- [ ] Move the duplicated `sm:pt-11`/`pb-14` offsets (`FinanceLayout`/`DashboardPage`/`Sidebar`) and the `.bh-app-shell` `top:44px`/`bottom:52px` `index.css` rules into the shell; sections drop their offset code; each section's scroll container still behaves (chat full-area, finance/dashboard scroll regions).
-- [ ] **Tests:** rail collapse/expand persists across reload; offsets correct per section; no double-offset regression.
+- [x] Built `shell/NavRail.tsx` (Lucide icon+label from the single `navItems` source, role-filtered; collapsible to icon-only via `useRailCollapsed`, persisted in localStorage, survives reload/PWA) + `shell/TopBar.tsx` (page title + account menu/logout via the Radix DropdownMenu primitive). Replaces the old `TopNav` (deleted). ShellLayout mounts them only ≥ canonical desktop breakpoint; mobile keeps the bottom tab bar.
+- [x] Consolidated offsets into the shell via CSS vars (`--shell-rail-w`/`--shell-top-h`/`--shell-bottom-h`, set by ShellLayout per breakpoint + collapse). New `.shell-content` (fixed content area) and the rewritten `.bh-app-shell` both consume them; removed `sm:pt-11 pb-14` from `DashboardPage`/`FinanceLayout`. `BottomTabBar` re-layered `z-50`→`z-shell`. **Sidebar `pb-14` kept** — the mobile chat sidebar is viewport-`fixed` (not bounded by `.bh-app-shell`), so it genuinely needs it (not redundant).
+- [x] **Tests:** `ShellLayout.test.tsx` (desktop→rail+topbar, mobile→tabbar, offset vars published), `useRailCollapsed.test.tsx` (default expanded, persists+rehydrates, updater fn). tsc clean; 329 tests; build green. Page-actions slot + global-search entry deferred to T13/P4 (noted in TopBar).
 
 ## Task 12: Mobile chrome (bottom tab bar + secondary nav)
 - **Effort:** M
