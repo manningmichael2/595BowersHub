@@ -1245,3 +1245,15 @@ Merged `feat/household-sharing-owner-attribution` → `main` (`326eb57`, --no-ff
 Everything built this session (+ the previously-merged design-system/finance-UI on main) is now LIVE.
 
 - [Next] Owner to log in as the member (sees all workspaces, can start a chat now) and as admin tag a couple of Manon's accounts on NetWorthPage → confirm the Transactions owner filter end-to-end. Then pick the next feature (finance north-star insights is the stated #1).
+
+## [2026-06-28] DB-browser sidebar usability + shipped — Claude Code
+
+Owner usability pass: the DB-browser schema sidebar listed every table under every schema, all expanded — a wall. Added four per-user organizers, all persisted in `bh_users.settings_json` (synced across devices) via new `SettingsPatch` keys `db_favorites`/`db_hidden`/`db_expanded` (+ FE `UserSettings` schema):
+- **Favorites** — star a table → pinned cross-schema "★ Favorites" group at top.
+- **Search** — live filter by table name; auto-expands matches, drops empty groups.
+- **Collapse-by-default** — schemas start collapsed except the active one; expand state remembered (was: all expanded).
+- **Hide** — eye-off a noisy table → drops off; `(+N)` on the schema count + a "Show hidden (N)" toggle reveal them.
+
+Pure helpers `buildFavoriteEntries`/`buildSchemaGroups` extracted from `SchemaSidebar.tsx` + unit-tested; settings round-trip test added. tsc + 85 FE db-browser tests + 5 settings-router tests green. Merged `feat/db-sidebar-usability` → `main` (`0427319`), pushed, **redeployed** (no migration; rebuilt app, health ok).
+
+- [Next] Owner to try the sidebar live (star a few finance tables, hide the `*_files` link tables). Continuing the broader usability pass.
