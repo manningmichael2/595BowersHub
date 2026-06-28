@@ -61,14 +61,15 @@ async def list_skills(user: dict = Depends(get_current_user)):
         if user["role"] == "admin":
             rows = await conn.fetch("SELECT * FROM public.bh_skills ORDER BY name")
         else:
-            # Show skills available in user's workspaces
+            # Workspaces are shared household-wide, so a member sees every active
+            # skill assigned to any workspace (no membership gate). Per-skill
+            # min_role is still enforced at execution time in skill_executor.
             rows = await conn.fetch("""
                 SELECT DISTINCT s.* FROM public.bh_skills s
                 JOIN public.bh_workspace_skills ws ON ws.skill_id = s.id
-                JOIN public.bh_workspace_users wu ON wu.workspace_id = ws.workspace_id
-                WHERE wu.user_id = $1 AND s.is_active = true
+                WHERE s.is_active = true
                 ORDER BY s.name
-            """, user["id"])
+            """)
 
     return [
         SkillResponse(

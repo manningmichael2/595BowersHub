@@ -1,7 +1,8 @@
 """Transactions explorer API (Monarch/Origin-style). A single flexible read
 endpoint backing the unified Finance → Transactions view: filter (text/category/
 month/account/status), sort, paginate, with allocation-aware subtotals + totals.
-Read-only; auth via get_current_user; DB-down → typed 503.
+Read-only; gated by the finance.read capability (so an admin feature-disable
+also blocks reads, R5.2); DB-down → typed 503.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.database import get_pool
-from backend.middleware.auth import get_current_user
+from backend.middleware.auth import require_capability
 from backend.services.transactions_query import search_transactions
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ async def list_transactions(
     order: str = "desc",
     limit: int = 100,
     offset: int = 0,
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(require_capability("finance.read")),
 ) -> dict:
     if status not in _STATUSES:
         raise HTTPException(status_code=400, detail=f"invalid status; one of {sorted(_STATUSES)}")
