@@ -176,7 +176,7 @@ function Stats({ p }: { p: Projection }) {
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'bad' }) {
-  const color = tone === 'ok' ? 'var(--color-primary)' : tone === 'bad' ? '#dc2626' : 'var(--color-text)'
+  const color = tone === 'ok' ? 'var(--color-primary)' : tone === 'bad' ? 'var(--color-danger)' : 'var(--color-text)'
   return (
     <div>
       <dt className="text-xs text-text-muted">{label}</dt>

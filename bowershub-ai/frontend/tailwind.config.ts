@@ -45,22 +45,6 @@ export default {
         'on-success': 'rgb(var(--color-on-success-rgb) / <alpha-value>)',
         'on-warning': 'rgb(var(--color-on-warning-rgb) / <alpha-value>)',
         'on-error': 'rgb(var(--color-on-error-rgb) / <alpha-value>)',
-
-        // Existing palette retained for backward compat with components
-        // written before the token system. New code should prefer the
-        // tokenized colors above.
-        brand: {
-          50: '#e8eaf6',
-          100: '#c5cae9',
-          200: '#9fa8da',
-          300: '#7986cb',
-          400: '#5c6bc0',
-          500: '#3f51b5',
-          600: '#3949ab',
-          700: '#303f9f',
-          800: '#283593',
-          900: '#1a237e',
-        },
       },
 
       // ---- Non-color design scales (R1.5) -------------------------------

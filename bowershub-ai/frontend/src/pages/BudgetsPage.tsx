@@ -18,7 +18,7 @@ function errorMessage(e: unknown): string {
   return detail ?? 'Something went wrong'
 }
 
-const TONE_COLOR: Record<BudgetTone, string> = { ok: '#4a4', warn: '#c84', over: '#c44' }
+const TONE_COLOR: Record<BudgetTone, string> = { ok: 'var(--color-success)', warn: 'var(--color-warning)', over: 'var(--color-danger)' }
 
 function thisMonthStart(): string {
   const d = new Date()

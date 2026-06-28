@@ -29,7 +29,7 @@ function errorMessage(e: unknown): string {
 const STATUSES: TxnStatus[] = ['all', 'uncategorized', 'spending', 'income', 'transfers']
 // Shared tokenized field styling (was the inline `inputStyle`).
 const INPUT_CLS = 'bg-surface text-text border border-border rounded px-2 py-1'
-const POS = 'text-[#4a4]'   // positive/income green (not a theme token — finance accent)
+const POS = 'text-success'   // positive/income amounts (theme success token)
 
 function fmtDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -135,7 +135,7 @@ export default function TransactionsPage() {
     t.is_split ? (
       <span className="text-text-muted">(split)</span>
     ) : t.is_transfer ? (
-      <span className="text-[#7a4]">Transfer</span>
+      <span className="text-accent">Transfer</span>
     ) : t.is_investment ? (
       <span className="text-text-muted">Investment</span>
     ) : (
@@ -211,7 +211,7 @@ export default function TransactionsPage() {
       {result && (
         <div className="flex flex-wrap gap-5 mb-2.5 text-xs text-text">
           <span>Income <b className={POS}>{money(result.totals.income)}</b></span>
-          <span>Spending <b className="text-[#c66]">{money(result.totals.spending)}</b></span>
+          <span>Spending <b className="text-danger">{money(result.totals.spending)}</b></span>
           <span>Net <b>{money(net)}</b></span>
           <span className="text-text-muted">{result.count} transactions</span>
         </div>

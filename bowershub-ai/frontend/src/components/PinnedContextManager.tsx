@@ -581,8 +581,8 @@ export default function PinnedContextManager({
 function TypeBadge({ type }: { type: ContextType }) {
   const tone =
     type === 'static'
-      ? 'border-sky-700/60 bg-sky-900/30 text-sky-200'
-      : 'border-violet-700/60 bg-violet-900/30 text-violet-200'
+      ? 'border-accent/60 bg-accent/20 text-accent'
+      : 'border-primary/60 bg-primary/20 text-primary'
   return (
     <span
       className={

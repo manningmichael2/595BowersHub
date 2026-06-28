@@ -156,7 +156,7 @@ function Row({ acc, children }: { acc: AccountBalance; children?: React.ReactNod
           <span>{acc.org}</span>
           {acc.account_type && <span>· {acc.account_type}</span>}
           {acc.as_of && <span>· as of {acc.as_of}</span>}
-          {acc.stale && <span data-testid="stale" className="text-[#c84]">· stale</span>}
+          {acc.stale && <span data-testid="stale" className="text-warning">· stale</span>}
         </div>
       </div>
       <div className="text-right min-w-[100px] font-semibold text-text">{money(acc.balance)}</div>
