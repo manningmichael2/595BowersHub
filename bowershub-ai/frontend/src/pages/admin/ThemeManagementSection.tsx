@@ -106,8 +106,8 @@ export default function ThemeManagementSection() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-lg font-medium text-gray-100">Theme Management</h2>
-          <p className="text-sm text-gray-400 mt-1">
+          <h2 className="text-lg font-medium text-text">Theme Management</h2>
+          <p className="text-sm text-text-muted mt-1">
             Manage published themes and the platform default. Personal themes
             owned by other users are not listed here.
           </p>
@@ -115,36 +115,36 @@ export default function ThemeManagementSection() {
         <button
           type="button"
           onClick={() => setBuilderOpen(true)}
-          className="px-3 py-1.5 rounded-lg bg-indigo-600 text-sm text-white hover:bg-indigo-500"
+          className="px-3 py-1.5 rounded-lg bg-primary text-sm text-on-primary hover:bg-primary/90"
         >
           + New theme
         </button>
       </div>
 
       {actionMsg && (
-        <div className="rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-300">
+        <div className="rounded-lg border border-success/40 bg-success/20 px-3 py-2 text-sm text-success">
           {actionMsg}
         </div>
       )}
       {error && (
-        <div className="rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-lg border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger">
           {error}
         </div>
       )}
 
       {isLoading && themes == null ? (
-        <div className="text-center text-gray-500 py-12">Loading themes...</div>
+        <div className="text-center text-text-muted py-12">Loading themes...</div>
       ) : sorted.length === 0 ? (
-        <div className="text-sm text-gray-500 italic">No themes available.</div>
+        <div className="text-sm text-text-muted italic">No themes available.</div>
       ) : (
-        <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto">
+        <div className="bg-background rounded-lg border border-border overflow-x-auto">
           <table className="w-full text-sm min-w-[700px]">
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-4 py-3 text-gray-400 font-medium">Theme</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium">Type</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium">Default</th>
-                <th className="text-right px-4 py-3 text-gray-400 font-medium">Actions</th>
+              <tr className="border-b border-border">
+                <th className="text-left px-4 py-3 text-text-muted font-medium">Theme</th>
+                <th className="text-left px-4 py-3 text-text-muted font-medium">Type</th>
+                <th className="text-left px-4 py-3 text-text-muted font-medium">Default</th>
+                <th className="text-right px-4 py-3 text-text-muted font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -154,7 +154,7 @@ export default function ThemeManagementSection() {
                 const canDelete = !theme.is_preset
                 const canSetDefault = theme.owner_id == null && !theme.is_default
                 return (
-                  <tr key={theme.id} className="border-b border-gray-800/50">
+                  <tr key={theme.id} className="border-b border-border/50">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div
@@ -179,10 +179,10 @@ export default function ThemeManagementSection() {
                           />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-gray-200 font-medium truncate">
+                          <div className="text-text font-medium truncate">
                             {theme.name}
                           </div>
-                          <div className="text-xs text-gray-500 font-mono truncate">
+                          <div className="text-xs text-text-muted font-mono truncate">
                             {theme.slug}
                           </div>
                         </div>
@@ -190,24 +190,24 @@ export default function ThemeManagementSection() {
                     </td>
                     <td className="px-4 py-3">
                       {theme.is_preset ? (
-                        <span className="text-[10px] uppercase tracking-wider text-gray-400 bg-gray-700/60 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] uppercase tracking-wider text-text-muted bg-surface-light/60 px-1.5 py-0.5 rounded">
                           Preset
                         </span>
                       ) : theme.owner_id == null ? (
-                        <span className="text-[10px] uppercase tracking-wider text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] uppercase tracking-wider text-primary bg-primary/40 px-1.5 py-0.5 rounded">
                           Published
                         </span>
                       ) : (
-                        <span className="text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-900/40 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] uppercase tracking-wider text-success bg-success/40 px-1.5 py-0.5 rounded">
                           Personal
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       {theme.is_default ? (
-                        <span className="text-amber-300 text-xs">★ Platform default</span>
+                        <span className="text-warning text-xs">★ Platform default</span>
                       ) : (
-                        <span className="text-gray-600 text-xs">—</span>
+                        <span className="text-text-muted text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -216,7 +216,7 @@ export default function ThemeManagementSection() {
                           type="button"
                           onClick={() => setPlatformDefault(theme)}
                           disabled={isBusy || !canSetDefault}
-                          className="px-2.5 py-1 rounded bg-gray-800 text-xs text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="px-2.5 py-1 rounded bg-surface text-xs text-text-muted hover:bg-surface-light disabled:opacity-40 disabled:cursor-not-allowed"
                           title={
                             theme.is_default
                               ? 'Already the platform default'
@@ -231,7 +231,7 @@ export default function ThemeManagementSection() {
                           type="button"
                           onClick={() => deleteTheme(theme)}
                           disabled={isBusy || !canDelete}
-                          className="px-2.5 py-1 rounded bg-red-900/40 text-xs text-red-200 hover:bg-red-800/60 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="px-2.5 py-1 rounded bg-danger/40 text-xs text-danger hover:bg-danger/90/60 disabled:opacity-40 disabled:cursor-not-allowed"
                           title={
                             theme.is_preset
                               ? 'Preset themes cannot be deleted'

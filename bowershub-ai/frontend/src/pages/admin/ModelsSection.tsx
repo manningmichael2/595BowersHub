@@ -48,11 +48,11 @@ export default function ModelsSection() {
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h3 className="text-sm font-medium text-gray-300">Model Catalog</h3>
-          <p className="text-xs text-gray-500 mt-0.5 max-w-xl">
+          <h3 className="text-sm font-medium text-text-muted">Model Catalog</h3>
+          <p className="text-xs text-text-muted mt-0.5 max-w-xl">
             DB-driven model list with operator-owned prices ($/MTok). Edit a price (saves on
             Enter or when you click away) or, for a flagged row whose price already matches the
-            reference, just hit <span className="text-amber-300">Confirm</span>. The reference
+            reference, just hit <span className="text-warning">Confirm</span>. The reference
             column is Anthropic's published rate. Refresh discovers models from the Anthropic
             Models API + Ollama, preserving your prices.
           </p>
@@ -60,35 +60,35 @@ export default function ModelsSection() {
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="px-3 py-2 rounded-lg text-sm bg-indigo-500/15 text-indigo-200 hover:bg-indigo-500/25 border border-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
+          className="px-3 py-2 rounded-lg text-sm bg-primary/15 text-primary hover:bg-primary/90/25 border border-primary/30 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0"
         >
           {refreshing ? 'Refreshing…' : '↻ Refresh now'}
         </button>
       </div>
 
       {result && (
-        <div className="bg-green-900/20 border border-green-800 rounded-lg px-4 py-2 text-sm text-green-300 mb-4">
+        <div className="bg-success/20 border border-success rounded-lg px-4 py-2 text-sm text-success mb-4">
           {result}
         </div>
       )}
       {actionError && (
-        <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-2 text-sm text-red-300 mb-4">
+        <div className="bg-danger/30 border border-danger rounded-lg px-4 py-2 text-sm text-danger mb-4">
           {actionError}
         </div>
       )}
 
       <SectionStateGuard isLoading={isLoading} error={error}>
-        <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto">
+        <div className="bg-background rounded-lg border border-border overflow-x-auto">
           <table className="w-full text-sm min-w-[720px]">
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-4 py-2 text-gray-400">Model ID</th>
-                <th className="text-left px-3 py-2 text-gray-400">Provider</th>
-                <th className="text-left px-3 py-2 text-gray-400">Roles</th>
-                <th className="text-right px-3 py-2 text-gray-400">In $/MTok</th>
-                <th className="text-right px-3 py-2 text-gray-400">Out $/MTok</th>
-                <th className="text-right px-3 py-2 text-gray-400">Reference</th>
-                <th className="text-left px-3 py-2 text-gray-400"></th>
+              <tr className="border-b border-border">
+                <th className="text-left px-4 py-2 text-text-muted">Model ID</th>
+                <th className="text-left px-3 py-2 text-text-muted">Provider</th>
+                <th className="text-left px-3 py-2 text-text-muted">Roles</th>
+                <th className="text-right px-3 py-2 text-text-muted">In $/MTok</th>
+                <th className="text-right px-3 py-2 text-text-muted">Out $/MTok</th>
+                <th className="text-right px-3 py-2 text-text-muted">Reference</th>
+                <th className="text-left px-3 py-2 text-text-muted"></th>
               </tr>
             </thead>
             <tbody>
@@ -96,7 +96,7 @@ export default function ModelsSection() {
                 data.map(m => <ModelRow key={m.id} model={m} onSaved={reload} />)
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-4 py-4 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-4 text-center text-text-muted">
                     No models
                   </td>
                 </tr>
@@ -156,18 +156,18 @@ function ModelRow({ model, onSaved }: { model: AdminModel; onSaved: () => Promis
     Number(model.input_cost_per_mtok) === Number(refIn) &&
     Number(model.output_cost_per_mtok) === Number(refOut)
 
-  const cell = 'w-20 bg-[#1a1a2e] border border-gray-700 rounded px-2 py-1 text-right text-gray-200 focus:border-indigo-500 focus:outline-none'
+  const cell = 'w-20 bg-surface border border-border rounded px-2 py-1 text-right text-text focus:border-primary focus:outline-none'
   return (
-    <tr className={'border-b border-gray-800/50 ' + (model.is_active ? '' : 'opacity-50')}>
-      <td className="px-4 py-2 text-gray-300 font-mono text-xs">
+    <tr className={'border-b border-border/50 ' + (model.is_active ? '' : 'opacity-50')}>
+      <td className="px-4 py-2 text-text-muted font-mono text-xs">
         {model.model_id}
         {model.needs_price_confirmation && (
-          <span className="ml-2 text-amber-400" title="Provisional price — Confirm, or edit to set">⚠</span>
+          <span className="ml-2 text-warning" title="Provisional price — Confirm, or edit to set">⚠</span>
         )}
-        {!model.is_active && <span className="ml-2 text-gray-600">(inactive)</span>}
+        {!model.is_active && <span className="ml-2 text-text-muted">(inactive)</span>}
       </td>
-      <td className="px-3 py-2 text-gray-400">{model.provider}</td>
-      <td className="px-3 py-2 text-indigo-300 text-xs">{model.roles?.join(', ')}</td>
+      <td className="px-3 py-2 text-text-muted">{model.provider}</td>
+      <td className="px-3 py-2 text-primary text-xs">{model.roles?.join(', ')}</td>
       <td className="px-3 py-2 text-right">
         <input className={cell} value={inCost} disabled={busy} inputMode="decimal"
                onChange={e => setInCost(e.target.value)} onBlur={commitEdit} onKeyDown={onKey} />
@@ -176,19 +176,19 @@ function ModelRow({ model, onSaved }: { model: AdminModel; onSaved: () => Promis
         <input className={cell} value={outCost} disabled={busy} inputMode="decimal"
                onChange={e => setOutCost(e.target.value)} onBlur={commitEdit} onKeyDown={onKey} />
       </td>
-      <td className={'px-3 py-2 text-right text-xs whitespace-nowrap ' + (matchesRef ? 'text-gray-500' : 'text-amber-300')}
+      <td className={'px-3 py-2 text-right text-xs whitespace-nowrap ' + (matchesRef ? 'text-text-muted' : 'text-warning')}
           title={matchesRef ? 'matches reference' : 'differs from reference'}>
         {refStr}
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
         {model.needs_price_confirmation && !dirty && (
           <button onClick={() => patch({ needs_price_confirmation: false })} disabled={busy}
-                  className="px-2.5 py-1 rounded text-xs bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 border border-amber-500/30 disabled:opacity-40">
+                  className="px-2.5 py-1 rounded text-xs bg-warning/15 text-warning hover:bg-warning/90/25 border border-warning/30 disabled:opacity-40">
             {busy ? '…' : 'Confirm'}
           </button>
         )}
-        {flash && <span className="text-green-400 text-xs">✓ saved</span>}
-        {err && <span className="text-red-400 text-xs">{err}</span>}
+        {flash && <span className="text-success text-xs">✓ saved</span>}
+        {err && <span className="text-danger text-xs">{err}</span>}
       </td>
     </tr>
   )

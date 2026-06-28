@@ -72,12 +72,12 @@ export default function AdminConsolePage() {
     ?? 'users'
 
   return (
-    <div className="h-screen flex flex-col bg-[#1a1a2e] text-gray-200">
+    <div className="h-screen flex flex-col bg-surface text-text">
       {/* Header */}
-      <div className="border-b border-gray-800 px-4 py-3 flex items-center gap-3 shrink-0">
+      <div className="border-b border-border px-4 py-3 flex items-center gap-3 shrink-0">
         <button
           onClick={() => navigate(-1)}
-          className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400"
+          className="p-1.5 rounded-lg hover:bg-surface-light text-text-muted"
         >
           ← Back
         </button>
@@ -86,7 +86,7 @@ export default function AdminConsolePage() {
 
       <div className="flex-1 flex min-h-0">
         {/* Sidebar */}
-        <nav className="w-56 border-r border-gray-800 p-2 overflow-y-auto shrink-0 hidden md:block">
+        <nav className="w-56 border-r border-border p-2 overflow-y-auto shrink-0 hidden md:block">
           <ul className="space-y-1">
             {SECTIONS.map(section => {
               const isActive = section.slug === activeSlug
@@ -97,8 +97,8 @@ export default function AdminConsolePage() {
                     className={
                       'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ' +
                       (isActive
-                        ? 'bg-indigo-500/10 text-indigo-200 border-l-2 border-indigo-500'
-                        : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200 border-l-2 border-transparent')
+                        ? 'bg-primary/10 text-primary border-l-2 border-primary'
+                        : 'text-text-muted hover:bg-surface-light/60 hover:text-text border-l-2 border-transparent')
                     }
                   >
                     <span>{section.icon}</span>
@@ -111,7 +111,7 @@ export default function AdminConsolePage() {
         </nav>
 
         {/* Mobile: horizontal tab strip */}
-        <div className="md:hidden border-b border-gray-800 px-2 overflow-x-auto shrink-0 absolute top-12 left-0 right-0 z-10 bg-[#1a1a2e]">
+        <div className="md:hidden border-b border-border px-2 overflow-x-auto shrink-0 absolute top-12 left-0 right-0 z-10 bg-surface">
           <div className="flex gap-1 min-w-max py-1">
             {SECTIONS.map(section => {
               const isActive = section.slug === activeSlug
@@ -122,8 +122,8 @@ export default function AdminConsolePage() {
                   className={
                     'px-3 py-1.5 text-xs rounded-lg whitespace-nowrap ' +
                     (isActive
-                      ? 'bg-indigo-500/15 text-indigo-200'
-                      : 'text-gray-400 hover:bg-gray-800/60')
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-text-muted hover:bg-surface-light/60')
                   }
                 >
                   <span className="mr-1">{section.icon}</span>
