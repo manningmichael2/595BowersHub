@@ -26,7 +26,7 @@ export default function ChatArea() {
     // always open the sidebar and pick a workspace.
     return (
       <div className="flex-1 flex flex-col h-full min-h-0">
-        <div className="flex items-center px-4 py-3 border-b border-border bg-background/80 shrink-0 md:hidden">
+        <div className="flex items-center px-4 py-3 border-b border-border bg-background/80 shrink-0 sm:hidden">
           <button
             onClick={toggleSidebar}
             className="p-1.5 rounded-lg hover:bg-surface text-text-muted"
