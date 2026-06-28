@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import {
@@ -9,7 +9,10 @@ import { useConversationStore, Conversation } from '../stores/conversation'
 import { useAuthStore } from '../stores/auth'
 import { useUIStore } from '../stores/ui'
 import { confirm } from '../stores/confirm'
-import WorkspaceSettingsPanel from './WorkspaceSettingsPanel'
+// Lazy: the panel is a modal shown only on demand, and it pulls in heavy
+// markdown/editor deps (SystemPromptViewer/Editor, PinnedContextManager). A
+// lazy boundary keeps that whole subtree out of the main bundle until first open.
+const WorkspaceSettingsPanel = lazy(() => import('./WorkspaceSettingsPanel'))
 
 export default function Sidebar() {
   const { workspaces, activeWorkspace, error: wsError, fetchWorkspaces, setActive: setActiveWorkspace } = useWorkspaceStore()
@@ -152,11 +155,13 @@ export default function Sidebar() {
     {/* Workspace settings panel — portaled to document.body to escape
         the sidebar's CSS transform containing block */}
     {wsSettingsOpen && activeWorkspace && createPortal(
-      <WorkspaceSettingsPanel
-        workspaceId={activeWorkspace.id}
-        mode={user?.role === 'admin' ? 'edit' : 'view'}
-        onClose={() => setWsSettingsOpen(false)}
-      />,
+      <Suspense fallback={null}>
+        <WorkspaceSettingsPanel
+          workspaceId={activeWorkspace.id}
+          mode={user?.role === 'admin' ? 'edit' : 'view'}
+          onClose={() => setWsSettingsOpen(false)}
+        />
+      </Suspense>,
       document.body,
     )}
     </>

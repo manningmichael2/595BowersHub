@@ -5,14 +5,10 @@
  * Implements task 22.1:
  *   - Right-side modal/panel triggered from the workspace settings cog.
  *   - Tabs: "System Prompt", "Pinned Context".
- *   - Mounts <SystemPromptViewer> / <SystemPromptEditor> (task 22.2 / 22.3)
- *     and <PinnedContextManager> (task 23.1) based on the active tab and
- *     the caller's `mode` prop / admin role.
+ *   - Mounts <SystemPromptViewer> / <SystemPromptEditor> and
+ *     <PinnedContextManager> based on the active tab and the caller's `mode`
+ *     prop / admin role.
  *   - Props: workspaceId, mode: 'view' | 'edit'.
- *
- * Until 22.2/22.3/23.1 ship, the child components are mounted only if
- * already present on disk; otherwise this panel renders inline placeholder
- * content with TODO markers so the orchestrator can wire them up cleanly.
  *
  * Mobile: full-screen sheet. Desktop: right-side panel anchored to the
  * viewport edge with a translucent backdrop, matching the pattern used by
@@ -20,58 +16,13 @@
  *
  * _Requirements: R5.1, R5.2, R6.1
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { useWorkspaceStore } from '../stores/workspace'
-
-// ---- Optional child component imports -------------------------------------
-//
-// These siblings ship in tasks 22.2, 22.3, and 23.1. We attempt to load them
-// lazily so this panel works whether or not they exist yet. Vite resolves
-// imports at build time, so we use dynamic `import()` and gate rendering on
-// whether the module loaded successfully.
-
-type SystemPromptViewerProps = { workspaceId: number; prompt: string }
-type SystemPromptEditorProps = {
-  workspaceId: number
-  initialPrompt: string
-  canEdit: boolean
-}
-type PinnedContextManagerProps = { workspaceId: number; canEdit: boolean }
-
-type LoadedComponent<P> = {
-  status: 'loading' | 'ready' | 'missing'
-  Component: React.ComponentType<P> | null
-}
-
-function useOptionalChild<P>(
-  loader: () => Promise<{ default: React.ComponentType<P> }>,
-): LoadedComponent<P> {
-  const [state, setState] = useState<LoadedComponent<P>>({
-    status: 'loading',
-    Component: null,
-  })
-  // Stash the loader in a ref so we don't re-invoke it on every render.
-  const loaderRef = useRef(loader)
-  useEffect(() => {
-    let cancelled = false
-    loaderRef
-      .current()
-      .then(mod => {
-        if (cancelled) return
-        setState({ status: 'ready', Component: mod.default })
-      })
-      .catch(() => {
-        if (cancelled) return
-        setState({ status: 'missing', Component: null })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-  return state
-}
+import SystemPromptViewer from './SystemPromptViewer'
+import SystemPromptEditor from './SystemPromptEditor'
+import PinnedContextManager from './PinnedContextManager'
 
 // ---- Component ------------------------------------------------------------
 
@@ -106,29 +57,6 @@ export default function WorkspaceSettingsPanel({
     const ws = workspaces.find(w => w.id === workspaceId)
     return ws?.name || `Workspace #${workspaceId}`
   }, [workspaces, workspaceId])
-
-  // ---- Optional child components ---------------------------------------
-  //
-  // The Vite/TypeScript dynamic import will fail at runtime if the module
-  // doesn't exist yet. We catch that and fall back to a placeholder.
-  //
-  // @vite-ignore prevents Vite from trying to statically resolve a path
-  // that may not exist on disk yet.
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore — children may not exist until tasks 22.2/22.3/23.1 ship.
-  const viewer = useOptionalChild<SystemPromptViewerProps>(
-    () => import(/* @vite-ignore */ './SystemPromptViewer'),
-  )
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore — children may not exist until tasks 22.2/22.3/23.1 ship.
-  const editor = useOptionalChild<SystemPromptEditorProps>(
-    () => import(/* @vite-ignore */ './SystemPromptEditor'),
-  )
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore — children may not exist until tasks 22.2/22.3/23.1 ship.
-  const pinnedManager = useOptionalChild<PinnedContextManagerProps>(
-    () => import(/* @vite-ignore */ './PinnedContextManager'),
-  )
 
   // ---- Load workspace prompt -------------------------------------------
 
@@ -256,17 +184,12 @@ export default function WorkspaceSettingsPanel({
               prompt={prompt}
               loading={loadingPrompt}
               canEdit={canEdit}
-              viewer={viewer}
-              editor={editor}
+              onSaved={setPrompt}
             />
           )}
 
           {activeTab === 'pinned_context' && (
-            <PinnedContextTab
-              workspaceId={workspaceId}
-              canEdit={canEdit}
-              loaded={pinnedManager}
-            />
+            <PinnedContextManager workspaceId={workspaceId} canEdit={canEdit} />
           )}
         </div>
 
@@ -316,101 +239,30 @@ function SystemPromptTab({
   prompt,
   loading,
   canEdit,
-  viewer,
-  editor,
+  onSaved,
 }: {
   workspaceId: number
   prompt: string
   loading: boolean
   canEdit: boolean
-  viewer: LoadedComponent<SystemPromptViewerProps>
-  editor: LoadedComponent<SystemPromptEditorProps>
+  onSaved: (newPrompt: string) => void
 }) {
   if (loading) {
     return <div className="text-sm text-text-muted">Loading system prompt…</div>
   }
 
-  // Editor path: only when caller is in edit mode AND we have admin role
-  // (canEdit prop already encodes that). Falls back to viewer if the editor
-  // module isn't available yet.
-  if (canEdit && editor.status === 'ready' && editor.Component) {
-    const Editor = editor.Component
+  // Editor when the caller is in edit mode AND has admin role (canEdit encodes
+  // both); otherwise the read-only viewer.
+  if (canEdit) {
     return (
-      <Editor
+      <SystemPromptEditor
         workspaceId={workspaceId}
         initialPrompt={prompt}
         canEdit={canEdit}
+        onSaved={onSaved}
       />
     )
   }
 
-  if (viewer.status === 'ready' && viewer.Component) {
-    const Viewer = viewer.Component
-    return <Viewer workspaceId={workspaceId} prompt={prompt} />
-  }
-
-  // ---- Placeholder until tasks 22.2 / 22.3 ship --------------------------
-  return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-border bg-surface p-3">
-        <div className="text-xs uppercase tracking-wider text-text-muted mb-2">
-          {prompt ? 'System prompt (raw)' : 'No system prompt'}
-        </div>
-        {prompt ? (
-          <pre className="whitespace-pre-wrap break-words text-sm text-text font-mono">
-            {prompt}
-          </pre>
-        ) : (
-          <p className="text-sm text-text-muted italic">
-            No system prompt set for this workspace
-          </p>
-        )}
-        <div className="mt-3 text-xs text-text-muted">
-          {prompt.length.toLocaleString()} characters · ~
-          {Math.ceil(prompt.length / 4).toLocaleString()} tokens
-        </div>
-      </div>
-
-      <p className="text-xs text-text-muted">
-        {/* TODO(task 22.2): replace placeholder with <SystemPromptViewer>. */}
-        {/* TODO(task 22.3): replace placeholder with <SystemPromptEditor> when canEdit. */}
-        Rich markdown rendering and editor ship with tasks 22.2 and 22.3.
-      </p>
-    </div>
-  )
-}
-
-function PinnedContextTab({
-  workspaceId,
-  canEdit,
-  loaded,
-}: {
-  workspaceId: number
-  canEdit: boolean
-  loaded: LoadedComponent<PinnedContextManagerProps>
-}) {
-  if (loaded.status === 'ready' && loaded.Component) {
-    const Manager = loaded.Component
-    return <Manager workspaceId={workspaceId} canEdit={canEdit} />
-  }
-
-  // ---- Placeholder until task 23.1 ships --------------------------------
-  return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-border bg-surface p-4">
-        <div className="text-sm text-text-muted font-medium mb-1">
-          Pinned context
-        </div>
-        <p className="text-sm text-text-muted">
-          Static and dynamic entries that get prepended to every request in
-          this workspace.
-        </p>
-      </div>
-      <p className="text-xs text-text-muted">
-        {/* TODO(task 23.1): replace placeholder with <PinnedContextManager>. */}
-        The full list, add/edit form, and refresh-now control ship with task
-        23.1.
-      </p>
-    </div>
-  )
+  return <SystemPromptViewer workspaceId={workspaceId} prompt={prompt} />
 }
