@@ -64,7 +64,7 @@ export default function DbBrowserPage() {
   return (
     <UndoRedoProvider>
       <div
-        className="flex h-full overflow-hidden pb-14 sm:pb-0 sm:pt-11"
+        className="flex h-full overflow-hidden"
         style={{ backgroundColor: 'var(--color-background)' }}
       >
         {/* Schema Sidebar — fixed width on desktop, overlay drawer on mobile */}

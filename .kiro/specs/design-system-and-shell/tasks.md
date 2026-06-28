@@ -133,16 +133,16 @@
 - **Effort:** M
 - **Dependencies:** Task 13
 - **Requirements:** R4.3
-- [ ] Stand up a Playwright screenshot-diff capability (mirroring the `ai-finance-insights` Phase 4 precedent); capture per-page baselines at mobile 390px and desktop ≥1024px to gate each migration step.
-- [ ] **Tests:** baseline capture + diff runs in CI/local; a deliberate change is caught by the diff.
+- **[DECISION 2026-06-28 — owner-approved] Deferred in favour of lightweight live visual checks.** Rather than stand up Playwright (browser install + auth fixture + baseline management) up front, Phase 4 migrates in small batches verified live on the running dev server (Tailscale `:5173` against the real backend). The token system makes regressions unlikely (utilities resolve to the same colors), and each batch is its own revertable commit. The full Playwright harness can be added later if churn warrants it.
+- [ ] (Deferred) Playwright screenshot-diff at 390px/≥1024px.
 
 ## Task 15: Migrate un-tokenized surfaces + remove dead hardcoding (incremental)
 - **Effort:** L
 - **Dependencies:** Task 14
 - **Requirements:** R4.1, R4.2, R4.4
-- [ ] Migrate page-by-page (each step independently shippable + revertable, R4.4): `pages/admin/*`, settings/appearance (`SettingsPage`, `AppearancePanel`, `ThemeBuilder`, `WorkspaceSettingsPanel`, `VoicePanel`), chat overlays (`QuickCaptureOverlay`, `PinnedContextManager`, `ScheduledPromptForm`/`ScheduledPromptsPage`, `SystemPromptEditor`), `components/db-browser/*`, and `MorningCard`/`IconUploader` stragglers — replacing hardcoded buttons/cards/inputs with the R2 primitives.
-- [ ] Remove dead hardcoding (R4.2): delete the legacy `brand-{50..900}` scale from `tailwind.config.ts` and stray literal `#hex`.
-- [ ] **Tests:** per-page visual-parity diff (Task 14) shows no unintended regression; grep shows zero hardcoded palettes (`#hex`, `gray-*`, `indigo-*`, `red-*`, `bg-neutral-*`) in migrated surfaces; `brand-*` gone; `tsc --noEmit` clean; `npm test` green.
+- [x] Migrate page-by-page (each step independently shippable + revertable, R4.4) — **done across Batches A–F** (`f-commits` per context-log): settings/appearance + admin (A/B), chat overlays (C), chat surface + voice + settings panels (D), dashboard widgets (E), finance pages + `PinnedContextManager` (F). Every surface now resolves color through the tokens. **Note:** this migrated *colors* to tokens; wholesale swap of raw `<button>`/`<div>` cards/inputs onto the R2 `Button`/`Card`/`Input` *components* is a softer follow-up (the primitives exist and are the only vendor-import surface; DoD gates on palettes, which are clean). db-browser was already tokenized pre-P4 (its `var(--color-X,#hex)` are never-fired fallbacks).
+- [x] Remove dead hardcoding (R4.2): deleted the legacy `brand-{50..900}` scale from `tailwind.config.ts` (zero call-sites) and stray literal `#hex` (Batch F: finance accents + `RetirementPlanner` `#dc2626`).
+- [x] **Tests:** grep shows **zero hardcoded palettes** in any app surface (theme-editor files keep hex as data); `brand-*` gone; `tsc --noEmit` clean; build green; `npm test` green (333). Per-page Playwright parity diff is the Task-14 deferred item (live visual checks substituted, owner-approved).
 
 ---
 

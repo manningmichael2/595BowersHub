@@ -18,6 +18,8 @@ export interface ComboboxOption {
 
 export interface ComboboxProps {
   label?: string
+  /** Accessible name when no visible `label` is rendered (e.g. in a filter bar). */
+  'aria-label'?: string
   options: ComboboxOption[]
   selectedKey?: Key | null
   onSelectionChange?: (key: Key | null) => void
@@ -34,6 +36,7 @@ export interface ComboboxProps {
  */
 export function Combobox({
   label,
+  'aria-label': ariaLabel,
   options,
   selectedKey,
   onSelectionChange,
@@ -44,6 +47,7 @@ export function Combobox({
   return (
     <ComboBox
       className={cn('flex flex-col gap-1', className)}
+      aria-label={!label ? ariaLabel : undefined}
       selectedKey={selectedKey ?? null}
       onSelectionChange={(key) => onSelectionChange?.(key)}
       items={options}

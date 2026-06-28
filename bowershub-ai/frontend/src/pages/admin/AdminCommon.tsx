@@ -40,11 +40,11 @@ export function SectionStateGuard({
   children: React.ReactNode
 }) {
   if (isLoading) {
-    return <div className="text-center text-gray-500 py-12">Loading...</div>
+    return <div className="text-center text-text-muted py-12">Loading...</div>
   }
   if (error) {
     return (
-      <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-300">
+      <div className="bg-danger/30 border border-danger rounded-lg px-4 py-3 text-sm text-danger">
         Error: {error}
       </div>
     )

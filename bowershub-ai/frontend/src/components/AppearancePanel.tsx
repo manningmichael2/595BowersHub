@@ -18,8 +18,13 @@
  *     `effectiveTheme.id !== settings.theme_id` after settings load.
  *
  * _Requirements: R3.1, R3.2, R3.3, R3.8, R4.1, R4.2, R4.3, R12.2
+ *
+ * Note: theme preview tiles + swatches render each theme's actual token colors
+ * via inline styles — that hex IS data (the theme being previewed), not chrome,
+ * so it stays. The surrounding chrome is tokenized.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -29,6 +34,7 @@ import {
   type ThemeTokens,
 } from '../stores/settings'
 import ThemeBuilder from './ThemeBuilder'
+import { Button, Skeleton } from './ui'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -257,8 +263,8 @@ export default function AppearancePanel() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-medium text-gray-100">Appearance</h2>
-        <p className="text-sm text-gray-400 mt-1">
+        <h2 className="text-lg font-medium text-text">Appearance</h2>
+        <p className="text-sm text-text-muted mt-1">
           Theme and text size for the app. Changes apply to every device you
           sign into.
         </p>
@@ -266,23 +272,23 @@ export default function AppearancePanel() {
 
       {/* Backend-fallback notice (R3.8) */}
       {showFallbackNotice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-700/40 bg-amber-900/20 px-3 py-2 text-sm text-amber-200">
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
           <div>
             Your selected theme is no longer available, so we reset it to the
             platform default. Pick another theme below to override.
           </div>
           <button
             onClick={dismissFallbackNotice}
-            className="shrink-0 text-amber-300/70 hover:text-amber-100"
+            className="shrink-0 text-warning/70 hover:text-warning"
             aria-label="Dismiss notice"
           >
-            ✕
+            <X size={16} aria-hidden />
           </button>
         </div>
       )}
 
       {errorMsg && (
-        <div className="rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           {errorMsg}
         </div>
       )}
@@ -291,16 +297,16 @@ export default function AppearancePanel() {
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-medium text-gray-200">Theme</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <h3 className="text-sm font-medium text-text">Theme</h3>
+            <p className="text-xs text-text-muted mt-0.5">
               Choose a palette. Your selection follows you across devices.
             </p>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onResetToPlatformDefault}
             disabled={savingDefault || settings.theme_id == null}
-            className="px-3 py-1.5 rounded-lg bg-gray-800 text-xs text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
             title={
               settings.theme_id == null
                 ? 'Already using the platform default'
@@ -308,17 +314,17 @@ export default function AppearancePanel() {
             }
           >
             {savingDefault ? 'Resetting…' : 'Use platform default'}
-          </button>
+          </Button>
         </div>
 
         {themesError && (
-          <div className="text-sm text-red-400">{themesError}</div>
+          <div className="text-sm text-danger">{themesError}</div>
         )}
 
         {themes == null ? (
           <ThemeGridSkeleton />
         ) : sortedThemes.length === 0 ? (
-          <div className="text-sm text-gray-500 italic">
+          <div className="text-sm text-text-muted italic">
             No themes available.
           </div>
         ) : (
@@ -341,22 +347,22 @@ export default function AppearancePanel() {
         )}
 
         <div>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => { setEditingThemeId(null); setEditingThemeName(null); setBuilderOpen(true) }}
-            className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-200 hover:bg-gray-700 border border-gray-700"
             title="Build a personal theme — opens the color editor"
           >
             🎨 Build a custom theme
-          </button>
+          </Button>
         </div>
       </section>
 
       {/* ---------------- Text size section ---------------- */}
       <section className="space-y-3">
         <div>
-          <h3 className="text-sm font-medium text-gray-200">Text size</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h3 className="text-sm font-medium text-text">Text size</h3>
+          <p className="text-xs text-text-muted mt-0.5">
             Applies to chat messages and rendered markdown. UI chrome stays
             the same size.
           </p>
@@ -376,8 +382,8 @@ export default function AppearancePanel() {
                 className={
                   'flex flex-col items-center justify-center gap-1 rounded-lg border px-3 py-3 transition-colors ' +
                   (selected
-                    ? 'border-primary bg-primary/10 text-gray-100'
-                    : 'border-gray-700 bg-gray-800/40 text-gray-300 hover:border-gray-600 hover:bg-gray-800/70')
+                    ? 'border-primary bg-primary/10 text-text'
+                    : 'border-border bg-surface-light/40 text-text-muted hover:border-text-muted hover:bg-surface-light/70')
                 }
               >
                 {/* Live preview: the label rendered at its own pixel size
@@ -390,7 +396,7 @@ export default function AppearancePanel() {
                 >
                   {opt.label}
                 </span>
-                <span className="text-[10px] uppercase tracking-wider text-gray-500">
+                <span className="text-[10px] uppercase tracking-wider text-text-muted">
                   {pending ? 'Saving…' : selected ? 'Selected' : 'Preview'}
                 </span>
               </button>
@@ -458,7 +464,7 @@ function ThemeCard({
         'group relative flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors ' +
         (selected
           ? 'border-primary ring-1 ring-primary/60 bg-primary/5'
-          : 'border-gray-700 bg-gray-800/40 hover:border-gray-600 hover:bg-gray-800/70') +
+          : 'border-border bg-surface-light/40 hover:border-text-muted hover:bg-surface-light/70') +
         (pending ? ' opacity-60 cursor-wait' : '')
       }
     >
@@ -466,13 +472,13 @@ function ThemeCard({
       {onEdit && (
         <span
           onClick={(e) => { e.stopPropagation(); onEdit() }}
-          className="absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded bg-gray-700/80 text-gray-300 hover:bg-gray-600 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10"
+          className="absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded bg-surface-light text-text-muted hover:bg-surface hover:text-text opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10"
           title="Edit theme colors"
         >
           ✏️
         </span>
       )}
-      {/* Mini preview tile rendered with the theme's actual tokens. */}
+      {/* Mini preview tile rendered with the theme's actual tokens (data). */}
       <div
         className="rounded-md border h-16 w-full overflow-hidden flex items-stretch"
         style={{
@@ -502,32 +508,32 @@ function ThemeCard({
       </div>
 
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm text-gray-100 font-medium truncate">
+        <div className="text-sm text-text font-medium truncate">
           {theme.name}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           {theme.is_preset ? (
-            <span className="text-[10px] uppercase tracking-wider text-gray-400 bg-gray-700/60 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] uppercase tracking-wider text-text-muted bg-surface-light px-1.5 py-0.5 rounded">
               Preset
             </span>
           ) : theme.owner_id == null ? (
-            <span className="text-[10px] uppercase tracking-wider text-indigo-300 bg-indigo-900/40 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] uppercase tracking-wider text-primary bg-primary/15 px-1.5 py-0.5 rounded">
               Custom
             </span>
           ) : (
-            <span className="text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-900/40 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] uppercase tracking-wider text-success bg-success/15 px-1.5 py-0.5 rounded">
               Yours
             </span>
           )}
         </div>
       </div>
 
-      {/* Swatch row — quick visual diff between similar themes. */}
+      {/* Swatch row — quick visual diff between similar themes (token data). */}
       <div className="flex items-center gap-1">
         {SWATCH_TOKENS.map(t => (
           <span
             key={t}
-            className="h-2.5 w-2.5 rounded-full border border-black/20"
+            className="h-2.5 w-2.5 rounded-full border border-border"
             style={{ backgroundColor: (tokens as any)[t] || '#000' }}
             title={String(t)}
           />
@@ -536,9 +542,9 @@ function ThemeCard({
 
       <div className="flex items-center justify-between text-[11px] mt-0.5">
         {theme.is_default ? (
-          <span className="text-amber-300">★ Platform default</span>
+          <span className="text-warning">★ Platform default</span>
         ) : (
-          <span className="text-gray-500">&nbsp;</span>
+          <span className="text-text-muted">&nbsp;</span>
         )}
         {selected && <span className="text-primary">Active</span>}
       </div>
@@ -550,10 +556,7 @@ function ThemeGridSkeleton() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          key={i}
-          className="h-32 rounded-lg border border-gray-700 bg-gray-800/30 animate-pulse"
-        />
+        <Skeleton key={i} className="h-32" />
       ))}
     </div>
   )

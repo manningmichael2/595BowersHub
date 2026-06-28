@@ -1,13 +1,13 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useFeatures } from '../hooks/useFeatures'
-import { isFeatureVisible } from '../lib/featureNav'
+import { isNavItemVisible } from '../lib/featureNav'
 import { NAV_ITEMS } from '../lib/navItems'
 
 export default function BottomTabBar() {
   const location = useLocation()
   const navigate = useNavigate()
   const access = useFeatures()
-  const tabs = NAV_ITEMS.filter(t => !t.feature || isFeatureVisible(access, t.feature))
+  const tabs = NAV_ITEMS.filter(t => isNavItemVisible(access, t.feature))
 
   // Determine active tab
   const activePath = tabs.find(t => location.pathname.startsWith(t.path))?.path

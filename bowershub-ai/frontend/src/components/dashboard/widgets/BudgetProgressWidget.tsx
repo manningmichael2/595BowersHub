@@ -5,7 +5,7 @@ function fmt(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 }
 
-const TONE_COLOR: Record<BudgetTone, string> = { ok: '#22c55e', warn: '#eab308', over: '#ef4444' }
+const TONE_COLOR: Record<BudgetTone, string> = { ok: 'var(--color-success)', warn: 'var(--color-warning)', over: 'var(--color-danger)' }
 
 interface Row { category: string; budgeted: number; actual: number; remaining: number | null }
 

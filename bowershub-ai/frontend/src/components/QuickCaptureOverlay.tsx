@@ -408,20 +408,20 @@ export default function QuickCaptureOverlay({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="relative flex flex-col w-full sm:max-w-xl bg-gray-900 border border-gray-700 sm:rounded-2xl shadow-2xl max-h-screen sm:max-h-[85vh] overflow-hidden">
+      <div className="relative flex flex-col w-full sm:max-w-xl bg-surface border border-border sm:rounded-2xl shadow-2xl max-h-screen sm:max-h-[85vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-700 shrink-0">
-          <h2 id="quick-capture-title" className="text-lg font-medium text-gray-100">
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border shrink-0">
+          <h2 id="quick-capture-title" className="text-lg font-medium text-text">
             ⚡ Quick Capture
           </h2>
           <div className="flex items-center gap-2">
-            <kbd className="hidden sm:inline-block text-[10px] text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
+            <kbd className="hidden sm:inline-block text-[10px] text-text-muted bg-surface px-1.5 py-0.5 rounded">
               Esc
             </kbd>
             <button
               type="button"
               onClick={() => onClose()}
-              className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+              className="p-1.5 rounded-lg text-text-muted hover:bg-surface hover:text-text"
               aria-label="Close"
             >
               ✕
@@ -480,10 +480,10 @@ export default function QuickCaptureOverlay({
         </div>
 
         {/* Footer — buttons depend on view */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-700 shrink-0 bg-gray-900/80">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border shrink-0 bg-surface">
           {view.kind === 'compose' && (
             <>
-              <span className="mr-auto text-xs text-gray-500">
+              <span className="mr-auto text-xs text-text-muted">
                 {effectiveWorkspaceId == null
                   ? 'Choose a workspace first'
                   : `Capturing into "${activeWorkspace?.name ?? `workspace ${effectiveWorkspaceId}`}"`}
@@ -491,7 +491,7 @@ export default function QuickCaptureOverlay({
               <button
                 type="button"
                 onClick={() => onClose()}
-                className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-300 hover:bg-gray-700"
+                className="px-3 py-1.5 rounded-lg bg-surface text-sm text-text-muted hover:bg-surface-light"
               >
                 Cancel
               </button>
@@ -502,8 +502,8 @@ export default function QuickCaptureOverlay({
                 className={
                   'px-4 py-1.5 rounded-lg text-sm font-medium ' +
                   (canSave && !uploading
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                    : 'bg-gray-800 text-gray-500 cursor-not-allowed')
+                    ? 'bg-primary text-on-primary hover:bg-primary/90'
+                    : 'bg-surface text-text-muted cursor-not-allowed')
                 }
               >
                 Save
@@ -516,14 +516,14 @@ export default function QuickCaptureOverlay({
               <button
                 type="button"
                 onClick={() => setView({ kind: 'compose' })}
-                className="mr-auto px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-300 hover:bg-gray-700"
+                className="mr-auto px-3 py-1.5 rounded-lg bg-surface text-sm text-text-muted hover:bg-surface-light"
               >
                 ← Back
               </button>
               <button
                 type="button"
                 onClick={() => onClose()}
-                className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-300 hover:bg-gray-700"
+                className="px-3 py-1.5 rounded-lg bg-surface text-sm text-text-muted hover:bg-surface-light"
               >
                 Cancel
               </button>
@@ -534,8 +534,8 @@ export default function QuickCaptureOverlay({
                 className={
                   'px-4 py-1.5 rounded-lg text-sm font-medium ' +
                   (accepted.some(a => a)
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                    : 'bg-gray-800 text-gray-500 cursor-not-allowed')
+                    ? 'bg-primary text-on-primary hover:bg-primary/90'
+                    : 'bg-surface text-text-muted cursor-not-allowed')
                 }
               >
                 Confirm
@@ -548,7 +548,7 @@ export default function QuickCaptureOverlay({
               <button
                 type="button"
                 onClick={() => onClose()}
-                className="mr-auto px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-300 hover:bg-gray-700"
+                className="mr-auto px-3 py-1.5 rounded-lg bg-surface text-sm text-text-muted hover:bg-surface-light"
               >
                 Cancel
               </button>
@@ -556,7 +556,7 @@ export default function QuickCaptureOverlay({
                 <button
                   type="button"
                   onClick={runExtract}
-                  className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-200 hover:bg-gray-700"
+                  className="px-3 py-1.5 rounded-lg bg-surface text-sm text-text hover:bg-surface-light"
                 >
                   Retry
                 </button>
@@ -568,8 +568,8 @@ export default function QuickCaptureOverlay({
                 className={
                   'px-4 py-1.5 rounded-lg text-sm font-medium ' +
                   (text.trim().length > 0
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                    : 'bg-gray-800 text-gray-500 cursor-not-allowed')
+                    ? 'bg-primary text-on-primary hover:bg-primary/90'
+                    : 'bg-surface text-text-muted cursor-not-allowed')
                 }
                 title={
                   text.trim().length === 0
@@ -637,7 +637,7 @@ function ComposeView({
           onChange={e => setText(e.target.value)}
           placeholder="What's on your mind? — a thought, a list, a fact to remember…"
           rows={6}
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60 resize-none"
+          className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60 resize-none"
         />
       </div>
 
@@ -649,8 +649,8 @@ function ComposeView({
           className={
             'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs ' +
             (uploading || image !== null
-              ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-              : 'bg-gray-800 text-gray-300 hover:bg-gray-700')
+              ? 'bg-surface text-text-muted cursor-not-allowed'
+              : 'bg-surface text-text-muted hover:bg-surface-light')
           }
           title="Attach image"
         >
@@ -658,12 +658,12 @@ function ComposeView({
         </button>
 
         {image && (
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-900/40 border border-indigo-700/50 px-2 py-1 text-xs text-indigo-200">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary/40 border border-primary/50 px-2 py-1 text-xs text-primary">
             <span className="truncate max-w-[12rem]">{image.filename}</span>
             <button
               type="button"
               onClick={onRemoveImage}
-              className="text-indigo-300 hover:text-white"
+              className="text-primary hover:text-on-primary"
               aria-label="Remove image"
             >
               ✕
@@ -673,15 +673,15 @@ function ComposeView({
       </div>
 
       {workspaceId == null && (
-        <div className="rounded-lg border border-amber-700/60 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
+        <div className="rounded-lg border border-warning/60 bg-warning/20 px-3 py-2 text-xs text-warning">
           No workspace is active. Open the sidebar and pick one before saving.
         </div>
       )}
 
       {workspaceName && workspaceId != null && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-text-muted">
           Captures inherit{' '}
-          <span className="text-gray-300">{workspaceName}</span>'s skill set
+          <span className="text-text-muted">{workspaceName}</span>'s skill set
           and domain conventions.
         </p>
       )}
@@ -708,7 +708,7 @@ function ConfirmView({
 
   return (
     <div className="space-y-3">
-      <div className="text-sm text-gray-300">
+      <div className="text-sm text-text-muted">
         Smart Capture extracted {pluralize(intents.length, 'intent')}. Untick any
         you don't want to save.
       </div>
@@ -720,8 +720,8 @@ function ConfirmView({
             className={
               'rounded-lg border px-3 py-2 ' +
               (accepted[idx]
-                ? 'border-indigo-700/60 bg-indigo-900/20'
-                : 'border-gray-700 bg-gray-800/50 opacity-70')
+                ? 'border-primary/60 bg-primary/20'
+                : 'border-border bg-surface opacity-70')
             }
           >
             <label className="flex items-start gap-3 cursor-pointer select-none">
@@ -729,20 +729,20 @@ function ConfirmView({
                 type="checkbox"
                 checked={accepted[idx]}
                 onChange={() => toggle(idx)}
-                className="mt-1 accent-indigo-500"
+                className="mt-1 accent-primary"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-gray-400">
+                  <span className="text-[10px] uppercase tracking-wider text-text-muted">
                     {prettyDomainName(intent.domain)}
                   </span>
                   {intent.needs_more_info && (
-                    <span className="text-[10px] uppercase tracking-wider text-amber-300 bg-amber-900/30 px-1.5 py-0.5 rounded">
+                    <span className="text-[10px] uppercase tracking-wider text-warning bg-warning/30 px-1.5 py-0.5 rounded">
                       needs more info
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-gray-100 mt-0.5">{intent.summary}</div>
+                <div className="text-sm text-text mt-0.5">{intent.summary}</div>
               </div>
             </label>
           </li>
@@ -750,7 +750,7 @@ function ConfirmView({
       </ul>
 
       {commitErrors.length > 0 && (
-        <div className="rounded-lg border border-red-700/60 bg-red-900/20 px-3 py-2 text-xs text-red-200 space-y-1">
+        <div className="rounded-lg border border-danger/60 bg-danger/20 px-3 py-2 text-xs text-danger space-y-1">
           <div className="font-medium">Some captures failed to save:</div>
           {commitErrors.map((e, i) => (
             <div key={i} className="font-mono">
@@ -775,8 +775,8 @@ function StatusView({
   return (
     <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
       <div className="text-3xl">{icon}</div>
-      <div className="text-base text-gray-100">{title}</div>
-      <div className="text-xs text-gray-500">{caption}</div>
+      <div className="text-base text-text">{title}</div>
+      <div className="text-xs text-text-muted">{caption}</div>
     </div>
   )
 }
@@ -792,13 +792,13 @@ function ExtractErrorView({
 }) {
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-red-700/60 bg-red-900/20 px-3 py-3">
-        <div className="text-sm font-medium text-red-200 mb-1">
+      <div className="rounded-lg border border-danger/60 bg-danger/20 px-3 py-3">
+        <div className="text-sm font-medium text-danger mb-1">
           Smart Capture failed
         </div>
-        <div className="text-xs text-red-300">{message}</div>
+        <div className="text-xs text-danger">{message}</div>
       </div>
-      <div className="text-xs text-gray-400 space-y-1">
+      <div className="text-xs text-text-muted space-y-1">
         {retryable && <div>You can retry, or save your text verbatim as a raw note.</div>}
         {!hasText && (
           <div>
@@ -807,8 +807,8 @@ function ExtractErrorView({
           </div>
         )}
         <div>
-          Raw notes go to <code className="text-gray-300">/knowledge/captures/</code>{' '}
-          and are searchable by <code className="text-gray-300">recall</code>.
+          Raw notes go to <code className="text-text-muted">/knowledge/captures/</code>{' '}
+          and are searchable by <code className="text-text-muted">recall</code>.
         </div>
       </div>
     </div>

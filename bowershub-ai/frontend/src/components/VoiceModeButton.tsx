@@ -156,8 +156,8 @@ export default function VoiceModeButton({
           className={
             'p-2 rounded-lg shrink-0 mb-0.5 transition-colors ' +
             (ttsEnabled
-              ? 'text-indigo-400 hover:bg-indigo-600/20'
-              : 'text-gray-500 hover:bg-gray-800')
+              ? 'text-primary hover:bg-primary/20'
+              : 'text-text-muted hover:bg-surface')
           }
           title={ttsEnabled ? 'Disable read-aloud' : 'Enable read-aloud'}
           aria-label={ttsEnabled ? 'Disable read-aloud' : 'Enable read-aloud'}
@@ -189,7 +189,7 @@ export default function VoiceModeButton({
         <button
           type="button"
           onClick={handleStopSpeaking}
-          className="p-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 shrink-0 mb-0.5 transition-colors"
+          className="p-2 rounded-lg bg-warning/20 hover:bg-warning/40 text-warning shrink-0 mb-0.5 transition-colors"
           title="Stop speaking (disables read-aloud)"
           aria-label="Stop speaking"
         >
@@ -226,8 +226,8 @@ export default function VoiceModeButton({
           className={
             'p-2 rounded-lg shrink-0 mb-0.5 transition-colors ' +
             (isListening
-              ? 'bg-red-600/80 hover:bg-red-600 text-white animate-pulse'
-              : 'hover:bg-gray-800 text-gray-400')
+              ? 'bg-danger/80 hover:bg-danger/90 text-on-primary animate-pulse'
+              : 'hover:bg-surface text-text-muted')
           }
           title={isListening ? 'Stop listening' : 'Start voice input'}
           aria-label={isListening ? 'Stop listening' : 'Start voice input'}
@@ -270,7 +270,7 @@ export default function VoiceModeButton({
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-sm rounded-lg border border-amber-700/40 bg-amber-900/90 px-4 py-2 text-sm text-amber-100 shadow-lg backdrop-blur-sm"
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-sm rounded-lg border border-warning/40 bg-warning/90 px-4 py-2 text-sm text-on-warning shadow-lg backdrop-blur-sm"
         >
           <div className="flex items-start gap-3">
             <span className="flex-1">
@@ -280,7 +280,7 @@ export default function VoiceModeButton({
             <button
               type="button"
               onClick={dismissToast}
-              className="text-amber-200 hover:text-amber-50 font-bold"
+              className="text-on-warning/80 hover:text-on-warning font-bold"
               aria-label="Dismiss"
             >
               ×

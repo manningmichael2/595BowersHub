@@ -1136,3 +1136,72 @@ Built the unified app shell (Tasks 10–13) on `spec/design-system-and-shell`. P
 **State:** `tsc` clean; **333 frontend tests** (320 after Phase 2 → +13); build green. Desktop now: persistent left nav rail + contextual top bar across all sections. **Owner has NOT yet done a live desktop+mobile visual pass** (no reachable backend in this checkout) — chat regression gate + rail/offsets best confirmed in the running app. Branch ahead of `main` by Phase 3.
 
 - [Next] **Phase 4 — surface migration & visual-parity safety** (Tasks 14–15): stand up the Playwright screenshot-diff harness (390px/1024px baselines, R4.3) → migrate the ~40 un-tokenized surfaces (admin console, settings/appearance incl. ThemeBuilder, chat overlays, db-browser) onto the tokens + primitives page-by-page, wire store `error` fields through `ErrorState`, adopt the finance widgets in the finance pages (re-check the React-Aria main-chunk ceiling then), migrate Dashboard tabs to SecondaryNav, and remove the dead `brand-*` Tailwind scale + stray hex (R4.1/R4.2/R4.4).
+
+---
+
+## [2026-06-28] design-system-and-shell — Phase 4 (surface migration) complete — Claude Code
+
+Completed Phase 4 token migration on `spec/design-system-and-shell`. Spec is now **fully traceable (26/26)** and its hard DoD gates are met. Batches D–F this session (A–C committed prior); each is its own revertable commit, tsc + 333 frontend tests + build green throughout.
+
+- **Batch D (`b3767f4`)** — chat surface (ChatArea/ChatHeader/MessageList/InputArea/ModelPicker/MorningCard/TypingIndicator/SlashAutocomplete/SearchOverlay/QuickCaptureOverlay/ErrorBoundary), voice UI, settings panels (WorkspaceSettingsPanel/IconUploader/SystemPromptViewer), DashboardV2/SportsScoresWidget, db-browser ImageGallery, ToolFramePage/QuickCapturePage, remaining admin sections → tokens. **Caught 4 contrast regressions a naive same-token swap introduced:** VoiceModeButton unavailable-toast rendered `text-warning` on `bg-warning/90` (text-on-itself, unreadable) → `text-on-warning`; MessageList read-aloud `hover:text-text-muted` was a no-op → `hover:text-text`; VoicePanel ToggleSwitch thumb `bg-surface` vanished against the track → `bg-on-primary`; LayerBadge L1/L2 `bg-*/50 text-*` cut contrast → `/20` soft-badge idiom.
+- **Batch E (`7e4f377`)** — dashboard widgets: hardcoded status hex in the inline `style={{var(--color-*)}}` idiom (#22c55e/#eab308/#ef4444/#fff) → success/warning/danger/on-* vars across SystemHealth/BudgetProgress/Tailscale/RecentEmails/Balances/Containers/RecentTransactions/FinanceSummary/WidgetGrid.
+- **Batch F (`d771361`)** — **owner-approved decision: tokenize the finance pages' hand-picked accent palette to the theme** (rather than keep it custom). TransactionsPage income→`text-success`/spending→`text-danger`/transfer→`text-accent`; BudgetsPage TONE_COLOR→success/warning/danger; NetWorthPage stale→`text-warning`; RetirementPlanner stray `#dc2626`→`var(--color-danger)`; PinnedContextManager static/dynamic badges off sky/violet→accent/primary soft-badge idiom. **R4.1:** deleted the dead `brand-{50..900}` Tailwind scale (zero call-sites).
+- **db-browser was already tokenized pre-P4** — its `var(--color-X, #hex)` are harmless never-fired fallbacks (`--color-error`/`--color-on-primary` are genuinely injected; confirmed in `themeTokens.ts`). Not churned.
+
+**Verified DoD:** zero hardcoded palettes in any app surface (grep-clean; theme-editor files keep hex as data); `brand-*` gone; zero `@radix-ui`/`react-aria` imports outside `components/ui/`; react-aria absent from the build (finance widgets built in T8 but not yet adopted, so trivially confined to the lazy chunk); validator 26/26.
+
+- **Task 14 (Playwright parity harness) — owner-deferred** in favour of live visual checks (recorded in tasks.md).
+- **Softer follow-ups (not DoD gates, deferred):** wholesale swap of raw `<button>`/card/input markup onto the R2 `Button`/`Card`/`Input` *components* (colors are done; component adoption is cosmetic-debt); wire store `error` fields through `ErrorState`; migrate DashboardPage's state-driven tabs onto `SecondaryNav`; **adopt the React-Aria finance widgets in the finance pages** (this is finance-north-star work — re-check the main-chunk bundle ceiling when it lands).
+
+- [Next] Branch `spec/design-system-and-shell` carries Phases 1–4 (Phase 1+2 already merged to `main`; Phases 3–4 ahead). **Owner still hasn't done a live desktop+mobile visual pass** (no reachable backend in this checkout). Suggested: run the dev server, walk the shell + chat regression gate + the retoned finance pages, then merge to `main` so Kiro sees the finished design system. After merge, the **finance north star** is unblocked on a stable shell (per `ui-before-finance-priority`).
+
+---
+
+## [2026-06-28] design-system-and-shell — mobile shell chrome + nav hardening — Claude Code
+
+Live mobile validation pass with the owner (dev server over Tailscale) surfaced real gaps beyond the Phase-4 token work; fixed on `spec/design-system-and-shell`. All green throughout (340 frontend tests, tsc + build clean); each change its own commit.
+
+**Root-cause finding (owner action needed): the deployed backend is STALE.** `/api/me/features` returns 404 on the running backend (uptime ~3.4d → started ~2026-06-25), but that route shipped in `6c986b3` (role-aware nav) on 2026-06-26. So `loadFeatureAccess()` 404s → `featureAccess` stays null → gated nav (Finance/Database) was hidden on EVERY device, desktop included. **The real fix is a backend redeploy.** (Sibling protected routes return 401; only `/api/me/features` 404s — confirming it's route-not-registered, not auth.)
+
+**Mobile shell chrome (the big gap).** `ShellLayout` rendered NO top bar on mobile — only the bottom tab bar — so any page outside the 5 tabs had no title, no account/logout, and no up/back (browser-back unwound to chat).
+- `shell/MobileTopBar` (menu + brand + global-search entry) + `shell/NavDrawer` (scrollable left Sheet: all destinations incl. gated, tools, account + logout). New `ui/Sheet` primitive over Radix Dialog (focus-trap/ESC/scroll-lock) + slide/fade keyframes in tailwind.
+- Mobile `--shell-top-h` now = real bar height, so `.shell-content` AND `.bh-app-shell` (chat) offset below it with no per-surface edits. Owner confirmed chat + the fixed mobile conversation-sidebar render correctly under it.
+
+**Gated-nav hardening.** `isNavItemVisible()` renders gated items OPTIMISTICALLY while access is null (server still enforces on click) instead of fail-closed-hiding them — un-hides Finance/Database even against the stale backend. Wired into BottomTabBar/NavRail/NavDrawer. `loadFeatureAccess()` gained bounded retry w/ backoff. Tradeoff (documented): a less-privileged user may briefly see a button they can't use during the load window.
+
+**Settings master-detail (mobile).** The cramped horizontal-scroll chip row → full-width section LIST that drills into a pane with a back-to-LIST control (not `navigate(-1)`, which was the dump-to-chat trap). Desktop sidebar+pane unchanged. `activeSection` is now `SectionId | null`; pane switch extracted to `<SectionPane>`.
+
+**De-dup now that the shell owns chrome.** ChatHeader's search button removed (duplicated the shell's global search — was doubled on desktop too); chat Sidebar's legacy primary-nav link row removed (duplicated NavRail). `DbBrowserPage` had leftover manual `pb-14 sm:pb-0 sm:pt-11` offsets (T11 removed these from Dashboard/Finance but missed it) → double-offset, removed. ChatHeader/ChatArea mobile toggles re-pointed `md:hidden`→`sm:hidden` (canonical breakpoint).
+
+**Verified already-good (no change):** TransactionsPage is responsive (stacked cards vs table at `isMobile`, R5.3); dashboard widgets already use `ErrorState`+retry (`WidgetShell`).
+
+- [Next] Owner to: **redeploy backend** (the real Finance/Database fix), do a **desktop visual pass**, then merge `spec/design-system-and-shell` → `main`. Deferred (not blockers): finance-widget adoption in finance pages (north-star work — re-check React-Aria main-chunk ceiling then); chat Sidebar account/Settings/Admin footer still duplicates the drawer on mobile (owner undecided — Admin is the one non-redundant shortcut); DashboardNav stays state-driven (doesn't map to the route-based SecondaryNav without making dashboard pages routes).
+
+---
+
+## [2026-06-28] Finance UI build started — React-Aria widgets into Transactions — Claude Code
+
+With the shell stable, began the finance UI build (owner-directed) by adopting the T8 React-Aria finance widgets into the flagship Transactions page. 3 increments on `spec/design-system-and-shell`, each its own commit; tsc + 340 frontend tests + build green throughout. **Bundle isolation holds**: react-aria-components stays OUT of the main chunk and lands only in the lazy `/finance/transactions` chunk.
+
+- **#1 (b0b4dfd)** — filter + bulk category `<select>` → searchable `Combobox`. Combobox primitive gained `aria-label` passthrough (use without a visible label).
+- **#2 (2c19871)** — date filter → `DateRangePicker` (presets still drive start/end); a useMemo bridges the 'YYYY-MM-DD' string state ↔ CalendarDate (`parseDate`).
+- **#3 (73f339f)** — the centerpiece: desktop table → `DataGrid` with **click-to-edit category cells** (display → Combobox on click → categorize). Bulk-select preserved via plain checkboxes in render-cells + the page's own `selected` set (not RAC selection). Sorting wired to the existing sort/order query via `onSortChange`. DataGrid primitive extended (ReactNode headers, per-col width, rowTestId).
+  - **Two deliberate, revertable tradeoffs:** splits now open a **modal Dialog** (React Aria tables can't host inline detail rows — SplitEditor reused as-is); the **DataGrid is desktop-only**, mobile keeps the validated stacked-card list.
+
+- **Bundle ceiling watch:** the lazy TransactionsPage chunk grew 200KB→357KB→444KB (≈110→136KB gzip) across #1→#3 as Table/ComboBox/Calendar/NumberField landed. Loaded only on the finance route + cached; acceptable for a power-tool, but flagged for an owner decision if it matters.
+
+- [Next] **Owner to redeploy backend + validate the finance pages live** (finance data won't load against the stale backend; the new controls render regardless but filtering/categorizing needs data). Confirm the two #3 tradeoffs feel right. Then: extend widgets to the other finance pages (CurrencyInput in Budgets/SplitEditor; possibly DataGrid for NetWorth/holdings), and decide on the bundle ceiling. Still pending from earlier: backend redeploy is ALSO the real fix for the Finance/Database nav gating (the /api/me/features 404).
+
+## [2026-06-28] Finance UI build — money inputs + adoption assessment — Claude Code
+
+Continued the finance UI build (owner thumbs-up) — extended the widgets to the other finance money/category inputs.
+
+- **#4 (0ecebbf)** — CurrencyInput where money is entered: SplitEditor (per-line Combobox category + CurrencyInput amount; amount state string→number, NaN=empty; inline styles modernized to tokens + Button primitive) and BudgetsPage ("set $" → CurrencyInput). React Aria NumberField commits on blur, so the existing BudgetsPage fireEvent test passes unchanged.
+- **Bundle:** Vite now extracts react-aria into a SHARED chunk across the lazy finance routes, so per-page finance chunks stay tiny (BudgetsPage ~2.7KB) and react-aria loads once for the whole finance area. Main bundle still verified free of react-aria.
+
+**Adoption assessment — widgets now applied everywhere they cleanly fit:**
+- Transactions: Combobox (filter/bulk) + DateRangePicker + DataGrid w/ inline-categorize. Splits: Combobox + CurrencyInput. Budgets: CurrencyInput. ✓
+- **RetirementPlanner — skipped (not a clean fit):** its custom `NumField` handles mixed `$`/`%`/age types consistently; only 4/10 fields are currency, so partial CurrencyInput would fragment it. A generic NumberField primitive (prefix/suffix/format) would be the right way to unify it — a larger primitive addition, deferred.
+- **NetWorthPage — skipped:** grouped accounts-by-type display list with subtotals; a flat sortable DataGrid isn't clearly better for net worth (no editing).
+
+- [Next] Finance-widget adoption is substantially complete. Owner to validate the finance pages live (still needs the backend redeploy). Open options: a generic NumberField widget to unify RetirementPlanner; bundle-ceiling decision; then merge `spec/design-system-and-shell` → `main` after the desktop pass.

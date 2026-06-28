@@ -23,14 +23,14 @@ export default function FinanceSummaryWidget({ data }: WidgetProps) {
         </div>
         <div className="text-right">
           <p className="text-xs uppercase tracking-wide" style={{ color: 'var(--color-text-muted)' }}>MTD Income</p>
-          <p className="text-xl font-bold tabular-nums" style={{ color: '#22c55e' }}>{fmt(d.mtd_income || 0)}</p>
+          <p className="text-xl font-bold tabular-nums" style={{ color: 'var(--color-success)' }}>{fmt(d.mtd_income || 0)}</p>
         </div>
       </div>
 
       {/* Net change badge + prev month */}
       <div className="flex items-center justify-between text-xs" style={{ color: 'var(--color-text-muted)' }}>
         <span>Last month: {fmt(d.prev_month_spending)} spent / {fmt(d.prev_month_income || 0)} earned</span>
-        <span className="inline-flex items-center rounded-full px-2 py-0.5 font-semibold" style={{ backgroundColor: `color-mix(in srgb, ${isDown ? '#22c55e' : '#ef4444'} 15%, transparent)`, color: isDown ? '#22c55e' : '#ef4444' }}>
+        <span className="inline-flex items-center rounded-full px-2 py-0.5 font-semibold" style={{ backgroundColor: `color-mix(in srgb, ${isDown ? 'var(--color-success)' : 'var(--color-danger)'} 15%, transparent)`, color: isDown ? 'var(--color-success)' : 'var(--color-danger)' }}>
           {isDown ? '↓' : '↑'} {fmt(Math.abs(d.net_change))}
         </span>
       </div>

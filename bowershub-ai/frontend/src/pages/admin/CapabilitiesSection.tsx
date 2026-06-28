@@ -49,31 +49,31 @@ export default function CapabilitiesSection() {
             <p className="text-sm text-text-muted mb-3">
               The minimum role required for each gate. Changes take effect immediately.
             </p>
-            <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto">
+            <div className="bg-background rounded-lg border border-border overflow-x-auto">
               <table className="w-full text-sm min-w-[560px]">
                 <thead>
-                  <tr className="border-b border-gray-800">
-                    <th className="text-left px-4 py-3 text-gray-400 font-medium">Capability</th>
-                    <th className="text-left px-4 py-3 text-gray-400 font-medium">Min role</th>
-                    <th className="text-left px-4 py-3 text-gray-400 font-medium">Description</th>
+                  <tr className="border-b border-border">
+                    <th className="text-left px-4 py-3 text-text-muted font-medium">Capability</th>
+                    <th className="text-left px-4 py-3 text-text-muted font-medium">Min role</th>
+                    <th className="text-left px-4 py-3 text-text-muted font-medium">Description</th>
                   </tr>
                 </thead>
                 <tbody>
                   {caps.data.map(c => (
-                    <tr key={c.capability} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                      <td className="px-4 py-3 font-mono text-gray-300">{c.capability}</td>
+                    <tr key={c.capability} className="border-b border-border/50 hover:bg-surface-light/30">
+                      <td className="px-4 py-3 font-mono text-text-muted">{c.capability}</td>
                       <td className="px-4 py-3">
                         <select
                           aria-label={`Min role for ${c.capability}`}
                           value={c.min_role}
                           disabled={savingCap === c.capability}
                           onChange={e => retune(c.capability, e.target.value)}
-                          className="bg-[#1a1a2e] border border-gray-700 rounded px-2 py-1 text-xs disabled:opacity-50"
+                          className="bg-surface border border-border rounded px-2 py-1 text-xs disabled:opacity-50"
                         >
                           {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-gray-500">{c.description}</td>
+                      <td className="px-4 py-3 text-text-muted">{c.description}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -88,20 +88,20 @@ export default function CapabilitiesSection() {
                 User-facing areas and their baseline capability. A floored feature can
                 never be granted below admin.
               </p>
-              <div className="bg-[#0f0f1a] rounded-lg border border-gray-800 overflow-x-auto">
+              <div className="bg-background rounded-lg border border-border overflow-x-auto">
                 <table className="w-full text-sm min-w-[480px]">
                   <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left px-4 py-3 text-gray-400 font-medium">Feature</th>
-                      <th className="text-left px-4 py-3 text-gray-400 font-medium">Baseline capability</th>
-                      <th className="text-left px-4 py-3 text-gray-400 font-medium">Admin-only floor</th>
+                    <tr className="border-b border-border">
+                      <th className="text-left px-4 py-3 text-text-muted font-medium">Feature</th>
+                      <th className="text-left px-4 py-3 text-text-muted font-medium">Baseline capability</th>
+                      <th className="text-left px-4 py-3 text-text-muted font-medium">Admin-only floor</th>
                     </tr>
                   </thead>
                   <tbody>
                     {features.data.map(f => (
-                      <tr key={f.feature_key} className="border-b border-gray-800/50">
-                        <td className="px-4 py-3 text-gray-300">{f.label}</td>
-                        <td className="px-4 py-3 font-mono text-gray-500">{f.baseline_capability}</td>
+                      <tr key={f.feature_key} className="border-b border-border/50">
+                        <td className="px-4 py-3 text-text-muted">{f.label}</td>
+                        <td className="px-4 py-3 font-mono text-text-muted">{f.baseline_capability}</td>
                         <td className="px-4 py-3">{f.admin_only_floor ? '🔒 Yes' : 'No'}</td>
                       </tr>
                     ))}

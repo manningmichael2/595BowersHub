@@ -174,7 +174,7 @@ export default function MorningCard({ workspaceId }: MorningCardProps) {
 
   return (
     <div
-      className="mb-4 rounded-lg border border-indigo-700/40 bg-indigo-950/30 p-4 shadow-sm"
+      className="mb-4 rounded-lg border border-primary/40 bg-primary/30 p-4 shadow-sm"
       role="region"
       aria-label="Morning briefing"
       data-testid="morning-card"
@@ -184,11 +184,11 @@ export default function MorningCard({ workspaceId }: MorningCardProps) {
           <span className="text-lg" aria-hidden>
             🌅
           </span>
-          <h3 className="text-sm font-medium text-gray-100 truncate">
+          <h3 className="text-sm font-medium text-text truncate">
             Good morning
           </h3>
           {hasBriefing && briefing?.generated_at && (
-            <span className="text-[11px] text-gray-500 shrink-0">
+            <span className="text-[11px] text-text-muted shrink-0">
               {formatGeneratedAt(briefing.generated_at)}
             </span>
           )}
@@ -196,7 +196,7 @@ export default function MorningCard({ workspaceId }: MorningCardProps) {
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 text-gray-500 hover:text-gray-200 text-sm rounded p-0.5"
+          className="shrink-0 text-text-muted hover:text-text text-sm rounded p-0.5"
           aria-label="Dismiss morning briefing for today"
           title="Dismiss for today"
         >
@@ -205,13 +205,13 @@ export default function MorningCard({ workspaceId }: MorningCardProps) {
       </div>
 
       {error && (
-        <div className="mb-3 rounded border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+        <div className="mb-3 rounded border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger">
           {error}
         </div>
       )}
 
       {loading && briefing == null ? (
-        <div className="text-sm text-gray-400" data-testid="morning-card-loading">
+        <div className="text-sm text-text-muted" data-testid="morning-card-loading">
           Loading briefing…
         </div>
       ) : !hasBriefing ? (
@@ -237,7 +237,7 @@ function NoBriefingState({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm text-gray-400">
+      <p className="text-sm text-text-muted">
         No briefing yet today. Generate one to see weather, yesterday's
         spending, your inbox, today's schedule, and more.
       </p>
@@ -245,7 +245,7 @@ function NoBriefingState({
         type="button"
         onClick={onGenerateNow}
         disabled={generating}
-        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm disabled:opacity-50 disabled:cursor-wait"
+        className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-on-primary text-sm disabled:opacity-50 disabled:cursor-wait"
         data-testid="morning-card-generate"
       >
         {generating ? 'Generating…' : "Generate today's briefing"}
@@ -257,7 +257,7 @@ function NoBriefingState({
 function BriefingSections({ sections }: { sections: ParsedSection[] }) {
   if (sections.length === 0) {
     return (
-      <div className="text-sm text-gray-500 italic">
+      <div className="text-sm text-text-muted italic">
         Briefing has no content.
       </div>
     )
@@ -276,21 +276,21 @@ function SectionTile({ section }: { section: ParsedSection }) {
   const isMissing = section.content.trim() === MISSING_PLACEHOLDER
   return (
     <div
-      className="rounded border border-gray-700 bg-gray-800/40 p-2.5"
+      className="rounded border border-border bg-surface p-2.5"
       data-section-key={section.key}
     >
       <div className="flex items-center gap-2 mb-1">
         <span className="text-base shrink-0" aria-hidden>
           {icon}
         </span>
-        <span className="text-xs font-medium text-gray-300 uppercase tracking-wider">
+        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
           {section.label}
         </span>
       </div>
       <div
         className={
           'text-sm whitespace-pre-wrap break-words ' +
-          (isMissing ? 'text-gray-500 italic' : 'text-gray-200')
+          (isMissing ? 'text-text-muted italic' : 'text-text')
         }
       >
         {section.content}

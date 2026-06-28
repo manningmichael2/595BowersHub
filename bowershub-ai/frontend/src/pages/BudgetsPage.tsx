@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { budgetTone, type BudgetTone } from '../lib/budget'
 import { toast } from '../stores/toast'
+import { CurrencyInput } from '../components/ui/finance'
 import { financeBudgets, type BudgetActual } from '../services/financeBudgets'
 
 function money(n: number): string {
@@ -18,7 +19,7 @@ function errorMessage(e: unknown): string {
   return detail ?? 'Something went wrong'
 }
 
-const TONE_COLOR: Record<BudgetTone, string> = { ok: '#4a4', warn: '#c84', over: '#c44' }
+const TONE_COLOR: Record<BudgetTone, string> = { ok: 'var(--color-success)', warn: 'var(--color-warning)', over: 'var(--color-danger)' }
 
 function thisMonthStart(): string {
   const d = new Date()
@@ -44,8 +45,7 @@ export default function BudgetsPage() {
 
   useEffect(() => { void load() }, [load])
 
-  const edit = async (categoryId: number, raw: string) => {
-    const limit = Number(raw)
+  const edit = async (categoryId: number, limit: number) => {
     if (Number.isNaN(limit) || limit < 0) { toast.error('Enter a non-negative number'); return }
     try {
       await financeBudgets.setBudget(categoryId, month, limit)
@@ -83,12 +83,12 @@ export default function BudgetsPage() {
                 <div className="min-w-[90px] text-right text-text-muted">
                   {r.remaining != null ? `${money(r.remaining)} left` : ''}
                 </div>
-                <input
+                <CurrencyInput
                   aria-label={`Budget for ${r.category}`}
                   placeholder="set $"
-                  defaultValue={r.budgeted || ''}
-                  className="w-20 text-xs rounded border border-border bg-surface px-2 py-1 text-text"
-                  onBlur={(e) => { if (e.target.value !== String(r.budgeted || '')) edit(r.category_id, e.target.value) }}
+                  className="w-28 shrink-0"
+                  defaultValue={r.budgeted || undefined}
+                  onChange={(v) => { if (!Number.isNaN(v)) edit(r.category_id, v) }}
                 />
               </li>
             )

@@ -57,7 +57,7 @@ function WidgetCard({ instance, widgetDef, editMode, onRemove }: {
         <button
           onClick={(e) => { e.stopPropagation(); onRemove(instance.widget_key) }}
           className="absolute top-1 right-1 z-20 w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold"
-          style={{ backgroundColor: '#ef4444', color: '#fff' }}
+          style={{ backgroundColor: 'var(--color-danger)', color: 'var(--color-on-danger)' }}
           title="Remove widget"
         >
           ✕

@@ -115,16 +115,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadFeatureAccess: async () => {
-    const token = get().accessToken
-    if (!token) return
-    try {
-      const data = await rawFetch('/api/me/features', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      set({ featureAccess: data as FeatureAccess })
-    } catch {
-      // Non-fatal: nav simply withholds feature buttons until this succeeds.
-      // (The server still enforces access regardless of what the nav shows.)
+    if (!get().accessToken) return
+    // Bounded retry with backoff: a transient features-fetch failure must not
+    // strand the gated nav. The nav now renders optimistically while this is
+    // null (see isNavItemVisible), but we still want it to resolve to the
+    // authoritative payload as soon as the endpoint is reachable. A hard 404
+    // (e.g. a backend deployed before the route existed) simply exhausts the
+    // attempts and leaves the nav optimistic — the server still enforces access.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const data = await rawFetch('/api/me/features', {
+          headers: { Authorization: `Bearer ${get().accessToken}` },
+        })
+        set({ featureAccess: data as FeatureAccess })
+        return
+      } catch {
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+      }
     }
   },
 

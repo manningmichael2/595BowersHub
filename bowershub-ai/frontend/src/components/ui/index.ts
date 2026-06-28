@@ -31,6 +31,7 @@ export { FieldError } from './FieldError'
 
 // Radix-backed chrome primitives (R2.2)
 export * from './Dialog'
+export * from './Sheet'
 export * from './AlertDialog'
 export * from './DropdownMenu'
 export * from './Popover'

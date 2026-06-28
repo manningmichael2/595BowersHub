@@ -43,7 +43,7 @@ export default function SlashCommandsSection() {
     await load()
   }
 
-  if (loading) return <p className="text-gray-400">Loading...</p>
+  if (loading) return <p className="text-text-muted">Loading...</p>
 
   return (
     <div>
@@ -51,29 +51,29 @@ export default function SlashCommandsSection() {
         <h2 className="text-xl font-semibold">Slash Commands</h2>
         <button
           onClick={() => setEditing({ command: '/', description: '', flags: [], is_active: true })}
-          className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-500"
+          className="px-3 py-1.5 bg-primary text-on-primary rounded-lg text-sm hover:bg-primary/90"
         >
           + Add Command
         </button>
       </div>
 
-      {msg && <p className="text-green-400 text-sm mb-2">{msg}</p>}
+      {msg && <p className="text-success text-sm mb-2">{msg}</p>}
 
       <div className="space-y-2">
         {commands.map((cmd) => (
-          <div key={cmd.id} className="bg-gray-800/50 rounded-lg p-3 flex items-start gap-3">
+          <div key={cmd.id} className="bg-surface/50 rounded-lg p-3 flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <code className="text-indigo-300 font-mono text-sm">{cmd.command}</code>
-                {!cmd.is_active && <span className="text-xs text-red-400">(disabled)</span>}
-                {cmd.skill_name && <span className="text-xs text-gray-500">→ {cmd.skill_name}</span>}
-                {cmd.workspace_name && <span className="text-xs text-yellow-600">({cmd.workspace_name})</span>}
+                <code className="text-primary font-mono text-sm">{cmd.command}</code>
+                {!cmd.is_active && <span className="text-xs text-danger">(disabled)</span>}
+                {cmd.skill_name && <span className="text-xs text-text-muted">→ {cmd.skill_name}</span>}
+                {cmd.workspace_name && <span className="text-xs text-warning">({cmd.workspace_name})</span>}
               </div>
-              <p className="text-sm text-gray-400 mt-0.5">{cmd.description}</p>
+              <p className="text-sm text-text-muted mt-0.5">{cmd.description}</p>
               {cmd.flags && cmd.flags.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {cmd.flags.map((f: any, i: number) => (
-                    <span key={i} className="text-xs bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">
+                    <span key={i} className="text-xs bg-surface-light text-text-muted px-1.5 py-0.5 rounded">
                       {f.flag}
                     </span>
                   ))}
@@ -81,10 +81,10 @@ export default function SlashCommandsSection() {
               )}
             </div>
             <div className="flex gap-1 shrink-0">
-              <button onClick={() => setEditing(cmd)} className="text-xs text-gray-400 hover:text-white px-2 py-1">
+              <button onClick={() => setEditing(cmd)} className="text-xs text-text-muted hover:text-on-primary px-2 py-1">
                 Edit
               </button>
-              <button onClick={() => remove(cmd.id, cmd.command)} className="text-xs text-red-400 hover:text-red-300 px-2 py-1">
+              <button onClick={() => remove(cmd.id, cmd.command)} className="text-xs text-danger hover:text-danger px-2 py-1">
                 ✕
               </button>
             </div>
@@ -117,37 +117,37 @@ function CommandEditor({ command, onSave, onClose }: { command: any, onSave: (c:
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-xl p-6 w-full max-w-lg space-y-4">
+      <div className="bg-surface rounded-xl p-6 w-full max-w-lg space-y-4">
         <h3 className="text-lg font-medium">{command.id ? 'Edit Command' : 'New Command'}</h3>
 
         <div>
-          <label className="text-xs text-gray-400">Command</label>
+          <label className="text-xs text-text-muted">Command</label>
           <input
             value={form.command}
             onChange={e => setForm({ ...form, command: e.target.value })}
             disabled={!!command.id}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mt-1"
+            className="w-full bg-surface border border-border rounded px-3 py-2 text-sm mt-1"
             placeholder="/mycommand"
           />
         </div>
 
         <div>
-          <label className="text-xs text-gray-400">Description</label>
+          <label className="text-xs text-text-muted">Description</label>
           <input
             value={form.description}
             onChange={e => setForm({ ...form, description: e.target.value })}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mt-1"
+            className="w-full bg-surface border border-border rounded px-3 py-2 text-sm mt-1"
             placeholder="What this command does"
           />
         </div>
 
         <div>
-          <label className="text-xs text-gray-400">Flags (JSON array)</label>
+          <label className="text-xs text-text-muted">Flags (JSON array)</label>
           <textarea
             value={flagsText}
             onChange={e => setFlagsText(e.target.value)}
             rows={5}
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm mt-1 font-mono"
+            className="w-full bg-surface border border-border rounded px-3 py-2 text-sm mt-1 font-mono"
             placeholder='[{"flag": "--example", "description": "What it does"}]'
           />
         </div>
@@ -164,10 +164,10 @@ function CommandEditor({ command, onSave, onClose }: { command: any, onSave: (c:
         </div>
 
         <div className="flex gap-2 justify-end pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-text-muted hover:text-on-primary">
             Cancel
           </button>
-          <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-500">
+          <button onClick={handleSave} className="px-4 py-2 bg-primary text-on-primary rounded-lg text-sm hover:bg-primary/90">
             Save
           </button>
         </div>

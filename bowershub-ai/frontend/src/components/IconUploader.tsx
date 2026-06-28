@@ -271,8 +271,8 @@ export default function IconUploader() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-100">App Icon</h2>
-        <p className="text-sm text-gray-400 mt-1">
+        <h2 className="text-lg font-medium text-text">App Icon</h2>
+        <p className="text-sm text-text-muted mt-1">
           The icon shown in the PWA install, browser tab, and home screen.
           Uploads replace all sizes (192px, 512px, maskable-512px) at once.
         </p>
@@ -280,11 +280,11 @@ export default function IconUploader() {
 
       {/* ---- Current icon previews ---- */}
       <section>
-        <h3 className="text-sm font-medium text-gray-200 mb-3">Current icon</h3>
+        <h3 className="text-sm font-medium text-text mb-3">Current icon</h3>
         {isLoading && urls == null ? (
           <div className="flex gap-6">
-            <div className="h-32 w-32 rounded-lg border border-gray-700 bg-gray-800/30 animate-pulse" />
-            <div className="h-32 w-32 rounded-lg border border-gray-700 bg-gray-800/30 animate-pulse" />
+            <div className="h-32 w-32 rounded-lg border border-border bg-surface animate-pulse" />
+            <div className="h-32 w-32 rounded-lg border border-border bg-surface animate-pulse" />
           </div>
         ) : urls ? (
           <div className="flex flex-wrap gap-6">
@@ -302,34 +302,34 @@ export default function IconUploader() {
             />
           </div>
         ) : (
-          <div className="text-sm text-gray-500 italic">
+          <div className="text-sm text-text-muted italic">
             No icon manifest available.
           </div>
         )}
         {version && (
-          <p className="text-[11px] text-gray-500 mt-2">
-            Manifest version: <code className="text-gray-400">{version}</code>
+          <p className="text-[11px] text-text-muted mt-2">
+            Manifest version: <code className="text-text-muted">{version}</code>
           </p>
         )}
       </section>
 
       {/* ---- Messages ---- */}
       {errors.length > 0 && (
-        <div className="rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300 space-y-1">
+        <div className="rounded-lg border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger space-y-1">
           {errors.map((err, i) => (
             <div key={i}>{err}</div>
           ))}
         </div>
       )}
       {successMsg && (
-        <div className="rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-300">
+        <div className="rounded-lg border border-success/40 bg-success/20 px-3 py-2 text-sm text-success">
           {successMsg}
         </div>
       )}
 
       {/* ---- Actions ---- */}
       <section className="space-y-3">
-        <h3 className="text-sm font-medium text-gray-200">Actions</h3>
+        <h3 className="text-sm font-medium text-text">Actions</h3>
 
         <input
           ref={fileInputRef}
@@ -344,7 +344,7 @@ export default function IconUploader() {
             type="button"
             onClick={onPickFile}
             disabled={isBusy}
-            className="px-3 py-1.5 rounded-lg bg-indigo-600 text-sm text-white hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-lg bg-primary text-sm text-on-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busyAction === 'upload' ? 'Uploading…' : '⬆ Upload new icon'}
           </button>
@@ -353,7 +353,7 @@ export default function IconUploader() {
             type="button"
             onClick={onRevertToDefault}
             disabled={isBusy}
-            className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-lg bg-surface text-sm text-text-muted hover:bg-surface-light disabled:opacity-40 disabled:cursor-not-allowed"
             title="Restore the built-in default icon"
           >
             {busyAction === 'revert' ? 'Reverting…' : '↺ Revert to default'}
@@ -363,7 +363,7 @@ export default function IconUploader() {
             type="button"
             onClick={onRollback}
             disabled={isBusy || !hasRollback}
-            className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-lg bg-surface text-sm text-text-muted hover:bg-surface-light disabled:opacity-40 disabled:cursor-not-allowed"
             title={
               hasRollback
                 ? 'Swap back to the previous icon'
@@ -374,7 +374,7 @@ export default function IconUploader() {
           </button>
         </div>
 
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-text-muted">
           Required: PNG, square (within 1%), at least 512×512px, ≤ 4 MB. The
           server will generate the 192px and maskable-512px variants.
         </p>
@@ -407,7 +407,7 @@ function IconPreview({
   return (
     <div className="flex flex-col items-center gap-2">
       <div
-        className="rounded-lg border border-gray-700 bg-gray-900/60 p-2"
+        className="rounded-lg border border-border bg-surface p-2"
         style={{ width: size + 16, height: size + 16 }}
       >
         <img
@@ -419,7 +419,7 @@ function IconPreview({
           style={{ width: size, height: size, objectFit: 'contain' }}
         />
       </div>
-      <span className="text-[11px] text-gray-500">{label}</span>
+      <span className="text-[11px] text-text-muted">{label}</span>
     </div>
   )
 }

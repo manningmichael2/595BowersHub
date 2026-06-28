@@ -5,15 +5,17 @@ import { useRailCollapsed } from '../../hooks/useRailCollapsed'
 import { useUIStore } from '../../stores/ui'
 import NavRail from './NavRail'
 import TopBar from './TopBar'
+import MobileTopBar from './MobileTopBar'
+import NavDrawer from './NavDrawer'
 import BottomTabBar from '../BottomTabBar'
 import SearchOverlay from '../SearchOverlay'
 import QuickCaptureOverlay from '../QuickCaptureOverlay'
 
 const RAIL_W_EXPANDED = '15rem' // 240px (matches NavRail w-60)
 const RAIL_W_COLLAPSED = '4rem' // 64px (matches NavRail w-16)
-// Top bar height + the safe-area inset so content clears a notch on installed PWAs.
+// Top bar height + the safe-area inset so content clears a notch on installed
+// PWAs. Same height on mobile (MobileTopBar) and desktop (TopBar).
 const TOP_H = 'calc(2.75rem + env(safe-area-inset-top, 0px))'
-const MOBILE_TOP_H = 'env(safe-area-inset-top, 0px)'
 const BOTTOM_H = 'calc(56px + env(safe-area-inset-bottom, 0px))' // BottomTabBar + home indicator
 
 /** True when a Radix Dialog/AlertDialog is open, so global chords don't fire over a modal (R3.9). */
@@ -36,6 +38,7 @@ export default function ShellLayout() {
   const searchOpen = useUIStore((s) => s.searchOpen)
   const setSearchOpen = useUIStore((s) => s.setSearchOpen)
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false)
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false)
 
   // Publish chrome geometry so .shell-content + .bh-app-shell offset uniformly.
   useLayoutEffect(() => {
@@ -46,7 +49,7 @@ export default function ShellLayout() {
       root.setProperty('--shell-bottom-h', '0px')
     } else {
       root.setProperty('--shell-rail-w', '0px')
-      root.setProperty('--shell-top-h', MOBILE_TOP_H)
+      root.setProperty('--shell-top-h', TOP_H)
       root.setProperty('--shell-bottom-h', BOTTOM_H)
     }
   }, [isDesktop, collapsed])
@@ -75,10 +78,15 @@ export default function ShellLayout() {
 
   return (
     <>
-      {isDesktop && (
+      {isDesktop ? (
         <>
           <NavRail collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
           <TopBar />
+        </>
+      ) : (
+        <>
+          <MobileTopBar onMenuClick={() => setNavDrawerOpen(true)} />
+          <NavDrawer open={navDrawerOpen} onOpenChange={setNavDrawerOpen} />
         </>
       )}
 

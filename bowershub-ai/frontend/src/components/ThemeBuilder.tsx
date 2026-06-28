@@ -31,6 +31,7 @@
  * _Requirements: R1.4, R1.6, R1.7, R1.8, R3.4
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -41,6 +42,7 @@ import {
   type ContrastDecision,
 } from '../lib/contrast'
 import type { ThemeTokens } from '../stores/settings'
+import { Button, Input, Switch } from './ui'
 
 // ---- Types ----------------------------------------------------------------
 
@@ -244,7 +246,7 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-modal flex items-stretch sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="theme-builder-title"
@@ -257,20 +259,20 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
     >
       <div
         ref={dialogRef}
-        className="relative flex flex-col w-full sm:max-w-5xl sm:rounded-2xl bg-gray-900 border border-gray-700 shadow-2xl max-h-screen sm:max-h-[90vh] overflow-hidden"
+        className="relative flex flex-col w-full sm:max-w-5xl sm:rounded-2xl bg-surface border border-border shadow-elevation-4 max-h-screen sm:max-h-[90vh] overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-700 shrink-0">
-          <h2 id="theme-builder-title" className="text-lg font-medium text-gray-100">
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border shrink-0">
+          <h2 id="theme-builder-title" className="text-lg font-medium text-text">
             🎨 Build a custom theme
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-gray-200"
+            className="p-1.5 rounded-lg text-text-muted hover:bg-surface-light hover:text-text"
             aria-label="Close"
           >
-            ✕
+            <X size={16} aria-hidden />
           </button>
         </div>
 
@@ -280,16 +282,15 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
             {/* ---------------- Editor column ---------------- */}
             <section className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-200 mb-1">
+                <label className="block text-sm font-medium text-text mb-1">
                   Theme name
                 </label>
-                <input
+                <Input
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="My theme"
                   maxLength={100}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
                 />
               </div>
 
@@ -306,10 +307,10 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
                     <div key={field.key as string}>
                       <label
                         htmlFor={`token-${String(field.key)}`}
-                        className="flex items-baseline justify-between text-sm text-gray-200 mb-1"
+                        className="flex items-baseline justify-between text-sm text-text mb-1"
                       >
                         <span>{field.label}</span>
-                        <span className="text-[10px] uppercase tracking-wider text-gray-500">
+                        <span className="text-[10px] uppercase tracking-wider text-text-muted">
                           {field.hint}
                         </span>
                       </label>
@@ -317,8 +318,8 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
                         className={
                           'flex items-center gap-2 rounded-lg border px-2 py-1.5 ' +
                           (valid
-                            ? 'border-gray-700 bg-gray-800'
-                            : 'border-red-700/60 bg-red-900/10')
+                            ? 'border-border bg-background'
+                            : 'border-danger/60 bg-danger/10')
                         }
                       >
                         <input
@@ -336,12 +337,12 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
                           spellCheck={false}
                           autoCapitalize="none"
                           autoComplete="off"
-                          className="flex-1 bg-transparent text-sm font-mono text-gray-100 placeholder-gray-500 focus:outline-none"
+                          className="flex-1 bg-transparent text-sm font-mono text-text placeholder:text-text-muted focus:outline-none"
                           placeholder="#000000"
                         />
                       </div>
                       {!valid && (
-                        <div className="text-[11px] text-red-400 mt-0.5">
+                        <div className="text-[11px] text-danger mt-0.5">
                           Use a 6- or 8-digit hex like <code>#1a2b3c</code>.
                         </div>
                       )}
@@ -354,16 +355,16 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
               <ContrastBadge decision={decision} ratio={ratio} />
 
               {isAdmin && (
-                <label className="flex items-start gap-2 mt-2 text-sm text-gray-300 select-none">
-                  <input
-                    type="checkbox"
+                <label className="flex items-start gap-3 mt-2 text-sm text-text-muted select-none">
+                  <Switch
+                    className="mt-0.5"
                     checked={publish}
-                    onChange={e => setPublish(e.target.checked)}
-                    className="mt-0.5 accent-indigo-500"
+                    onCheckedChange={setPublish}
+                    aria-label="Publish to all users"
                   />
                   <div>
-                    <div className="text-gray-200">Publish to all users</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-text">Publish to all users</div>
+                    <div className="text-xs text-text-muted">
                       Admin only. Other users will be able to select this theme.
                       Leave unchecked to save it as a personal theme.
                     </div>
@@ -374,9 +375,9 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
 
             {/* ---------------- Preview column ---------------- */}
             <section className="space-y-3">
-              <div className="text-sm font-medium text-gray-200">Live preview</div>
+              <div className="text-sm font-medium text-text">Live preview</div>
               <ThemePreview tokens={tokens} />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-text-muted">
                 Preview uses your working palette. The chat UI applies the
                 selected theme everywhere (sidebar, headers, inputs) once you
                 save and select it.
@@ -386,8 +387,8 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-3 border-t border-gray-700 shrink-0 bg-gray-900/80">
-          <div className="text-xs text-gray-500">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-3 border-t border-border shrink-0 bg-surface/80">
+          <div className="text-xs text-text-muted">
             {loading
               ? 'Loading existing theme…'
               : decision === 'block'
@@ -397,23 +398,13 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
                   : 'Ready to save.'}
           </div>
           <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1.5 rounded-lg bg-gray-800 text-sm text-gray-300 hover:bg-gray-700"
-            >
+            <Button variant="secondary" size="sm" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
               onClick={handleSave}
               disabled={!canSave}
-              className={
-                'px-4 py-1.5 rounded-lg text-sm font-medium ' +
-                (canSave
-                  ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                  : 'bg-gray-800 text-gray-500 cursor-not-allowed')
-              }
               title={
                 decision === 'block'
                   ? 'Cannot save — text/background contrast is too low'
@@ -425,12 +416,12 @@ export default function ThemeBuilder({ themeId, editMode, initialName, onSave, o
               }
             >
               {saving ? 'Saving…' : 'Save theme'}
-            </button>
+            </Button>
           </div>
         </div>
 
         {errorMsg && (
-          <div className="px-5 py-2 border-t border-red-700/40 bg-red-900/20 text-sm text-red-300">
+          <div className="px-5 py-2 border-t border-danger/40 bg-danger/10 text-sm text-danger">
             {errorMsg}
           </div>
         )}
@@ -451,18 +442,18 @@ function ContrastBadge({
   const cfg = {
     ok: {
       label: 'OK',
-      tone: 'border-emerald-700/60 bg-emerald-900/30 text-emerald-200',
+      tone: 'border-success/60 bg-success/15 text-success',
       caption: 'Text contrast is comfortable to read.',
     },
     warn: {
       label: 'Warn',
-      tone: 'border-amber-700/60 bg-amber-900/30 text-amber-200',
+      tone: 'border-warning/60 bg-warning/15 text-warning',
       caption:
         'Contrast is below the 4.5:1 recommendation — readable but may strain.',
     },
     block: {
       label: 'Block',
-      tone: 'border-red-700/60 bg-red-900/30 text-red-200',
+      tone: 'border-danger/60 bg-danger/15 text-danger',
       caption:
         'Contrast is below 2.0:1 — text would be unreadable. Save is disabled.',
     },

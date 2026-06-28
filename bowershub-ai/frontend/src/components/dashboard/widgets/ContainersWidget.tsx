@@ -16,7 +16,7 @@ export default function ContainersWidget({ config, data }: WidgetProps) {
         const linkUrl = links[c.name]
         return (
           <div key={c.name} className="flex items-center gap-3 rounded-md px-3 py-2" style={{ opacity: isRunning ? 1 : 0.6, backgroundColor: 'color-mix(in srgb, var(--color-border) 20%, transparent)' }}>
-            <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: isRunning ? '#22c55e' : 'var(--color-text-muted)' }} />
+            <span className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: isRunning ? 'var(--color-success)' : 'var(--color-text-muted)' }} />
             <div className="flex-1 min-w-0">
               {linkUrl ? (
                 <a href={linkUrl} target="_blank" rel="noopener noreferrer" className="truncate text-sm font-medium hover:underline block" style={{ color: 'var(--color-primary)' }}>{c.name}</a>

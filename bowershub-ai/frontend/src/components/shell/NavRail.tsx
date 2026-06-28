@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { PanelLeftClose, PanelLeftOpen, type LucideIcon } from 'lucide-react'
 import { useFeatures } from '../../hooks/useFeatures'
-import { isFeatureVisible } from '../../lib/featureNav'
+import { isNavItemVisible } from '../../lib/featureNav'
 import { NAV_ITEMS, TOOL_ITEMS } from '../../lib/navItems'
 import { cn } from '../ui/cn'
 
@@ -51,7 +51,7 @@ function RailLink({
 export default function NavRail({ collapsed, onToggle }: NavRailProps) {
   const location = useLocation()
   const access = useFeatures()
-  const items = NAV_ITEMS.filter((i) => !i.feature || isFeatureVisible(access, i.feature))
+  const items = NAV_ITEMS.filter((i) => isNavItemVisible(access, i.feature))
 
   return (
     <nav

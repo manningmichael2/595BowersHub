@@ -43,6 +43,28 @@ export function isFeatureVisible(
   return !access.hidden_nav.includes(featureKey)
 }
 
+/**
+ * Nav visibility with OPTIMISTIC loading. While the effective-access payload is
+ * still unresolved (`access === null` — fetch in flight, or it failed and is
+ * retrying), show the item rather than fail-closed-hiding it: the server still
+ * enforces access on click, so an unreachable/slow `/api/me/features` no longer
+ * silently makes a user's whole gated nav vanish (the exact failure that hid
+ * Finance/Database when the features route 404'd). Once access IS resolved, the
+ * strict `permitted ∩ not-hidden` rule applies. Ungated items always show.
+ *
+ * Tradeoff: during the load window a less-privileged user may briefly see a
+ * button they can't use (clicking it 403s server-side) — acceptable vs. the
+ * "my nav disappeared" failure for the common single-admin case.
+ */
+export function isNavItemVisible(
+  access: FeatureAccess | null,
+  featureKey: string | undefined,
+): boolean {
+  if (!featureKey) return true
+  if (access === null) return true
+  return isFeatureVisible(access, featureKey)
+}
+
 /** The set of feature keys whose nav button should show. */
 export function visibleFeatureKeys(access: FeatureAccess | null): Set<string> {
   if (!access) return new Set()

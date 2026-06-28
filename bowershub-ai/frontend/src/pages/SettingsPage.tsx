@@ -16,13 +16,16 @@
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../stores/auth'
 import { useSettingsStore } from '../stores/settings'
 import { useFeatures } from '../hooks/useFeatures'
+import { useBreakpoint } from '../hooks/useBreakpoint'
 import { api } from '../services/api'
 import { toast } from '../stores/toast'
 import AppearancePanel from '../components/AppearancePanel'
 import VoicePanel from '../components/VoicePanel'
+import { Button, Badge, Switch } from '../components/ui'
 
 type SectionId =
   | 'profile'
@@ -56,10 +59,53 @@ const BASE_SECTIONS: SectionDef[] = [
 
 const ADMIN_SECTION: SectionDef = { id: 'admin', label: 'Admin', icon: '🛠️' }
 
+/** Renders the active section's pane. Sections that link out (scheduled
+ * prompts, admin) never reach here — handleSelect navigates away instead. */
+function SectionPane({ id }: { id: SectionId }) {
+  switch (id) {
+    case 'profile':
+      return <ProfileSection />
+    case 'appearance':
+      return <AppearancePanel />
+    case 'navigation':
+      return <NavigationSection />
+    case 'voice':
+      return <VoicePanel />
+    case 'notifications':
+      return (
+        <PlaceholderSection
+          title="Notifications"
+          description="Daily briefing and budget alert preferences. Coming soon."
+        />
+      )
+    case 'briefing':
+      return (
+        <PlaceholderSection
+          title="Briefing"
+          description="Morning card workspace and briefing schedule. Coming soon."
+        />
+      )
+    case 'context-capture':
+      return (
+        <PlaceholderSection
+          title="Context Capture"
+          description="Background context-capture preferences. Coming soon."
+        />
+      )
+    case 'labs':
+      return <LabsSection />
+    default:
+      return null
+  }
+}
+
 export default function SettingsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const [activeSection, setActiveSection] = useState<SectionId>('profile')
+  const { isDesktop } = useBreakpoint()
+  // null = no section drilled into. On desktop a pane is always shown (defaults
+  // to Profile); on mobile null means the section LIST is shown (master-detail).
+  const [activeSection, setActiveSection] = useState<SectionId | null>(null)
 
   // R12.5 — append Admin entry only when user has admin role.
   const sections: SectionDef[] =
@@ -79,83 +125,85 @@ export default function SettingsPage() {
     setActiveSection(id)
   }
 
+  const paneSection = activeSection ?? 'profile' // desktop always shows a pane
+  // Mobile drills into a single section; back returns to the list.
+  const mobilePaneOpen = !isDesktop && activeSection !== null
+
   return (
-    // The app body is locked to `overflow: hidden` (see index.css) so the
-    // chat shell can use position:fixed inset:0 without surprising
-    // scrolling on mobile. This page therefore has to manage its own
-    // scroll: a fixed-height shell whose body pane is `overflow-y-auto`.
-    <div
-      className="bh-app-shell bg-surface text-gray-200 flex flex-col"
-      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
-    >
-      {/* Header */}
-      <div className="border-b border-gray-800 px-4 py-3 flex items-center gap-3 shrink-0">
-        <button
-          onClick={() => navigate(-1)}
-          className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400"
-          aria-label="Back"
-        >
-          ← Back
-        </button>
-        <h1 className="text-lg font-medium">Settings</h1>
+    // The app body is locked to `overflow: hidden` (see index.css); this page
+    // manages its own scroll within the shell content area.
+    <div className="flex h-full flex-col bg-surface text-text">
+      {/* Header — on a mobile drill-in, the back returns to the section LIST
+          (not browser-back); otherwise just the title. App-level navigation is
+          owned by the shell chrome (rail / drawer / top bar). */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
+        {mobilePaneOpen ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveSection(null)}
+            aria-label="Back to settings list"
+          >
+            <ArrowLeft size={16} aria-hidden />
+            Settings
+          </Button>
+        ) : (
+          <h1 className="text-lg font-medium">Settings</h1>
+        )}
       </div>
 
-      {/* Body: nav (left on desktop, top on mobile) + active section pane.
-          `flex-1 min-h-0 overflow-y-auto` lets the inner content scroll
-          while the header stays pinned. */}
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col md:flex-row max-w-5xl w-full mx-auto md:gap-6 p-4 md:p-6">
-        {/* Section nav */}
-        <nav
-          className="md:w-56 md:shrink-0 flex md:flex-col gap-1 overflow-x-auto md:overflow-visible mb-4 md:mb-0"
-          aria-label="Settings sections"
-        >
-          {sections.map(s => {
-            const isActive = s.id === activeSection
-            return (
+      {!isDesktop ? (
+        // ---- Mobile: master-detail (full-width list → drilled-in pane) ----
+        activeSection === null ? (
+          <nav className="flex-1 overflow-y-auto" aria-label="Settings sections">
+            {sections.map((s) => (
               <button
                 key={s.id}
                 onClick={() => handleSelect(s.id)}
-                className={
-                  'shrink-0 md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ' +
-                  (isActive
-                    ? 'bg-gray-800 text-gray-100'
-                    : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200')
-                }
+                className="flex w-full items-center gap-3 border-b border-border px-4 py-3.5 text-left text-sm text-text transition-colors hover:bg-surface-light/60"
               >
-                <span aria-hidden="true">{s.icon}</span>
-                <span>{s.label}</span>
+                <span aria-hidden="true" className="text-base">
+                  {s.icon}
+                </span>
+                <span className="flex-1">{s.label}</span>
+                <ChevronRight size={16} className="shrink-0 text-text-muted" aria-hidden />
               </button>
-            )
-          })}
-        </nav>
+            ))}
+          </nav>
+        ) : (
+          <main className="flex-1 overflow-y-auto p-4">
+            <SectionPane id={paneSection} />
+          </main>
+        )
+      ) : (
+        // ---- Desktop: persistent sidebar + pane ----
+        <div className="mx-auto flex w-full max-w-5xl flex-1 min-h-0 gap-6 overflow-y-auto p-6">
+          <nav className="flex w-56 shrink-0 flex-col gap-1" aria-label="Settings sections">
+            {sections.map((s) => {
+              const isActive = s.id === paneSection
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => handleSelect(s.id)}
+                  className={
+                    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ' +
+                    (isActive
+                      ? 'bg-surface-light text-text'
+                      : 'text-text-muted hover:bg-surface-light/60 hover:text-text')
+                  }
+                >
+                  <span aria-hidden="true">{s.icon}</span>
+                  <span>{s.label}</span>
+                </button>
+              )
+            })}
+          </nav>
 
-        {/* Active section pane */}
-        <main className="flex-1 min-w-0">
-          {activeSection === 'profile' && <ProfileSection />}
-          {activeSection === 'appearance' && <AppearancePanel />}
-          {activeSection === 'navigation' && <NavigationSection />}
-          {activeSection === 'voice' && <VoicePanel />}
-          {activeSection === 'notifications' && (
-            <PlaceholderSection
-              title="Notifications"
-              description="Daily briefing and budget alert preferences. Coming soon."
-            />
-          )}
-          {activeSection === 'briefing' && (
-            <PlaceholderSection
-              title="Briefing"
-              description="Morning card workspace and briefing schedule. Coming soon."
-            />
-          )}
-          {activeSection === 'context-capture' && (
-            <PlaceholderSection
-              title="Context Capture"
-              description="Background context-capture preferences. Coming soon."
-            />
-          )}
-          {activeSection === 'labs' && <LabsSection />}
-        </main>
-      </div>
+          <main className="min-w-0 flex-1">
+            <SectionPane id={paneSection} />
+          </main>
+        </div>
+      )}
     </div>
   )
 }
@@ -170,26 +218,22 @@ function ProfileSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-100">Profile</h2>
-        <p className="text-sm text-gray-400 mt-1">
-          Your account details.
-        </p>
+        <h2 className="text-lg font-medium text-text">Profile</h2>
+        <p className="mt-1 text-sm text-text-muted">Your account details.</p>
       </div>
 
       <div className="space-y-3">
-        <div className="flex justify-between items-center py-2">
+        <div className="flex items-center justify-between py-2">
           <span className="text-sm">Display Name</span>
-          <span className="text-sm text-gray-400">{user?.display_name}</span>
+          <span className="text-sm text-text-muted">{user?.display_name}</span>
         </div>
-        <div className="flex justify-between items-center py-2">
+        <div className="flex items-center justify-between py-2">
           <span className="text-sm">Email</span>
-          <span className="text-sm text-gray-400">{user?.email}</span>
+          <span className="text-sm text-text-muted">{user?.email}</span>
         </div>
-        <div className="flex justify-between items-center py-2">
+        <div className="flex items-center justify-between py-2">
           <span className="text-sm">Role</span>
-          <span className="text-xs px-2 py-0.5 rounded bg-indigo-900/30 text-indigo-300">
-            {user?.role}
-          </span>
+          <Badge variant="secondary">{user?.role}</Badge>
         </div>
       </div>
     </div>
@@ -211,10 +255,10 @@ function PlaceholderSection({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-100">{title}</h2>
-        <p className="text-sm text-gray-400 mt-1">{description}</p>
+        <h2 className="text-lg font-medium text-text">{title}</h2>
+        <p className="mt-1 text-sm text-text-muted">{description}</p>
       </div>
-      <div className="text-sm text-gray-500 italic">Coming soon.</div>
+      <div className="text-sm italic text-text-muted">Coming soon.</div>
     </div>
   )
 }
@@ -229,27 +273,28 @@ function LabsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-100 flex items-center gap-2">
-          Labs <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 uppercase tracking-wider">Experimental</span>
+        <h2 className="flex items-center gap-2 text-lg font-medium text-text">
+          Labs
+          <span className="rounded bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+            Experimental
+          </span>
         </h2>
-        <p className="text-sm text-gray-400 mt-1">
+        <p className="mt-1 text-sm text-text-muted">
           Opt-in to experimental features currently in development. These may be unstable.
         </p>
       </div>
 
       <div className="space-y-4">
-        <label className="flex items-start gap-3 p-4 rounded-xl border border-gray-800 bg-gray-900/30 cursor-pointer hover:bg-gray-800/40 transition-colors">
-          <div className="flex items-center h-5">
-            <input
-              type="checkbox"
-              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500 focus:ring-indigo-500/50"
-              checked={!!settings.use_experimental_dashboard}
-              onChange={(e) => patch({ use_experimental_dashboard: e.target.checked })}
-            />
-          </div>
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-background/40 p-4 transition-colors hover:bg-surface-light/40">
+          <Switch
+            className="mt-0.5"
+            checked={!!settings.use_experimental_dashboard}
+            onCheckedChange={(v) => patch({ use_experimental_dashboard: v })}
+            aria-label="Dashboard V2 (SSE Command Center)"
+          />
           <div>
-            <div className="text-sm font-medium text-gray-200">Dashboard V2 (SSE Command Center)</div>
-            <div className="text-xs text-gray-500 mt-1 leading-relaxed">
+            <div className="text-sm font-medium text-text">Dashboard V2 (SSE Command Center)</div>
+            <div className="mt-1 text-xs leading-relaxed text-text-muted">
               Replaces the polling-based dashboard with a real-time Server-Sent Events stream.
             </div>
           </div>
@@ -267,19 +312,20 @@ function LabsSection() {
 
 function NavigationSection() {
   const access = useFeatures()
-  const loadFeatureAccess = useAuthStore(s => s.loadFeatureAccess)
+  const loadFeatureAccess = useAuthStore((s) => s.loadFeatureAccess)
   const [saving, setSaving] = useState<string | null>(null)
 
-  const permitted = (access?.features ?? []).filter(f => f.permitted)
+  const permitted = (access?.features ?? []).filter((f) => f.permitted)
   const hidden = new Set(access?.hidden_nav ?? [])
 
   const toggle = async (key: string, show: boolean) => {
     setSaving(key)
     const next = new Set(hidden)
-    if (show) next.delete(key); else next.add(key)
+    if (show) next.delete(key)
+    else next.add(key)
     try {
       await api.put('/api/me/settings/nav', { hidden: [...next] })
-      await loadFeatureAccess()   // refresh so the nav updates immediately
+      await loadFeatureAccess() // refresh so the nav updates immediately
     } catch (err: any) {
       toast.error(`Couldn't update navigation: ${err.response?.data?.detail || 'Unknown error'}`)
     } finally {
@@ -290,29 +336,27 @@ function NavigationSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-100">Navigation</h2>
-        <p className="text-sm text-gray-400 mt-1">
-          Hide features you don't use from your navigation. This is cosmetic — the
-          pages stay accessible by direct link.
+        <h2 className="text-lg font-medium text-text">Navigation</h2>
+        <p className="mt-1 text-sm text-text-muted">
+          Hide features you don't use from your navigation. This is cosmetic — the pages stay
+          accessible by direct link.
         </p>
       </div>
       <div className="space-y-3">
         {permitted.length === 0 && (
-          <p className="text-sm text-gray-500">No optional features available.</p>
+          <p className="text-sm text-text-muted">No optional features available.</p>
         )}
-        {permitted.map(f => (
+        {permitted.map((f) => (
           <label
             key={f.key}
-            className="flex items-center justify-between gap-3 p-3 rounded-xl border border-gray-800 bg-gray-900/30"
+            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background/40 p-3"
           >
-            <span className="text-sm text-gray-200">{f.label}</span>
-            <input
-              type="checkbox"
+            <span className="text-sm text-text">{f.label}</span>
+            <Switch
               aria-label={`Show ${f.label} in navigation`}
               disabled={saving === f.key}
               checked={!hidden.has(f.key)}
-              onChange={e => toggle(f.key, e.target.checked)}
-              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-indigo-500"
+              onCheckedChange={(v) => toggle(f.key, v)}
             />
           </label>
         ))}

@@ -45,22 +45,6 @@ export default {
         'on-success': 'rgb(var(--color-on-success-rgb) / <alpha-value>)',
         'on-warning': 'rgb(var(--color-on-warning-rgb) / <alpha-value>)',
         'on-error': 'rgb(var(--color-on-error-rgb) / <alpha-value>)',
-
-        // Existing palette retained for backward compat with components
-        // written before the token system. New code should prefer the
-        // tokenized colors above.
-        brand: {
-          50: '#e8eaf6',
-          100: '#c5cae9',
-          200: '#9fa8da',
-          300: '#7986cb',
-          400: '#5c6bc0',
-          500: '#3f51b5',
-          600: '#3949ab',
-          700: '#303f9f',
-          800: '#283593',
-          900: '#1a237e',
-        },
       },
 
       // ---- Non-color design scales (R1.5) -------------------------------
@@ -113,6 +97,26 @@ export default {
       // Note: `tabular-nums` for monetary/figure alignment is a built-in
       // Tailwind utility (fontVariantNumeric) — no config needed; primitives
       // and finance figure displays apply it directly.
+
+      // Enter animations for the Sheet/drawer (Radix mounts content already-open,
+      // so these play on open; close unmounts without an exit animation). Honors
+      // the prefers-reduced-motion collapse in index.css.
+      keyframes: {
+        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'slide-in-left': {
+          from: { transform: 'translateX(-100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        'slide-in-right': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'slide-in-left': 'slide-in-left 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'slide-in-right': 'slide-in-right 200ms cubic-bezier(0.2, 0, 0, 1)',
+      },
     },
   },
   plugins: [],
