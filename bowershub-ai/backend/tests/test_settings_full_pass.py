@@ -123,6 +123,15 @@ async def test_notifications_rejects_bad_time(env):
     assert r.status_code == 422
 
 
+async def test_notification_test_endpoint_reports_not_delivered_when_unconfigured(env):
+    # No web push (no VAPID) + pushover off by default → nothing delivers, and
+    # the endpoint reports that honestly rather than a false success.
+    r = await env["client"].post(
+        "/api/me/notifications/test", headers=env["headers"]["member"])
+    assert r.status_code == 200
+    assert r.json() == {"sent": False}
+
+
 async def test_notification_service_falls_back_to_default_row(env):
     # Persist the user's global (default) prefs with pushover on.
     await env["client"].put(

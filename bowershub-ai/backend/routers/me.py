@@ -165,6 +165,27 @@ async def set_notification_prefs(
     }
 
 
+@router.post("/notifications/test")
+async def send_test_notification(
+    request: Request, user: dict = Depends(get_current_user)
+) -> dict:
+    """Send a test notification through the user's configured channels so they
+    can confirm delivery actually reaches them. Goes through the real `send()`
+    path, so it honors their channel prefs AND quiet hours."""
+    from backend.services.notifications import NotificationService
+
+    config = request.app.state.config
+    notifier = NotificationService(config)
+    sent = await notifier.send(
+        user_id=user["id"],
+        event_type="test",
+        title="BowersHub test",
+        message="If you can read this, your notifications are working. 🎉",
+        priority=0,
+    )
+    return {"sent": sent}
+
+
 # ---- Web Push subscriptions ----------------------------------------------
 #
 # The Notifications "web push" preference is the user's intent; it only delivers

@@ -33,6 +33,8 @@ beforeEach(() => {
   ;(api.get as any).mockReset()
   ;(api.put as any).mockReset()
   ;(api.put as any).mockResolvedValue({ data: {} })
+  ;(api.post as any).mockReset()
+  ;(api.post as any).mockResolvedValue({ data: { sent: true } })
   ;(enableWebPush as any).mockClear()
   ;(disableWebPush as any).mockClear()
 
@@ -83,6 +85,22 @@ describe('NotificationsPanel', () => {
         '/api/me/notifications',
         expect.objectContaining({ quiet_start: '22:00' }),
       ),
+    )
+  })
+
+  it('fires a test notification through the configured channels', async () => {
+    ;(api.get as any).mockResolvedValue({
+      data: {
+        prefs: { web_push: false, pushover: true, quiet_start: null, quiet_end: null },
+        available: { web_push: false, pushover: true },
+      },
+    })
+    render(<NotificationsPanel />)
+    const btn = await screen.findByRole('button', { name: /send test notification/i })
+
+    fireEvent.click(btn)
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/api/me/notifications/test'),
     )
   })
 

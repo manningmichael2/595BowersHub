@@ -40,11 +40,12 @@ class NotificationService:
 
         sent = False
 
-        # Try Web Push
+        # Try Web Push — only counts as sent if a push was actually dispatched
+        # (configured + the user has a registered device).
         if prefs.get("web_push", True):
             try:
-                await self._send_web_push(user_id, title, message)
-                sent = True
+                if await self._send_web_push(user_id, title, message):
+                    sent = True
             except Exception as e:
                 logger.warning(f"Web Push failed for user {user_id}: {e}")
 
@@ -99,10 +100,12 @@ class NotificationService:
             # Wraps midnight (e.g., 22:00 → 07:00)
             return now >= quiet_start or now <= quiet_end
 
-    async def _send_web_push(self, user_id: int, title: str, message: str):
-        """Send Web Push notification to all user's subscriptions."""
+    async def _send_web_push(self, user_id: int, title: str, message: str) -> bool:
+        """Send Web Push to all the user's subscriptions. Returns True only if at
+        least one push was actually dispatched — so callers don't count web push
+        as 'sent' when it's unconfigured or the user has no registered device."""
         if not self.config.webpush_enabled:
-            return
+            return False
 
         pool = get_pool()
         async with pool.acquire() as conn:
@@ -112,8 +115,9 @@ class NotificationService:
             )
 
         if not subs:
-            return
+            return False
 
+        delivered = False
         try:
             from pywebpush import webpush, WebPushException
 
@@ -128,6 +132,7 @@ class NotificationService:
                         vapid_private_key=self.config.VAPID_PRIVATE_KEY,
                         vapid_claims={"sub": f"mailto:{self.config.ADMIN_EMAIL}"},
                     )
+                    delivered = True
                 except WebPushException as e:
                     if "410" in str(e) or "404" in str(e):
                         # Subscription expired — remove it
@@ -140,6 +145,8 @@ class NotificationService:
                         raise
         except ImportError:
             logger.warning("pywebpush not available")
+
+        return delivered
 
     async def send_pushover(
         self,
