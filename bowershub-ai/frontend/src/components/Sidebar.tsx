@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import {
-  LayoutDashboard, MessageSquare, Wallet, Database, Workflow,
   Settings, Wrench, Plus, MoreHorizontal, Pencil, Trash2,
 } from 'lucide-react'
 import { useWorkspaceStore } from '../stores/workspace'
@@ -111,17 +110,10 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* User menu */}
+      {/* User menu. Primary app navigation lives in the shell chrome now
+          (desktop NavRail / mobile NavDrawer + BottomTabBar), so the old
+          per-surface nav-link row that used to sit here was removed. */}
       <div className="p-3 border-t border-border">
-        {/* Navigation links — hidden on mobile, where the BottomTabBar already
-            provides these. Kept on desktop (no bottom bar there). */}
-        <div className="hidden sm:flex gap-1 mb-2">
-          <Link to="/dashboard" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Dashboard" aria-label="Dashboard" onClick={() => setSidebarOpen(false)}><LayoutDashboard size={16} aria-hidden /></Link>
-          <Link to="/finance" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Finance" aria-label="Finance" onClick={() => setSidebarOpen(false)}><Wallet size={16} aria-hidden /></Link>
-          <Link to="/chat" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Chat" aria-label="Chat" onClick={() => setSidebarOpen(false)}><MessageSquare size={16} aria-hidden /></Link>
-          <Link to="/db" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="Database" aria-label="Database" onClick={() => setSidebarOpen(false)}><Database size={16} aria-hidden /></Link>
-          <Link to="/tools/n8n" className="flex-1 flex items-center justify-center text-text-muted hover:text-text py-2 rounded hover:bg-background/50 transition-colors" title="n8n" aria-label="n8n" onClick={() => setSidebarOpen(false)}><Workflow size={16} aria-hidden /></Link>
-        </div>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-sm font-medium text-on-primary shrink-0">
