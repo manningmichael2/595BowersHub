@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../services/api'
 import { toast } from '../stores/toast'
 import { enableWebPush, disableWebPush, browserSupportsWebPush } from '../services/push'
-import { Switch, Spinner } from './ui'
+import { Switch, Spinner, Button } from './ui'
 
 interface Prefs {
   web_push: boolean
@@ -37,6 +37,7 @@ export default function NotificationsPanel() {
   const [available, setAvailable] = useState<Available>({ web_push: false, pushover: false })
   const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -69,6 +70,25 @@ export default function NotificationsPanel() {
       )
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Fire a real test notification through the user's configured channels.
+  const sendTest = async () => {
+    setTesting(true)
+    try {
+      const res = await api.post('/api/me/notifications/test')
+      if (res.data?.sent) {
+        toast.success('Test notification sent — check your devices.')
+      } else {
+        toast.error(
+          "Test wasn't delivered. Check a channel is on and you're outside quiet hours.",
+        )
+      }
+    } catch (err: any) {
+      toast.error(`Couldn't send test: ${err.response?.data?.detail || 'Unknown error'}`)
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -174,7 +194,19 @@ export default function NotificationsPanel() {
         </div>
       </div>
 
-      <p className="text-xs text-text-muted">{saving ? 'Saving…' : 'Changes save automatically.'}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-text-muted">
+          {saving ? 'Saving…' : 'Changes save automatically.'}
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={sendTest}
+          disabled={testing || !(available.web_push || available.pushover)}
+        >
+          {testing ? 'Sending…' : 'Send test notification'}
+        </Button>
+      </div>
     </div>
   )
 }
