@@ -19,8 +19,58 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDbBrowserStore } from '../../stores/db-browser'
+import { useSettingsStore } from '../../stores/settings'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 import { api } from '../../services/api'
+
+/** A "schema.table" preference key (favorites / hidden are stored as these). */
+const tkey = (schema: string, table: string) => `${schema}.${table}`
+
+interface TableMeta {
+  name: string
+  column_count: number
+  row_count: number
+  has_link_table: boolean
+}
+
+interface SchemaLike { name: string; tables: TableMeta[] }
+
+const byName = (a: { name: string }, b: { name: string }) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+
+/** Resolve favorite "schema.table" keys to concrete tables (skipping stale keys),
+ * filtered by the search query, sorted by table name. Pure — unit-tested. */
+export function buildFavoriteEntries(
+  schemas: SchemaLike[], favorites: Set<string>, q: string,
+): { schema: string; table: TableMeta }[] {
+  const out: { schema: string; table: TableMeta }[] = []
+  for (const s of schemas) {
+    for (const t of s.tables) {
+      if (favorites.has(tkey(s.name, t.name)) && (q === '' || t.name.toLowerCase().includes(q))) {
+        out.push({ schema: s.name, table: t })
+      }
+    }
+  }
+  return out.sort((a, b) => byName(a.table, b.table))
+}
+
+/** Per-schema visible tables: hidden filtered out (unless showHidden), search
+ * applied, sorted. Groups with no matches under an active search are dropped.
+ * Pure — unit-tested. */
+export function buildSchemaGroups(
+  schemas: SchemaLike[], hidden: Set<string>, showHidden: boolean, q: string,
+): { name: string; tables: TableMeta[]; hiddenCount: number }[] {
+  return schemas
+    .map(schema => {
+      const tables = [...schema.tables]
+        .filter(t => showHidden || !hidden.has(tkey(schema.name, t.name)))
+        .filter(t => q === '' || t.name.toLowerCase().includes(q))
+        .sort(byName)
+      const hiddenCount = schema.tables.filter(t => hidden.has(tkey(schema.name, t.name))).length
+      return { name: schema.name, tables, hiddenCount }
+    })
+    .filter(g => q === '' || g.tables.length > 0)
+}
 
 interface SchemaSidebarProps {
   /** Whether the mobile drawer is open (controlled by parent) */
@@ -60,8 +110,17 @@ export default function SchemaSidebar({ mobileOpen, onMobileClose }: SchemaSideb
   }>()
   const navigate = useNavigate()
 
-  // Track which schemas are expanded (all expanded by default)
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Per-user sidebar prefs (favorites / hidden / expanded schemas), persisted in
+  // settings_json via the settings store (synced across devices).
+  const settings = useSettingsStore(s => s.settings)
+  const patchSettings = useSettingsStore(s => s.patch)
+  const favorites = useMemo(() => new Set(settings.db_favorites ?? []), [settings.db_favorites])
+  const hidden = useMemo(() => new Set(settings.db_hidden ?? []), [settings.db_hidden])
+
+  // Search filter + "show hidden" toggle (ephemeral, not persisted).
+  const [search, setSearch] = useState('')
+  const [showHidden, setShowHidden] = useState(false)
+  const q = search.trim().toLowerCase()
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -75,34 +134,50 @@ export default function SchemaSidebar({ mobileOpen, onMobileClose }: SchemaSideb
   // Dialog state
   const [dialog, setDialog] = useState<DialogMode>({ type: 'none' })
 
-  // Initialize expanded state when schemas load
-  useEffect(() => {
-    if (schemas.length > 0 && expanded.size === 0) {
-      setExpanded(new Set(schemas.map(s => s.name)))
-    }
-  }, [schemas])
+  // Collapse-by-default: a schema is open only if the user expanded it
+  // (persisted). First-load default opens just the active schema; once the user
+  // toggles anything, db_expanded is authoritative.
+  const expandedSet = useMemo(
+    () => new Set(settings.db_expanded ?? (activeSchema ? [activeSchema] : [])),
+    [settings.db_expanded, activeSchema],
+  )
 
-  // Sort tables alphabetically within each schema
-  const sortedSchemas = useMemo(() => {
-    return schemas.map(schema => ({
-      ...schema,
-      tables: [...schema.tables].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
-      ),
-    }))
-  }, [schemas])
+  const persist = useCallback((delta: { db_favorites?: string[]; db_hidden?: string[]; db_expanded?: string[] }) => {
+    void patchSettings(delta).catch(() => {})
+  }, [patchSettings])
 
   const toggleSchema = (name: string) => {
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(name)) {
-        next.delete(name)
-      } else {
-        next.add(name)
-      }
-      return next
-    })
+    const next = new Set(expandedSet)
+    if (next.has(name)) next.delete(name); else next.add(name)
+    persist({ db_expanded: [...next] })
   }
+
+  const toggleFavorite = (schema: string, table: string) => {
+    const next = new Set(favorites)
+    const k = tkey(schema, table)
+    if (next.has(k)) next.delete(k); else next.add(k)
+    persist({ db_favorites: [...next] })
+  }
+
+  const toggleHidden = (schema: string, table: string) => {
+    const next = new Set(hidden)
+    const k = tkey(schema, table)
+    if (next.has(k)) next.delete(k); else next.add(k)
+    persist({ db_hidden: [...next] })
+  }
+
+  // Favorites pinned at top; schema groups with hidden/search applied. Pure
+  // helpers (buildFavoriteEntries / buildSchemaGroups) are unit-tested.
+  const favoriteEntries = useMemo(
+    () => buildFavoriteEntries(schemas, favorites, q),
+    [schemas, favorites, q],
+  )
+  const groups = useMemo(
+    () => buildSchemaGroups(schemas, hidden, showHidden, q),
+    [schemas, hidden, showHidden, q],
+  )
+
+  const totalHidden = hidden.size
 
   const handleTableClick = (schemaName: string, tableName: string) => {
     navigate(`/db/${schemaName}/${tableName}`)
@@ -206,40 +281,87 @@ export default function SchemaSidebar({ mobileOpen, onMobileClose }: SchemaSideb
         </div>
       </div>
 
+      {/* Search / filter */}
+      <div className="shrink-0 px-2 pt-2">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Filter tables…"
+          aria-label="Filter tables"
+          className="w-full px-2.5 py-1.5 rounded text-sm"
+          style={{
+            backgroundColor: 'var(--color-background)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text)',
+          }}
+        />
+      </div>
+
       {/* Schema list */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2">
         {schemasLoading ? (
-          <p
-            className="text-sm px-2 py-4"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
+          <p className="text-sm px-2 py-4" style={{ color: 'var(--color-text-muted)' }}>
             Loading schemas…
           </p>
-        ) : sortedSchemas.length === 0 ? (
-          <p
-            className="text-sm px-2 py-4"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
+        ) : schemas.length === 0 ? (
+          <p className="text-sm px-2 py-4" style={{ color: 'var(--color-text-muted)' }}>
             No schemas found.
           </p>
         ) : (
           <div className="space-y-1">
-            {sortedSchemas.map(schema => (
-              <SchemaGroup
-                key={schema.name}
-                name={schema.name}
-                tables={schema.tables}
-                isExpanded={expanded.has(schema.name)}
+            {/* Favorites — pinned at top, always visible */}
+            {favoriteEntries.length > 0 && (
+              <FavoritesGroup
+                entries={favoriteEntries}
                 activeSchema={activeSchema}
                 activeTable={activeTable}
-                onToggle={() => toggleSchema(schema.name)}
+                onTableClick={handleTableClick}
+                onToggleFavorite={toggleFavorite}
+              />
+            )}
+
+            {groups.map(group => (
+              <SchemaGroup
+                key={group.name}
+                name={group.name}
+                tables={group.tables}
+                hiddenCount={group.hiddenCount}
+                isExpanded={q !== '' || expandedSet.has(group.name)}
+                activeSchema={activeSchema}
+                activeTable={activeTable}
+                favorites={favorites}
+                hidden={hidden}
+                onToggle={() => toggleSchema(group.name)}
                 onTableClick={handleTableClick}
                 onTableContextMenu={handleTableContextMenu}
+                onToggleFavorite={toggleFavorite}
+                onToggleHidden={toggleHidden}
               />
             ))}
+
+            {q !== '' && favoriteEntries.length === 0 && groups.length === 0 && (
+              <p className="text-sm px-2 py-4" style={{ color: 'var(--color-text-muted)' }}>
+                No tables match “{search}”.
+              </p>
+            )}
           </div>
         )}
       </div>
+
+      {/* Show/hide hidden-tables toggle */}
+      {totalHidden > 0 && (
+        <div className="shrink-0 px-3 py-1.5" style={{ borderTop: '1px solid var(--color-border)' }}>
+          <button
+            type="button"
+            onClick={() => setShowHidden(v => !v)}
+            className="text-xs w-full text-left px-1 py-1 rounded"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            {showHidden ? '▾ Hide hidden tables' : `▸ Show hidden (${totalHidden})`}
+          </button>
+        </div>
+      )}
 
       {/* Field Settings link */}
       <div
@@ -408,24 +530,175 @@ function MobileDrawer({
   )
 }
 
+// ---- Icons ----------------------------------------------------------------
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"
+      fill={filled ? 'currentColor' : 'none'} strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  )
+}
+
+function EyeIcon({ off }: { off: boolean }) {
+  return off ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  ) : (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+// ---- Table row (shared by favorites + schema groups) ----------------------
+
+function TableRow({
+  schema, table, isActive, isFavorite, isHidden, schemaSuffix,
+  onClick, onContextMenu, onToggleFavorite, onToggleHidden,
+}: {
+  schema: string
+  table: TableMeta
+  isActive: boolean
+  isFavorite: boolean
+  isHidden: boolean
+  /** Show the schema name on the right (used in the cross-schema Favorites group). */
+  schemaSuffix?: boolean
+  onClick: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
+  onToggleFavorite: () => void
+  onToggleHidden?: () => void
+}) {
+  // Affordances: always tappable on mobile (no hover); hover-revealed on desktop.
+  // A favorited star stays visible so "unfavorite" is always discoverable.
+  const affordanceCls = 'flex items-center gap-0.5 pr-1 shrink-0 transition-opacity ' +
+    (isFavorite ? 'opacity-100 ' : 'opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100')
+  return (
+    <li>
+      <div
+        className="group/row flex items-center rounded transition-colors min-h-[44px] sm:min-h-0"
+        style={{ backgroundColor: isActive ? 'var(--color-surface)' : 'transparent' }}
+        onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-surface)' }}
+        onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent' }}
+      >
+        <button
+          type="button"
+          onClick={onClick}
+          onContextMenu={onContextMenu}
+          className="flex-1 min-w-0 flex items-center gap-1.5 px-2 py-2.5 sm:py-1.5 text-left text-sm"
+          style={{
+            color: isActive ? 'var(--color-primary)' : isHidden ? 'var(--color-text-muted)' : 'var(--color-text)',
+            fontWeight: isActive ? 500 : 400,
+          }}
+        >
+          {table.has_link_table && <span className="text-xs shrink-0" title="Image support">📷</span>}
+          <span className="truncate">{table.name}</span>
+          {schemaSuffix && (
+            <span className="text-xs ml-1 shrink-0 truncate" style={{ color: 'var(--color-text-muted)' }}>
+              {schema}
+            </span>
+          )}
+        </button>
+        <div className={affordanceCls}>
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            className="p-1 rounded"
+            style={{ color: isFavorite ? 'var(--color-warning, #eab308)' : 'var(--color-text-muted)' }}
+            aria-label={isFavorite ? `Unfavorite ${table.name}` : `Favorite ${table.name}`}
+            title={isFavorite ? 'Unfavorite' : 'Favorite'}
+          >
+            <StarIcon filled={isFavorite} />
+          </button>
+          {onToggleHidden && (
+            <button
+              type="button"
+              onClick={onToggleHidden}
+              className="p-1 rounded"
+              style={{ color: 'var(--color-text-muted)' }}
+              aria-label={isHidden ? `Unhide ${table.name}` : `Hide ${table.name}`}
+              title={isHidden ? 'Unhide' : 'Hide'}
+            >
+              <EyeIcon off={!isHidden} />
+            </button>
+          )}
+        </div>
+      </div>
+    </li>
+  )
+}
+
+// ---- Favorites group (pinned at top, cross-schema) ------------------------
+
+function FavoritesGroup({
+  entries, activeSchema, activeTable, onTableClick, onToggleFavorite,
+}: {
+  entries: { schema: string; table: TableMeta }[]
+  activeSchema: string | undefined
+  activeTable: string | undefined
+  onTableClick: (schema: string, table: string) => void
+  onToggleFavorite: (schema: string, table: string) => void
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 px-2 py-1.5" style={{ color: 'var(--color-text-muted)' }}>
+        <span style={{ color: 'var(--color-warning, #eab308)' }}><StarIcon filled /></span>
+        <span className="text-xs font-semibold uppercase tracking-wide">Favorites</span>
+      </div>
+      <ul className="ml-3 mt-0.5 space-y-0.5">
+        {entries.map(({ schema, table }) => (
+          <TableRow
+            key={`${schema}.${table.name}`}
+            schema={schema}
+            table={table}
+            schemaSuffix
+            isActive={activeSchema === schema && activeTable === table.name}
+            isFavorite
+            isHidden={false}
+            onClick={() => onTableClick(schema, table.name)}
+            onToggleFavorite={() => onToggleFavorite(schema, table.name)}
+          />
+        ))}
+      </ul>
+      <div className="mx-2 my-1" style={{ borderBottom: '1px solid var(--color-border)' }} />
+    </div>
+  )
+}
+
+// ---- Schema group ---------------------------------------------------------
+
 function SchemaGroup({
   name,
   tables,
+  hiddenCount,
   isExpanded,
   activeSchema,
   activeTable,
+  favorites,
+  hidden,
   onToggle,
   onTableClick,
   onTableContextMenu,
+  onToggleFavorite,
+  onToggleHidden,
 }: {
   name: string
-  tables: { name: string; column_count: number; row_count: number; has_link_table: boolean }[]
+  tables: TableMeta[]
+  hiddenCount: number
   isExpanded: boolean
   activeSchema: string | undefined
   activeTable: string | undefined
+  favorites: Set<string>
+  hidden: Set<string>
   onToggle: () => void
   onTableClick: (schema: string, table: string) => void
   onTableContextMenu: (e: React.MouseEvent, schema: string, table: string) => void
+  onToggleFavorite: (schema: string, table: string) => void
+  onToggleHidden: (schema: string, table: string) => void
 }) {
   const isAdmin = useIsAdmin()
   return (
@@ -436,22 +709,12 @@ function SchemaGroup({
         onClick={onToggle}
         className="w-full flex items-center gap-1.5 px-2 py-2.5 sm:py-1.5 rounded text-left transition-colors min-h-[44px] sm:min-h-0"
         style={{ color: 'var(--color-text)' }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'var(--color-surface)'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent'
-        }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--color-surface)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
       >
-        {/* Expand/collapse chevron */}
         <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
+          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round"
           className="shrink-0 transition-transform"
           style={{
             color: 'var(--color-text-muted)',
@@ -461,54 +724,28 @@ function SchemaGroup({
           <polyline points="9 18 15 12 9 6" />
         </svg>
         <span className="text-sm font-medium truncate">{name}</span>
-        <span
-          className="text-xs ml-auto shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          {tables.length}
+        <span className="text-xs ml-auto shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+          {tables.length}{hiddenCount > 0 ? ` (+${hiddenCount})` : ''}
         </span>
       </button>
 
-      {/* Table list (expanded) — items have 44px min touch targets on mobile (Req 23.4) */}
       {isExpanded && (
         <ul className="ml-3 mt-0.5 space-y-0.5">
           {tables.map(table => {
-            const isActive =
-              activeSchema === name && activeTable === table.name
-
+            const k = tkey(name, table.name)
             return (
-              <li key={table.name}>
-                <button
-                  type="button"
-                  onClick={() => onTableClick(name, table.name)}
-                  onContextMenu={isAdmin ? (e) => onTableContextMenu(e, name, table.name) : undefined}
-                  className="w-full flex items-center gap-1.5 px-2 py-2.5 sm:py-1.5 rounded text-left text-sm transition-colors min-h-[44px] sm:min-h-0"
-                  style={{
-                    color: isActive
-                      ? 'var(--color-primary)'
-                      : 'var(--color-text)',
-                    backgroundColor: isActive
-                      ? 'var(--color-surface)'
-                      : 'transparent',
-                    fontWeight: isActive ? 500 : 400,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'var(--color-surface)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.backgroundColor = 'transparent'
-                    }
-                  }}
-                >
-                  {table.has_link_table && (
-                    <span className="text-xs shrink-0" title="Image support">📷</span>
-                  )}
-                  <span className="truncate">{table.name}</span>
-                </button>
-              </li>
+              <TableRow
+                key={table.name}
+                schema={name}
+                table={table}
+                isActive={activeSchema === name && activeTable === table.name}
+                isFavorite={favorites.has(k)}
+                isHidden={hidden.has(k)}
+                onClick={() => onTableClick(name, table.name)}
+                onContextMenu={isAdmin ? (e) => onTableContextMenu(e, name, table.name) : undefined}
+                onToggleFavorite={() => onToggleFavorite(name, table.name)}
+                onToggleHidden={() => onToggleHidden(name, table.name)}
+              />
             )
           })}
         </ul>
