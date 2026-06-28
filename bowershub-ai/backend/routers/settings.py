@@ -45,6 +45,9 @@ class SettingsPatch(BaseModel):
     morning_card_disabled: Optional[bool] = Field(default=None)
     voice: Optional[dict[str, Any]] = Field(default=None)
     use_experimental_dashboard: Optional[bool] = Field(default=None)
+    # When true, the background context-capture pass is skipped for this user's
+    # exchanges (privacy opt-out). Honored in services.hook_engine.
+    context_capture_disabled: Optional[bool] = Field(default=None)
     # DB Browser sidebar prefs (per-user): favorited / hidden tables as
     # "schema.table" keys, and the set of expanded schema names. Each list
     # replaces wholesale (RFC 7396 merge treats a list as a scalar value).
@@ -66,6 +69,7 @@ _NULLABLE_KEYS = {
     "morning_card_disabled",
     "voice",
     "use_experimental_dashboard",
+    "context_capture_disabled",
     "db_favorites",
     "db_hidden",
     "db_expanded",

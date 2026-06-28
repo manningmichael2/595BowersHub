@@ -4,8 +4,12 @@ nav self-hide (R5.4 — hiding a button NEVER restricts the route)."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+import re
+from datetime import time as dt_time
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, field_validator
 
 from backend.database import get_pool
 from backend.middleware.auth import get_current_user
@@ -13,10 +17,36 @@ from backend.services import authz
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
+# Global notification preferences are stored under this synthetic event_type so
+# the user has one set of channel + quiet-hour settings; the NotificationService
+# falls back to this row when no event-specific row exists.
+DEFAULT_EVENT_TYPE = "default"
+
+_HHMM = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
 
 class NavHideRequest(BaseModel):
     model_config = {"extra": "forbid"}
     hidden: list[str]
+
+
+class NotificationPrefs(BaseModel):
+    """Per-user global notification preferences. Quiet hours are 'HH:MM' 24h
+    strings (or null for none)."""
+    model_config = {"extra": "forbid"}
+    web_push: bool = True
+    pushover: bool = False
+    quiet_start: Optional[str] = None
+    quiet_end: Optional[str] = None
+
+    @field_validator("quiet_start", "quiet_end")
+    @classmethod
+    def _valid_hhmm(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if not _HHMM.match(v):
+            raise ValueError("quiet hours must be 'HH:MM' (24-hour)")
+        return v
 
 
 @router.get("/features")
@@ -48,3 +78,87 @@ async def set_hidden_nav(body: NavHideRequest, user: dict = Depends(get_current_
         await conn.execute(
             "UPDATE public.bh_users SET settings_json = $1 WHERE id = $2", settings, user["id"])
     return {"hidden_nav": hidden}
+
+
+# ---- Notification preferences --------------------------------------------
+
+def _fmt_time(t: Optional[dt_time]) -> Optional[str]:
+    """Render a DB `time` as 'HH:MM' (or None)."""
+    return t.strftime("%H:%M") if t is not None else None
+
+
+def _parse_time(s: Optional[str]) -> Optional[dt_time]:
+    """Parse an 'HH:MM' string into a `time` (or None). Input is pre-validated."""
+    if not s:
+        return None
+    hh, mm = s.split(":")
+    return dt_time(int(hh), int(mm))
+
+
+@router.get("/notifications")
+async def get_notification_prefs(
+    request: Request, user: dict = Depends(get_current_user)
+) -> dict:
+    """The user's global notification preferences plus which channels the server
+    can actually deliver (web push / Pushover need server-side config). The UI
+    greys out a channel that isn't available."""
+    config = request.app.state.config
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT web_push, pushover, quiet_start, quiet_end
+              FROM public.bh_notification_prefs
+             WHERE user_id = $1 AND event_type = $2
+            """,
+            user["id"], DEFAULT_EVENT_TYPE,
+        )
+    prefs = (
+        {
+            "web_push": row["web_push"],
+            "pushover": row["pushover"],
+            "quiet_start": _fmt_time(row["quiet_start"]),
+            "quiet_end": _fmt_time(row["quiet_end"]),
+        }
+        if row
+        else {"web_push": True, "pushover": False, "quiet_start": None, "quiet_end": None}
+    )
+    return {
+        "prefs": prefs,
+        "available": {
+            "web_push": config.webpush_enabled,
+            "pushover": config.pushover_enabled,
+        },
+    }
+
+
+@router.put("/notifications")
+async def set_notification_prefs(
+    body: NotificationPrefs, user: dict = Depends(get_current_user)
+) -> dict:
+    """Upsert the user's global notification preferences (the `default` row)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO public.bh_notification_prefs
+                   (user_id, event_type, web_push, pushover, quiet_start, quiet_end)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (user_id, event_type) DO UPDATE SET
+                web_push   = EXCLUDED.web_push,
+                pushover   = EXCLUDED.pushover,
+                quiet_start = EXCLUDED.quiet_start,
+                quiet_end  = EXCLUDED.quiet_end
+            """,
+            user["id"], DEFAULT_EVENT_TYPE,
+            body.web_push, body.pushover,
+            _parse_time(body.quiet_start), _parse_time(body.quiet_end),
+        )
+    return {
+        "prefs": {
+            "web_push": body.web_push,
+            "pushover": body.pushover,
+            "quiet_start": body.quiet_start or None,
+            "quiet_end": body.quiet_end or None,
+        }
+    }

@@ -59,14 +59,21 @@ class NotificationService:
         return sent
 
     async def _get_preferences(self, user_id: int, event_type: str) -> dict:
-        """Get notification preferences for a user + event type."""
+        """Get notification preferences for a user + event type.
+
+        Falls back to the user's global `default` row when no row exists for the
+        specific event type, so the Settings UI (which writes one global row) can
+        steer delivery for every event without per-event configuration.
+        """
         pool = get_pool()
         async with pool.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT web_push, pushover, quiet_start, quiet_end
                 FROM public.bh_notification_prefs
-                WHERE user_id = $1 AND event_type = $2
-            """, user_id, event_type)
+                WHERE user_id = $1 AND event_type = ANY($2::text[])
+                ORDER BY (event_type = $3) DESC
+                LIMIT 1
+            """, user_id, [event_type, "default"], event_type)
 
         if row:
             return {
