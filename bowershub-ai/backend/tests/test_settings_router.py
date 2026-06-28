@@ -376,6 +376,43 @@ async def test_patch_unknown_text_size_persists_value_resolver_returns_medium(
     )
 
 
+async def test_patch_db_sidebar_prefs_round_trip(settings_env):
+    """PATCH persists the DB-browser sidebar prefs (favorites/hidden/expanded)
+    as "schema.table" lists, and an explicit null clears them."""
+    client = settings_env["client"]
+    pool = settings_env["pool"]
+    alice = settings_env["users"]["alice"]
+    headers = settings_env["headers"]["alice"]
+
+    resp = await client.patch(
+        "/api/settings",
+        json={
+            "db_favorites": ["finance.transactions", "public.bh_users"],
+            "db_hidden": ["public.bh_users_files"],
+            "db_expanded": ["finance"],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    settings = resp.json()["settings"]
+    assert settings["db_favorites"] == ["finance.transactions", "public.bh_users"]
+    assert settings["db_hidden"] == ["public.bh_users_files"]
+    assert settings["db_expanded"] == ["finance"]
+
+    persisted = await _user_settings_json(pool, alice["id"])
+    assert persisted["db_favorites"] == ["finance.transactions", "public.bh_users"]
+
+    # A later partial PATCH replaces the favorites list wholesale (RFC 7396).
+    resp = await client.patch("/api/settings", json={"db_favorites": ["cook.recipes"]}, headers=headers)
+    assert resp.json()["settings"]["db_favorites"] == ["cook.recipes"]
+    # …and the untouched keys survive.
+    assert resp.json()["settings"]["db_hidden"] == ["public.bh_users_files"]
+
+    # Explicit null clears a key.
+    resp = await client.patch("/api/settings", json={"db_hidden": None}, headers=headers)
+    assert "db_hidden" not in resp.json()["settings"]
+
+
 async def test_reset_theme_clears_override_and_falls_back_to_platform_default(
     settings_env,
 ):

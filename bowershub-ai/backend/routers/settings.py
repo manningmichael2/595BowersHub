@@ -45,6 +45,12 @@ class SettingsPatch(BaseModel):
     morning_card_disabled: Optional[bool] = Field(default=None)
     voice: Optional[dict[str, Any]] = Field(default=None)
     use_experimental_dashboard: Optional[bool] = Field(default=None)
+    # DB Browser sidebar prefs (per-user): favorited / hidden tables as
+    # "schema.table" keys, and the set of expanded schema names. Each list
+    # replaces wholesale (RFC 7396 merge treats a list as a scalar value).
+    db_favorites: Optional[list[str]] = Field(default=None)
+    db_hidden: Optional[list[str]] = Field(default=None)
+    db_expanded: Optional[list[str]] = Field(default=None)
 
     model_config = {"extra": "ignore"}
 
@@ -60,6 +66,9 @@ _NULLABLE_KEYS = {
     "morning_card_disabled",
     "voice",
     "use_experimental_dashboard",
+    "db_favorites",
+    "db_hidden",
+    "db_expanded",
 }
 
 
