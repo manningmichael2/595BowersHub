@@ -21,8 +21,7 @@ import QuickCaptureOverlay from './components/QuickCaptureOverlay'
 import QuickCapturePage from './pages/QuickCapturePage'
 import ToolFramePage from './pages/ToolFramePage'
 import DashboardPage from './pages/DashboardPage'
-import BottomTabBar from './components/BottomTabBar'
-import TopNav from './components/TopNav'
+import ShellLayout from './components/shell/ShellLayout'
 
 // Lazy-loaded DB Browser — code-split to avoid impacting chat page load
 const DbBrowserPage = lazy(() => import('./pages/DbBrowserPage'))
@@ -187,43 +186,42 @@ function App() {
 
   return (
     <>
-      {/* Desktop top navigation bar */}
-      <TopNav />
-
+      {/* All authenticated sections render inside the one app shell (R3.1):
+          a layout route whose <Outlet/> hosts the active section. */}
       <Routes>
-        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/admin/*" element={<AdminConsolePage />} />
-        <Route path="/quick-capture" element={<QuickCapturePage />} />
-        <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/finance" element={<FinanceLayout />}>
-          <Route index element={<Navigate to="/finance/transactions" replace />} />
-          <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
-          <Route path="ask" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceQaPage /></Suspense>} />
-          <Route path="insights" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><InsightsPage /></Suspense>} />
-          <Route path="retirement" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RetirementPlanner /></Suspense>} />
-          <Route path="review" element={<Navigate to="/finance/transactions" replace />} />
-          <Route path="recurring" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RecurringPage /></Suspense>} />
-          <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
-          <Route path="budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
+        <Route element={<ShellLayout />}>
+          <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin/*" element={<AdminConsolePage />} />
+          <Route path="/quick-capture" element={<QuickCapturePage />} />
+          <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/finance" element={<FinanceLayout />}>
+            <Route index element={<Navigate to="/finance/transactions" replace />} />
+            <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
+            <Route path="ask" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceQaPage /></Suspense>} />
+            <Route path="insights" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><InsightsPage /></Suspense>} />
+            <Route path="retirement" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RetirementPlanner /></Suspense>} />
+            <Route path="review" element={<Navigate to="/finance/transactions" replace />} />
+            <Route path="recurring" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RecurringPage /></Suspense>} />
+            <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
+            <Route path="budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
+          </Route>
+          <Route path="/tools/:toolId" element={<ToolFramePage />} />
+          <Route path="/db/*" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><DbBrowserPage /></Suspense>} />
+          <Route path="/chat/*" element={<AppShell />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/*" element={<AppShell />} />
         </Route>
-        <Route path="/tools/:toolId" element={<ToolFramePage />} />
-        <Route path="/db/*" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><DbBrowserPage /></Suspense>} />
-        <Route path="/chat/*" element={<AppShell />} />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/*" element={<AppShell />} />
       </Routes>
 
       {/* Hotkey-triggered Quick Capture overlay. The `/quick-capture`
           route mounts its own copy via QuickCapturePage, so we render
-          this one only when the user opened it via Ctrl/Cmd+Shift+K. */}
+          this one only when the user opened it via Ctrl/Cmd+Shift+K.
+          It lives outside the shell so it overlays the whole app. */}
       {quickCaptureOpen && (
         <QuickCaptureOverlay onClose={() => setQuickCaptureOpen(false)} />
       )}
-
-      {/* Bottom tab bar - mobile only */}
-      <BottomTabBar />
     </>
   )
 }

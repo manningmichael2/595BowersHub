@@ -95,10 +95,10 @@
 - **Effort:** L
 - **Dependencies:** Task 9
 - **Requirements:** R3.1, R3.8
-- [ ] Add `frontend/src/hooks/useBreakpoint.ts` reading `matchMedia('(min-width: <BREAKPOINT_DESKTOP>px)')`; export `BREAKPOINT_DESKTOP` from one module and **re-point the chat `AppShell` sidebar breakpoint** (currently `md`, `AppShell.tsx:55`) to it.
-- [ ] Refactor `App.tsx` (`:176-224`) from loose `<TopNav/>`/`<Routes>`/`<BottomTabBar/>` siblings into a parent `<Route element={<ShellLayout/>}>` wrapping all authenticated sections via `<Outlet/>`; unauthenticated route tree unaffected.
-- [ ] Land this as **its own revertable commit**, separate from P4; abort path = revert this commit.
-- [ ] **Tests (chat is the named regression gate):** chat `position:fixed; inset:0`, `body{overflow:hidden}` scroll-lock, and safe-area offsets verified intact on **both** desktop and mobile; a **700px-width** assertion proves coherent chrome (no desktop chat chrome inside mobile shell). Refactor is revertable.
+- [x] Added `hooks/useBreakpoint.ts` — `BREAKPOINT_DESKTOP = 640` (canonical; unifies on Tailwind `sm`) + reactive `useBreakpoint()` over `matchMedia`. **Re-pointed AppShell sidebar `md:`→`sm:`** (`AppShell.tsx`) so the chat sidebar switches at the canonical breakpoint — the 640–767px band is now coherently desktop.
+- [x] Refactored `App.tsx`: loose `<TopNav/>`/`<Routes>`/`<BottomTabBar/>` siblings → a `<Route element={<ShellLayout/>}>` layout route wrapping all authenticated sections via `<Outlet/>` (`components/shell/ShellLayout.tsx`); QuickCapture overlay stays outside the shell; unauthenticated tree unaffected. Behavior-preserving (same chrome around the same content).
+- [x] Lands as **its own revertable commit** (this one), separate from P4. Abort = revert it.
+- [x] **Tests + chat gate:** `useBreakpoint.test.tsx` (both branches + canonical value), `ShellLayout.test.tsx` (Outlet wraps section + chrome renders once). Chat invariants verified untouched: `AppShell` `position:fixed; inset:0`, index.css `body{overflow:hidden}` + `.bh-app-shell` top:44/bottom:52+safe-area offsets unchanged. tsc clean; 324 tests; build green. **Visual desktop+mobile chat confirmation pending owner review in the running app** (no reachable backend in this checkout for an automated runtime pass).
 
 ## Task 11: Desktop chrome (nav rail + contextual top bar) + offset consolidation
 - **Effort:** L

@@ -52,16 +52,16 @@ export default function AppShell() {
       {/* Sidebar — desktop: always visible; mobile: overlay */}
       <div className={`
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        fixed md:relative md:translate-x-0
+        fixed sm:relative sm:translate-x-0
         z-30 h-full w-72 transition-transform duration-200
       `}>
         <Sidebar />
       </div>
 
-      {/* Sidebar backdrop on mobile */}
+      {/* Sidebar backdrop on mobile (below the canonical desktop breakpoint) */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-20 bg-black/50 md:hidden"
+          className="fixed inset-0 z-20 bg-black/50 sm:hidden"
           onClick={() => useUIStore.getState().setSidebarOpen(false)}
         />
       )}
