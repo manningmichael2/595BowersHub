@@ -12,7 +12,7 @@ from backend.models.workspace import (
     WorkspaceCreate, WorkspaceUpdate, WorkspaceResponse,
     WorkspaceUserAssignment, PinnedContextCreate, PinnedContextUpdate, PinnedContextResponse,
 )
-from backend.middleware.auth import get_current_user, require_admin
+from backend.middleware.auth import get_current_user, require_admin, require_capability
 from backend.middleware.audit import AuditLogger
 from backend.database import get_pool
 
@@ -234,10 +234,10 @@ async def delete_workspace(workspace_id: int, user: dict = Depends(require_admin
 
 @router.post("/{workspace_id}/users")
 async def add_user_to_workspace(
-    workspace_id: int, body: WorkspaceUserAssignment, user: dict = Depends(get_current_user)
+    workspace_id: int, body: WorkspaceUserAssignment,
+    user: dict = Depends(require_capability("users.manage")),
 ):
-    """Add a user to a workspace."""
-    await _check_workspace_access(workspace_id, user)
+    """Add a user to a workspace (provisioning — admin/users.manage only)."""
     pool = get_pool()
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -248,9 +248,11 @@ async def add_user_to_workspace(
 
 
 @router.delete("/{workspace_id}/users/{uid}")
-async def remove_user_from_workspace(workspace_id: int, uid: int, user: dict = Depends(get_current_user)):
-    """Remove a user from a workspace."""
-    await _check_workspace_access(workspace_id, user)
+async def remove_user_from_workspace(
+    workspace_id: int, uid: int,
+    user: dict = Depends(require_capability("users.manage")),
+):
+    """Remove a user from a workspace (provisioning — admin/users.manage only)."""
     pool = get_pool()
     async with pool.acquire() as conn:
         await conn.execute(

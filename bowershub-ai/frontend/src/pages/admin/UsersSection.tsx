@@ -5,12 +5,59 @@ import { useEndpointData, SectionStateGuard } from './AdminCommon'
 
 const ROLES = ['admin', 'member', 'viewer']
 
+interface UserWorkspace {
+  id: number
+  name: string
+  icon: string | null
+  member: boolean
+  role: string | null
+}
+
 export default function UsersSection() {
   const { data, isLoading, error, reload } = useEndpointData<any[]>('/api/admin/users')
   const [showInvite, setShowInvite] = useState(false)
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [role, setRole] = useState('member')
   const [savingId, setSavingId] = useState<number | null>(null)
+
+  // Per-user workspace management: which user's panel is open + its workspace list.
+  const [wsUserId, setWsUserId] = useState<number | null>(null)
+  const [wsList, setWsList] = useState<UserWorkspace[]>([])
+  const [wsBusy, setWsBusy] = useState(false)
+
+  const openWorkspaces = async (userId: number) => {
+    if (wsUserId === userId) { setWsUserId(null); return }
+    setWsUserId(userId)
+    setWsList([])
+    setWsBusy(true)
+    try {
+      const res = await api.get(`/api/admin/users/${userId}/workspaces`)
+      setWsList(res.data)
+    } catch (err: any) {
+      toast.error('Failed to load workspaces: ' + (err.response?.data?.detail || 'Unknown error'))
+      setWsUserId(null)
+    } finally {
+      setWsBusy(false)
+    }
+  }
+
+  // Toggle a user's membership in one workspace, optimistically reflecting the change.
+  const toggleWorkspace = async (userId: number, ws: UserWorkspace) => {
+    setWsBusy(true)
+    try {
+      if (ws.member) {
+        await api.delete(`/api/admin/users/${userId}/workspaces/${ws.id}`)
+      } else {
+        await api.put(`/api/admin/users/${userId}/workspaces/${ws.id}`, { role: 'member' })
+      }
+      setWsList(list => list.map(w =>
+        w.id === ws.id ? { ...w, member: !w.member, role: w.member ? null : 'member' } : w))
+    } catch (err: any) {
+      toast.error('Failed to update workspace: ' + (err.response?.data?.detail || 'Unknown error'))
+    } finally {
+      setWsBusy(false)
+    }
+  }
 
   const createInvite = async () => {
     try {
@@ -127,6 +174,7 @@ export default function UsersSection() {
                   <th className="text-left px-4 py-3 text-text-muted font-medium">Role</th>
                   <th className="text-left px-4 py-3 text-text-muted font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-text-muted font-medium">Last Login</th>
+                  <th className="text-left px-4 py-3 text-text-muted font-medium">Workspaces</th>
                 </tr>
               </thead>
               <tbody>
@@ -164,8 +212,52 @@ export default function UsersSection() {
                         ? new Date(u.last_login_at).toLocaleDateString()
                         : 'Never'}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => openWorkspaces(u.id)}
+                        aria-expanded={wsUserId === u.id}
+                        className="text-xs px-2 py-0.5 rounded border border-border text-text-muted hover:bg-surface-light/50"
+                      >
+                        {wsUserId === u.id ? 'Hide' : 'Manage'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
+                {wsUserId !== null && data.some((u: any) => u.id === wsUserId) && (
+                  <tr className="border-b border-border/50 bg-surface-light/20">
+                    <td colSpan={6} className="px-4 py-3">
+                      <div className="text-xs text-text-muted mb-2">
+                        Shared workspaces for{' '}
+                        <span className="text-text font-medium">
+                          {data.find((u: any) => u.id === wsUserId)?.display_name}
+                        </span>
+                      </div>
+                      {wsBusy && wsList.length === 0 ? (
+                        <div className="text-xs text-text-muted">Loading…</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {wsList.map(ws => (
+                            <label
+                              key={ws.id}
+                              className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-surface text-xs cursor-pointer hover:bg-surface-light/50"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={ws.member}
+                                disabled={wsBusy}
+                                onChange={() => toggleWorkspace(wsUserId, ws)}
+                              />
+                              <span>{ws.icon} {ws.name}</span>
+                            </label>
+                          ))}
+                          {wsList.length === 0 && (
+                            <span className="text-xs text-text-muted">No workspaces exist yet.</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
