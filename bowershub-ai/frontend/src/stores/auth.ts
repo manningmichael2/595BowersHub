@@ -22,6 +22,9 @@ interface AuthState {
   refreshAuth: () => Promise<boolean>
   loadFeatureAccess: () => Promise<void>
   clearError: () => void
+  // Patch the cached user in place (e.g. after a self-service profile edit) and
+  // keep the localStorage mirror in sync, so a reload shows the new value.
+  updateUser: (patch: Partial<User>) => void
 }
 
 const BASE_URL = ''
@@ -191,6 +194,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  updateUser: (patch) => {
+    const current = get().user
+    if (!current) return
+    const next = { ...current, ...patch }
+    set({ user: next })
+    localStorage.setItem('user', JSON.stringify(next))
+  },
 }))
 
 // Restore session on app load
