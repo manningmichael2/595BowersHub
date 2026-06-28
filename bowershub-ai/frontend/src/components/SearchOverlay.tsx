@@ -58,7 +58,7 @@ export default function SearchOverlay() {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60" onClick={() => setSearchOpen(false)} />
+      <div className="absolute inset-0 bg-background/60" onClick={() => setSearchOpen(false)} />
 
       {/* Search panel */}
       <div className="relative w-full max-w-2xl mx-4 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden">
@@ -118,7 +118,7 @@ export default function SearchOverlay() {
               className="w-full text-left px-4 py-3 hover:bg-background/50 border-b border-border/50"
             >
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400">message</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-primary/30 text-primary">message</span>
                 <span className="text-xs text-text-muted">{r.workspace_name}</span>
                 <span className="text-xs text-text-muted">• {r.conversation_title}</span>
               </div>
@@ -130,7 +130,7 @@ export default function SearchOverlay() {
           {(results.knowledge || []).map((r, i) => (
             <div key={`know-${i}`} className="px-4 py-3 border-b border-border/50">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/30 text-green-400">knowledge</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-success/30 text-success">knowledge</span>
                 <span className="text-xs text-text-muted">{r.topic || r.file}</span>
               </div>
               <p className="text-sm text-text">{r.content}</p>

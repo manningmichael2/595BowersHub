@@ -271,12 +271,12 @@ export default function ScheduledPromptsPage() {
   // ---- Render -------------------------------------------------------------
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] text-gray-200 flex flex-col">
+    <div className="min-h-screen bg-surface text-text flex flex-col">
       {/* Header */}
-      <div className="border-b border-gray-800 px-4 py-3 flex items-center gap-3 shrink-0">
+      <div className="border-b border-border px-4 py-3 flex items-center gap-3 shrink-0">
         <button
           onClick={() => navigate(-1)}
-          className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400"
+          className="p-1.5 rounded-lg hover:bg-surface text-text-muted"
           aria-label="Back"
         >
           ← Back
@@ -293,8 +293,8 @@ export default function ScheduledPromptsPage() {
             className={
               'px-3 py-1.5 rounded-md text-sm font-medium ' +
               (formMode.kind !== 'closed'
-                ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                : 'bg-indigo-600 text-white hover:bg-indigo-500')
+                ? 'bg-surface text-text-muted cursor-not-allowed'
+                : 'bg-primary text-on-primary hover:bg-primary/90')
             }
           >
             + New scheduled prompt
@@ -303,7 +303,7 @@ export default function ScheduledPromptsPage() {
       </div>
 
       <div className="flex-1 max-w-5xl w-full mx-auto p-4 md:p-6 space-y-4">
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-text-muted">
           Run a saved prompt on a cron schedule. Results either get pinned to
           the workspace conversation or pushed to your phone via Pushover.
         </p>
@@ -322,18 +322,18 @@ export default function ScheduledPromptsPage() {
 
         {/* Load state */}
         {loading && (
-          <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-6 text-sm text-gray-400">
+          <div className="rounded-lg border border-border bg-surface p-6 text-sm text-text-muted">
             Loading scheduled prompts…
           </div>
         )}
 
         {!loading && loadError && (
-          <div className="rounded-lg border border-red-700/40 bg-red-900/20 p-4 space-y-3">
-            <div className="text-sm text-red-300">{loadError}</div>
+          <div className="rounded-lg border border-danger/40 bg-danger/20 p-4 space-y-3">
+            <div className="text-sm text-danger">{loadError}</div>
             <button
               type="button"
               onClick={loadPrompts}
-              className="px-3 py-1.5 rounded-md text-sm bg-gray-800 text-gray-200 hover:bg-gray-700"
+              className="px-3 py-1.5 rounded-md text-sm bg-surface text-text hover:bg-surface-light"
             >
               Retry
             </button>
@@ -342,19 +342,19 @@ export default function ScheduledPromptsPage() {
 
         {/* Empty state */}
         {!loading && !loadError && prompts.length === 0 && (
-          <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-8 text-center space-y-3">
+          <div className="rounded-lg border border-border bg-surface p-8 text-center space-y-3">
             <div className="text-3xl" aria-hidden="true">⏰</div>
-            <div className="text-sm text-gray-300">
+            <div className="text-sm text-text-muted">
               No scheduled prompts yet.
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-text-muted">
               Create one to have BowersHub AI run a prompt on a schedule and
               deliver the result to a workspace or to your phone.
             </div>
             <button
               type="button"
               onClick={() => setFormMode({ kind: 'create' })}
-              className="px-3 py-1.5 rounded-md text-sm bg-indigo-600 text-white hover:bg-indigo-500"
+              className="px-3 py-1.5 rounded-md text-sm bg-primary text-on-primary hover:bg-primary/90"
             >
               + New scheduled prompt
             </button>
@@ -363,10 +363,10 @@ export default function ScheduledPromptsPage() {
 
         {/* Table */}
         {!loading && !loadError && prompts.length > 0 && (
-          <div className="rounded-lg border border-gray-800 bg-gray-900/40 overflow-hidden">
+          <div className="rounded-lg border border-border bg-surface overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-gray-900/70 text-xs uppercase tracking-wider text-gray-500">
+                <thead className="bg-surface text-xs uppercase tracking-wider text-text-muted">
                   <tr>
                     <th className="text-left px-3 py-2 font-medium">Name</th>
                     <th className="text-left px-3 py-2 font-medium">Workspace</th>
@@ -419,17 +419,17 @@ export default function ScheduledPromptsPage() {
             as `bh_hooks` rows under the hood. Helps with debugging without
             cluttering the UI for regular users. */}
         {user?.role === 'admin' && prompts.length > 0 && (
-          <div className="text-[11px] text-gray-600">
+          <div className="text-[11px] text-text-muted">
             Scheduled prompts are stored as
-            <code className="mx-1 px-1 py-0.5 rounded bg-gray-800 text-gray-400">
+            <code className="mx-1 px-1 py-0.5 rounded bg-surface text-text-muted">
               bh_hooks
             </code>
             rows with
-            <code className="mx-1 px-1 py-0.5 rounded bg-gray-800 text-gray-400">
+            <code className="mx-1 px-1 py-0.5 rounded bg-surface text-text-muted">
               event_type=schedule
             </code>
             and
-            <code className="mx-1 px-1 py-0.5 rounded bg-gray-800 text-gray-400">
+            <code className="mx-1 px-1 py-0.5 rounded bg-surface text-text-muted">
               action_type=call_ai
             </code>
             .
@@ -480,8 +480,8 @@ function PromptRow({
     <>
       <tr
         className={
-          'border-t border-gray-800 transition-colors ' +
-          (isExpanded ? 'bg-indigo-900/10' : 'hover:bg-gray-800/40')
+          'border-t border-border transition-colors ' +
+          (isExpanded ? 'bg-primary/10' : 'hover:bg-surface')
         }
       >
         {/* Name + chevron — clicking the name toggles the log expansion. */}
@@ -489,13 +489,13 @@ function PromptRow({
           <button
             type="button"
             onClick={onToggleExpand}
-            className="flex items-start gap-1.5 text-left text-gray-100 hover:text-white"
+            className="flex items-start gap-1.5 text-left text-text hover:text-on-primary"
             aria-expanded={isExpanded}
           >
             <span
               className={
                 'mt-0.5 inline-block transition-transform ' +
-                (isExpanded ? 'rotate-90 text-indigo-300' : 'text-gray-500')
+                (isExpanded ? 'rotate-90 text-primary' : 'text-text-muted')
               }
               aria-hidden="true"
             >
@@ -508,8 +508,8 @@ function PromptRow({
               className={
                 'mt-1 text-[11px] ' +
                 (flashEntry.tone === 'ok'
-                  ? 'text-emerald-300'
-                  : 'text-red-300')
+                  ? 'text-success'
+                  : 'text-danger')
               }
             >
               {flashEntry.text}
@@ -518,19 +518,19 @@ function PromptRow({
         </td>
 
         {/* Workspace */}
-        <td className="px-3 py-2 align-top text-gray-300">{workspaceName}</td>
+        <td className="px-3 py-2 align-top text-text-muted">{workspaceName}</td>
 
         {/* Schedule — show the human form, with the raw expression as a
             tooltip and as a small monospace line below. */}
         <td className="px-3 py-2 align-top">
           <div
-            className="text-gray-200"
+            className="text-text"
             title={prompt.cron_expression}
           >
             {scheduleHuman}
           </div>
           {scheduleHuman !== prompt.cron_expression && (
-            <div className="font-mono text-[11px] text-gray-500">
+            <div className="font-mono text-[11px] text-text-muted">
               {prompt.cron_expression}
             </div>
           )}
@@ -550,8 +550,8 @@ function PromptRow({
             className={
               'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs ' +
               (prompt.is_enabled
-                ? 'bg-emerald-900/30 text-emerald-300'
-                : 'bg-gray-800 text-gray-400') +
+                ? 'bg-success/30 text-success'
+                : 'bg-surface text-text-muted') +
               (isBusy ? ' opacity-60 cursor-wait' : ' hover:opacity-80')
             }
             aria-pressed={prompt.is_enabled}
@@ -559,7 +559,7 @@ function PromptRow({
             <span
               className={
                 'inline-block w-2 h-2 rounded-full ' +
-                (prompt.is_enabled ? 'bg-emerald-400' : 'bg-gray-500')
+                (prompt.is_enabled ? 'bg-success' : 'bg-surface-light')
               }
             />
             {prompt.is_enabled ? 'Enabled' : 'Disabled'}
@@ -568,16 +568,16 @@ function PromptRow({
 
         {/* Last run */}
         <td className="px-3 py-2 align-top">
-          <div className="text-gray-300">{formatTimestamp(prompt.last_run)}</div>
+          <div className="text-text-muted">{formatTimestamp(prompt.last_run)}</div>
           {lastStatus && (
             <div
               className={
                 'text-[11px] ' +
                 (lastStatus === 'success'
-                  ? 'text-emerald-400'
+                  ? 'text-success'
                   : lastStatus === 'error'
-                    ? 'text-red-400'
-                    : 'text-gray-500')
+                    ? 'text-danger'
+                    : 'text-text-muted')
               }
             >
               {lastStatus}
@@ -612,7 +612,7 @@ function PromptRow({
 
       {/* Expanded log row */}
       {isExpanded && (
-        <tr className="bg-gray-950/60 border-t border-gray-800">
+        <tr className="bg-surface border-t border-border">
           <td colSpan={7} className="px-3 py-3">
             <PromptLog
               promptId={prompt.id}
@@ -631,14 +631,14 @@ function PromptRow({
 function DeliveryBadge({ method }: { method: string }) {
   if (method === 'pushover') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-amber-900/30 px-2 py-0.5 text-xs text-amber-300">
+      <span className="inline-flex items-center gap-1 rounded-md bg-warning/30 px-2 py-0.5 text-xs text-warning">
         <span aria-hidden="true">📲</span> Pushover
       </span>
     )
   }
   // Default to "pin" rendering — the backend constrains this to {pin, pushover}.
   return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-indigo-900/30 px-2 py-0.5 text-xs text-indigo-300">
+    <span className="inline-flex items-center gap-1 rounded-md bg-primary/30 px-2 py-0.5 text-xs text-primary">
       <span aria-hidden="true">📌</span> Pinned in workspace
     </span>
   )
@@ -654,10 +654,10 @@ interface RowActionProps {
 function RowAction({ label, onClick, disabled, tone = 'default' }: RowActionProps) {
   const toneClass =
     tone === 'danger'
-      ? 'bg-red-900/30 text-red-300 hover:bg-red-900/50'
+      ? 'bg-danger/30 text-danger hover:bg-danger/50'
       : tone === 'primary'
-        ? 'bg-indigo-900/30 text-indigo-200 hover:bg-indigo-900/50'
-        : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+        ? 'bg-primary/30 text-primary hover:bg-primary/50'
+        : 'bg-surface text-text-muted hover:bg-surface-light'
   return (
     <button
       type="button"
@@ -684,31 +684,31 @@ interface PromptLogProps {
 
 function PromptLog({ promptId, promptTemplate, state }: PromptLogProps) {
   if (!state || state.loading) {
-    return <div className="text-xs text-gray-500">Loading log entries…</div>
+    return <div className="text-xs text-text-muted">Loading log entries…</div>
   }
   if (state.error) {
-    return <div className="text-xs text-red-400">{state.error}</div>
+    return <div className="text-xs text-danger">{state.error}</div>
   }
   return (
     <div className="space-y-3">
       {/* Show the prompt template up top — useful when triaging a row. */}
       {promptTemplate && (
-        <details className="rounded border border-gray-800 bg-gray-900/40">
-          <summary className="cursor-pointer px-2 py-1 text-[11px] uppercase tracking-wider text-gray-500 hover:text-gray-300">
+        <details className="rounded border border-border bg-surface">
+          <summary className="cursor-pointer px-2 py-1 text-[11px] uppercase tracking-wider text-text-muted hover:text-text-muted">
             Prompt template
           </summary>
-          <pre className="px-2 py-2 text-xs whitespace-pre-wrap text-gray-300">
+          <pre className="px-2 py-2 text-xs whitespace-pre-wrap text-text-muted">
             {promptTemplate}
           </pre>
         </details>
       )}
 
       <div>
-        <div className="text-[11px] uppercase tracking-wider text-gray-500 mb-1">
+        <div className="text-[11px] uppercase tracking-wider text-text-muted mb-1">
           Last 10 runs
         </div>
         {state.entries.length === 0 ? (
-          <div className="text-xs text-gray-500 italic">
+          <div className="text-xs text-text-muted italic">
             No runs yet for prompt #{promptId}.
           </div>
         ) : (
@@ -719,32 +719,32 @@ function PromptLog({ promptId, promptTemplate, state }: PromptLogProps) {
                 className={
                   'rounded border px-2.5 py-1.5 text-xs ' +
                   (entry.success
-                    ? 'border-emerald-900/40 bg-emerald-950/20'
-                    : 'border-red-900/40 bg-red-950/20')
+                    ? 'border-success/40 bg-success/20'
+                    : 'border-danger/40 bg-danger/20')
                 }
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-gray-400">
+                  <span className="font-mono text-text-muted">
                     {formatTimestamp(entry.executed_at)}
                   </span>
                   <span
                     className={
                       'rounded-full px-1.5 py-0.5 text-[10px] ' +
                       (entry.success
-                        ? 'bg-emerald-900/40 text-emerald-300'
-                        : 'bg-red-900/40 text-red-300')
+                        ? 'bg-success/40 text-success'
+                        : 'bg-danger/40 text-danger')
                     }
                   >
                     {entry.success ? 'success' : 'error'}
                   </span>
                 </div>
                 {entry.response_snippet && (
-                  <div className="mt-1 whitespace-pre-wrap text-gray-300">
+                  <div className="mt-1 whitespace-pre-wrap text-text-muted">
                     {entry.response_snippet}
                   </div>
                 )}
                 {entry.error_message && (
-                  <div className="mt-1 whitespace-pre-wrap text-red-300">
+                  <div className="mt-1 whitespace-pre-wrap text-danger">
                     {entry.error_message}
                   </div>
                 )}

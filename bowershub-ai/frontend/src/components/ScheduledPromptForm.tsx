@@ -429,7 +429,7 @@ export default function ScheduledPromptForm({
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-6 text-sm text-gray-400">
+      <div className="rounded-lg border border-border bg-surface p-6 text-sm text-text-muted">
         Loading scheduled prompt…
       </div>
     )
@@ -437,13 +437,13 @@ export default function ScheduledPromptForm({
 
   if (loadError) {
     return (
-      <div className="rounded-lg border border-red-700/40 bg-red-900/20 p-4 space-y-3">
-        <div className="text-sm text-red-300">{loadError}</div>
+      <div className="rounded-lg border border-danger/40 bg-danger/20 p-4 space-y-3">
+        <div className="text-sm text-danger">{loadError}</div>
         <div className="flex justify-end">
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-md text-sm bg-gray-800 text-gray-200 hover:bg-gray-700"
+            className="px-3 py-1.5 rounded-md text-sm bg-surface text-text hover:bg-surface-light"
           >
             Close
           </button>
@@ -458,15 +458,15 @@ export default function ScheduledPromptForm({
         e.preventDefault()
         submit()
       }}
-      className="rounded-lg border border-indigo-700/40 bg-indigo-900/10 p-4 space-y-4"
+      className="rounded-lg border border-primary/40 bg-primary/10 p-4 space-y-4"
     >
-      <div className="text-sm font-medium text-gray-100">
+      <div className="text-sm font-medium text-text">
         {existingPromptId ? 'Edit scheduled prompt' : 'New scheduled prompt'}
       </div>
 
       {/* Name */}
       <div>
-        <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+        <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
           Name
         </label>
         <input
@@ -475,13 +475,13 @@ export default function ScheduledPromptForm({
           onChange={e => update('name', e.target.value)}
           maxLength={200}
           placeholder="e.g. Morning briefing"
-          className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+          className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
         />
       </div>
 
       {/* Workspace */}
       <div>
-        <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+        <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
           Target workspace
         </label>
         <select
@@ -493,7 +493,7 @@ export default function ScheduledPromptForm({
             )
           }
           disabled={!!existingPromptId}
-          className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+          className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
         >
           <option value="">— select a workspace —</option>
           {workspaces.map(w => (
@@ -503,7 +503,7 @@ export default function ScheduledPromptForm({
           ))}
         </select>
         {existingPromptId && (
-          <div className="mt-1 text-[11px] text-gray-500">
+          <div className="mt-1 text-[11px] text-text-muted">
             The target workspace is fixed once a scheduled prompt is created.
           </div>
         )}
@@ -511,7 +511,7 @@ export default function ScheduledPromptForm({
 
       {/* Prompt template */}
       <div>
-        <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+        <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
           Prompt template
         </label>
         <textarea
@@ -519,13 +519,13 @@ export default function ScheduledPromptForm({
           onChange={e => update('prompt_template', e.target.value)}
           rows={5}
           placeholder="e.g. Summarize yesterday's spending and flag anything over $100."
-          className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm font-mono text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+          className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-sm font-mono text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
         />
       </div>
 
       {/* Schedule */}
       <div className="space-y-3">
-        <div className="text-xs uppercase tracking-wider text-gray-500">
+        <div className="text-xs uppercase tracking-wider text-text-muted">
           Schedule
         </div>
 
@@ -546,8 +546,8 @@ export default function ScheduledPromptForm({
               className={
                 'px-3 py-1.5 rounded-md text-sm border ' +
                 (form.scheduleMode === opt.id
-                  ? 'border-indigo-500 bg-indigo-600/20 text-indigo-200'
-                  : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700')
+                  ? 'border-primary bg-primary/20 text-primary'
+                  : 'border-border bg-surface text-text-muted hover:bg-surface-light')
               }
             >
               {opt.label}
@@ -567,13 +567,13 @@ export default function ScheduledPromptForm({
             />
             {form.scheduleMode === 'weekly' && (
               <div>
-                <label className="block text-[11px] uppercase tracking-wider text-gray-500 mb-1">
+                <label className="block text-[11px] uppercase tracking-wider text-text-muted mb-1">
                   Day of week
                 </label>
                 <select
                   value={form.weekday}
                   onChange={e => update('weekday', Number(e.target.value))}
-                  className="bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+                  className="bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
                 >
                   {WEEKDAYS.map(d => (
                     <option key={d.value} value={d.value}>
@@ -585,7 +585,7 @@ export default function ScheduledPromptForm({
             )}
             {form.scheduleMode === 'monthly' && (
               <div>
-                <label className="block text-[11px] uppercase tracking-wider text-gray-500 mb-1">
+                <label className="block text-[11px] uppercase tracking-wider text-text-muted mb-1">
                   Day of month
                 </label>
                 <input
@@ -596,7 +596,7 @@ export default function ScheduledPromptForm({
                   }
                   min={1}
                   max={31}
-                  className="w-24 bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+                  className="w-24 bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
                 />
               </div>
             )}
@@ -605,7 +605,7 @@ export default function ScheduledPromptForm({
 
         {form.scheduleMode === 'custom' && (
           <div>
-            <label className="block text-[11px] uppercase tracking-wider text-gray-500 mb-1">
+            <label className="block text-[11px] uppercase tracking-wider text-text-muted mb-1">
               Cron expression (5 fields: minute hour day-of-month month day-of-week)
             </label>
             <input
@@ -614,7 +614,7 @@ export default function ScheduledPromptForm({
               onChange={e => update('cron_custom', e.target.value)}
               spellCheck={false}
               placeholder="0 7 * * *"
-              className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm font-mono text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+              className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-sm font-mono text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
             />
           </div>
         )}
@@ -624,8 +624,8 @@ export default function ScheduledPromptForm({
           className={
             'rounded-md border px-2.5 py-1.5 text-xs ' +
             (cronValidation.ok
-              ? 'border-emerald-700/40 bg-emerald-900/10 text-emerald-200'
-              : 'border-amber-700/40 bg-amber-900/10 text-amber-200')
+              ? 'border-success/40 bg-success/10 text-success'
+              : 'border-warning/40 bg-warning/10 text-warning')
           }
         >
           {cronValidation.ok ? (
@@ -642,7 +642,7 @@ export default function ScheduledPromptForm({
                 href="https://crontab.guru/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline hover:text-amber-100"
+                className="underline hover:text-warning"
               >
                 cron help
               </a>
@@ -653,7 +653,7 @@ export default function ScheduledPromptForm({
 
       {/* Delivery method */}
       <div>
-        <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
+        <div className="text-xs uppercase tracking-wider text-text-muted mb-1">
           Delivery method
         </div>
         <div className="flex flex-wrap gap-2">
@@ -678,8 +678,8 @@ export default function ScheduledPromptForm({
                 className={
                   'flex-1 min-w-[14rem] cursor-pointer rounded-md border px-3 py-2 ' +
                   (active
-                    ? 'border-indigo-500 bg-indigo-600/20 text-indigo-100'
-                    : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700')
+                    ? 'border-primary bg-primary/20 text-primary'
+                    : 'border-border bg-surface text-text-muted hover:bg-surface-light')
                 }
               >
                 <div className="flex items-center gap-2">
@@ -689,7 +689,7 @@ export default function ScheduledPromptForm({
                     value={opt.id}
                     checked={active}
                     onChange={() => update('delivery_method', opt.id)}
-                    className="accent-indigo-500"
+                    className="accent-primary"
                   />
                   <span className="text-sm font-medium">{opt.label}</span>
                 </div>
@@ -703,7 +703,7 @@ export default function ScheduledPromptForm({
       </div>
 
       {submitError && (
-        <div className="rounded-md border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-md border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger">
           {submitError}{' '}
           {/* Surface a help link for cron-shaped errors. */}
           {/invalid|cron/i.test(submitError) && (
@@ -711,7 +711,7 @@ export default function ScheduledPromptForm({
               href="https://crontab.guru/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-red-100"
+              className="underline hover:text-danger"
             >
               cron help
             </a>
@@ -724,7 +724,7 @@ export default function ScheduledPromptForm({
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 py-1.5 rounded-md text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
+          className="px-3 py-1.5 rounded-md text-sm bg-surface text-text-muted hover:bg-surface-light"
         >
           Cancel
         </button>
@@ -734,8 +734,8 @@ export default function ScheduledPromptForm({
           className={
             'px-3 py-1.5 rounded-md text-sm font-medium ' +
             (saving || !cronValidation.ok
-              ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-              : 'bg-indigo-600 text-white hover:bg-indigo-500')
+              ? 'bg-surface text-text-muted cursor-not-allowed'
+              : 'bg-primary text-on-primary hover:bg-primary/90')
           }
         >
           {saving ? 'Saving…' : existingPromptId ? 'Save changes' : 'Create prompt'}
@@ -763,7 +763,7 @@ function TimePicker({ hour, minute, onChange }: TimePickerProps) {
     .padStart(2, '0')}`
   return (
     <div>
-      <label className="block text-[11px] uppercase tracking-wider text-gray-500 mb-1">
+      <label className="block text-[11px] uppercase tracking-wider text-text-muted mb-1">
         Time
       </label>
       <input
@@ -775,7 +775,7 @@ function TimePicker({ hour, minute, onChange }: TimePickerProps) {
           const m = clamp(Number(mStr) || 0, 0, 59)
           onChange(h, m)
         }}
-        className="bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+        className="bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
       />
     </div>
   )

@@ -201,10 +201,10 @@ export default function PinnedContextManager({
   const tone: BudgetTone = budgetTone(totalTokens, budget)
   const budgetToneClasses =
     tone === 'over'
-      ? 'border-red-700/60 bg-red-900/20 text-red-200'
+      ? 'border-danger/60 bg-danger/20 text-danger'
       : tone === 'warn'
-        ? 'border-amber-700/60 bg-amber-900/20 text-amber-200'
-        : 'border-gray-700 bg-gray-900/40 text-gray-300'
+        ? 'border-warning/60 bg-warning/20 text-warning'
+        : 'border-border bg-surface text-text-muted'
 
   // ---- Form helpers -----------------------------------------------------
 
@@ -380,15 +380,15 @@ export default function PinnedContextManager({
             {(budgetPct * 100).toFixed(0)}%
           </div>
         </div>
-        <div className="mt-1.5 h-1.5 rounded-full bg-black/30 overflow-hidden">
+        <div className="mt-1.5 h-1.5 rounded-full bg-background/30 overflow-hidden">
           <div
             className={
               'h-full transition-all ' +
               (tone === 'over'
-                ? 'bg-red-400'
+                ? 'bg-danger'
                 : tone === 'warn'
-                  ? 'bg-amber-400'
-                  : 'bg-emerald-400')
+                  ? 'bg-warning'
+                  : 'bg-success')
             }
             style={{ width: `${Math.min(100, budgetPct * 100)}%` }}
           />
@@ -404,7 +404,7 @@ export default function PinnedContextManager({
 
       {/* Header row */}
       <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-300">
+        <div className="text-sm text-text-muted">
           {loading
             ? 'Loading…'
             : `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`}
@@ -413,7 +413,7 @@ export default function PinnedContextManager({
           <button
             type="button"
             onClick={openAdd}
-            className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-500"
+            className="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-sm font-medium hover:bg-primary/90"
           >
             + Add entry
           </button>
@@ -421,7 +421,7 @@ export default function PinnedContextManager({
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300">
+        <div className="rounded-lg border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger">
           {error}
         </div>
       )}
@@ -441,7 +441,7 @@ export default function PinnedContextManager({
 
       {/* Entry list */}
       {!loading && entries.length === 0 && !formOpen && (
-        <div className="rounded-lg border border-gray-800 bg-gray-900/40 px-3 py-6 text-center text-sm text-gray-500">
+        <div className="rounded-lg border border-border bg-surface px-3 py-6 text-center text-sm text-text-muted">
           No pinned context entries yet.
           {canEdit && ' Click "Add entry" to create one.'}
         </div>
@@ -453,27 +453,27 @@ export default function PinnedContextManager({
           return (
             <li
               key={entry.id}
-              className="rounded-lg border border-gray-800 bg-gray-900/40 overflow-hidden"
+              className="rounded-lg border border-border bg-surface overflow-hidden"
             >
               {/* Row header (clickable) */}
               <button
                 type="button"
                 onClick={() => setExpandedId(expanded ? null : entry.id)}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-800/50"
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-surface"
               >
                 <TypeBadge type={entry.context_type} />
-                <span className="flex-1 text-sm text-gray-100 font-medium truncate">
+                <span className="flex-1 text-sm text-text font-medium truncate">
                   {entry.title}
                 </span>
-                <span className="text-[11px] text-gray-500 font-mono shrink-0">
+                <span className="text-[11px] text-text-muted font-mono shrink-0">
                   P{entry.priority}
                 </span>
-                <span className="text-[11px] text-gray-500 font-mono shrink-0">
+                <span className="text-[11px] text-text-muted font-mono shrink-0">
                   ~{entry.token_estimate.toLocaleString()}t
                 </span>
                 {entry.context_type === 'dynamic' && (
                   <span
-                    className="text-[11px] text-gray-500 shrink-0"
+                    className="text-[11px] text-text-muted shrink-0"
                     title={entry.cached_at || ''}
                   >
                     {formatRelative(entry.cached_at)}
@@ -481,7 +481,7 @@ export default function PinnedContextManager({
                 )}
                 <svg
                   className={
-                    'w-4 h-4 text-gray-500 shrink-0 transition-transform ' +
+                    'w-4 h-4 text-text-muted shrink-0 transition-transform ' +
                     (expanded ? 'rotate-180' : '')
                   }
                   fill="none"
@@ -499,17 +499,17 @@ export default function PinnedContextManager({
 
               {/* Expanded body */}
               {expanded && (
-                <div className="border-t border-gray-800 px-3 py-3 space-y-3">
+                <div className="border-t border-border px-3 py-3 space-y-3">
                   {entry.context_type === 'static' ? (
                     <Section label="Content">
-                      <pre className="whitespace-pre-wrap break-words text-sm text-gray-200 font-mono">
+                      <pre className="whitespace-pre-wrap break-words text-sm text-text font-mono">
                         {entry.content || '(empty)'}
                       </pre>
                     </Section>
                   ) : (
                     <>
                       <Section label="SQL query">
-                        <pre className="whitespace-pre-wrap break-words text-sm text-gray-200 font-mono">
+                        <pre className="whitespace-pre-wrap break-words text-sm text-text font-mono">
                           {entry.query || '(empty)'}
                         </pre>
                       </Section>
@@ -520,10 +520,10 @@ export default function PinnedContextManager({
                             : 'Cached result'
                         }
                       >
-                        <pre className="whitespace-pre-wrap break-words text-sm text-gray-300 font-mono">
+                        <pre className="whitespace-pre-wrap break-words text-sm text-text-muted font-mono">
                           {entry.cached_result || '(no cached result yet)'}
                         </pre>
-                        <div className="mt-1 text-[11px] text-gray-500">
+                        <div className="mt-1 text-[11px] text-text-muted">
                           Refreshes every {entry.refresh_minutes} min
                         </div>
                       </Section>
@@ -541,8 +541,8 @@ export default function PinnedContextManager({
                           className={
                             'px-2.5 py-1 rounded-md text-xs font-medium ' +
                             (refreshingId === entry.id
-                              ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                              : 'bg-gray-800 text-gray-200 hover:bg-gray-700')
+                              ? 'bg-surface text-text-muted cursor-not-allowed'
+                              : 'bg-surface text-text hover:bg-surface-light')
                           }
                         >
                           {refreshingId === entry.id
@@ -553,14 +553,14 @@ export default function PinnedContextManager({
                       <button
                         type="button"
                         onClick={() => openEdit(entry)}
-                        className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-800 text-gray-200 hover:bg-gray-700"
+                        className="px-2.5 py-1 rounded-md text-xs font-medium bg-surface text-text hover:bg-surface-light"
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(entry)}
-                        className="px-2.5 py-1 rounded-md text-xs font-medium bg-red-900/40 text-red-200 hover:bg-red-900/60"
+                        className="px-2.5 py-1 rounded-md text-xs font-medium bg-danger/40 text-danger hover:bg-danger/60"
                       >
                         Delete
                       </button>
@@ -604,10 +604,10 @@ function Section({
 }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wider text-gray-500 mb-1">
+      <div className="text-[11px] uppercase tracking-wider text-text-muted mb-1">
         {label}
       </div>
-      <div className="rounded-md border border-gray-800 bg-black/30 px-2 py-1.5 max-h-64 overflow-y-auto">
+      <div className="rounded-md border border-border bg-background/30 px-2 py-1.5 max-h-64 overflow-y-auto">
         {children}
       </div>
     </div>
@@ -642,16 +642,16 @@ function PinnedContextForm({
         e.preventDefault()
         onSubmit()
       }}
-      className="rounded-lg border border-indigo-700/40 bg-indigo-900/10 p-3 space-y-3"
+      className="rounded-lg border border-primary/40 bg-primary/10 p-3 space-y-3"
     >
-      <div className="text-sm font-medium text-gray-100">
+      <div className="text-sm font-medium text-text">
         {editing ? 'Edit entry' : 'New pinned-context entry'}
       </div>
 
       {/* Type (only on create) */}
       {!editing && (
         <div>
-          <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+          <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
             Type
           </label>
           <div className="flex gap-2">
@@ -663,8 +663,8 @@ function PinnedContextForm({
                 className={
                   'px-3 py-1.5 rounded-md text-sm border ' +
                   (form.context_type === t
-                    ? 'border-indigo-500 bg-indigo-600/20 text-indigo-200'
-                    : 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700')
+                    ? 'border-primary bg-primary/20 text-primary'
+                    : 'border-border bg-surface text-text-muted hover:bg-surface-light')
                 }
               >
                 {t === 'static' ? 'Static text' : 'Dynamic SQL'}
@@ -676,7 +676,7 @@ function PinnedContextForm({
 
       {/* Title */}
       <div>
-        <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+        <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
           Title
         </label>
         <input
@@ -685,14 +685,14 @@ function PinnedContextForm({
           onChange={e => update('title', e.target.value)}
           maxLength={200}
           placeholder="e.g. Active projects"
-          className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+          className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
         />
       </div>
 
       {/* Content (static) or Query (dynamic) */}
       {form.context_type === 'static' ? (
         <div>
-          <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+          <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
             Content
           </label>
           <textarea
@@ -700,13 +700,13 @@ function PinnedContextForm({
             onChange={e => update('content', e.target.value)}
             rows={6}
             placeholder="Markdown or plain text"
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm font-mono text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+            className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-sm font-mono text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
           />
         </div>
       ) : (
         <>
           <div>
-            <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+            <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
               SQL query (SELECT only)
             </label>
             <textarea
@@ -715,11 +715,11 @@ function PinnedContextForm({
               rows={6}
               placeholder="SELECT name, status FROM inventory.projects WHERE active = true"
               spellCheck={false}
-              className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm font-mono text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+              className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-sm font-mono text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
             />
           </div>
           <div>
-            <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+            <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
               Refresh every (minutes)
             </label>
             <input
@@ -733,16 +733,16 @@ function PinnedContextForm({
               }
               min={1}
               max={1440}
-              className="w-32 bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+              className="w-32 bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
             />
-            <span className="ml-2 text-xs text-gray-500">1 — 1440</span>
+            <span className="ml-2 text-xs text-text-muted">1 — 1440</span>
           </div>
         </>
       )}
 
       {/* Priority */}
       <div>
-        <label className="block text-xs uppercase tracking-wider text-gray-500 mb-1">
+        <label className="block text-xs uppercase tracking-wider text-text-muted mb-1">
           Priority
         </label>
         <input
@@ -756,15 +756,15 @@ function PinnedContextForm({
           }
           min={1}
           max={1000}
-          className="w-32 bg-gray-800 border border-gray-700 rounded-md px-2 py-1.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/60"
+          className="w-32 bg-surface border border-border rounded-md px-2 py-1.5 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary/60"
         />
-        <span className="ml-2 text-xs text-gray-500">
+        <span className="ml-2 text-xs text-text-muted">
           lower = surfaces earlier in context (1 — 1000)
         </span>
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-700/40 bg-red-900/20 px-2.5 py-1.5 text-xs text-red-300">
+        <div className="rounded-md border border-danger/40 bg-danger/20 px-2.5 py-1.5 text-xs text-danger">
           {error}
         </div>
       )}
@@ -773,7 +773,7 @@ function PinnedContextForm({
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 py-1.5 rounded-md text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
+          className="px-3 py-1.5 rounded-md text-sm bg-surface text-text-muted hover:bg-surface-light"
         >
           Cancel
         </button>
@@ -783,8 +783,8 @@ function PinnedContextForm({
           className={
             'px-3 py-1.5 rounded-md text-sm font-medium ' +
             (saving
-              ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-              : 'bg-indigo-600 text-white hover:bg-indigo-500')
+              ? 'bg-surface text-text-muted cursor-not-allowed'
+              : 'bg-primary text-on-primary hover:bg-primary/90')
           }
         >
           {saving ? 'Saving…' : editing ? 'Save changes' : 'Create entry'}

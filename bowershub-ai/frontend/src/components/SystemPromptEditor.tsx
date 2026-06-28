@@ -246,7 +246,7 @@ export default function SystemPromptEditor({
       {/* Inline error banner (length limit + backend errors) */}
       {error && (
         <div
-          className="rounded-lg border border-red-700/40 bg-red-900/20 px-3 py-2 text-sm text-red-300"
+          className="rounded-lg border border-danger/40 bg-danger/20 px-3 py-2 text-sm text-danger"
           role="alert"
         >
           {error}
@@ -256,7 +256,7 @@ export default function SystemPromptEditor({
       {/* Transient success toast — small inline banner, auto-dismiss */}
       {toast && (
         <div
-          className="rounded-lg border border-green-700/40 bg-green-900/20 px-3 py-2 text-sm text-green-300"
+          className="rounded-lg border border-success/40 bg-success/20 px-3 py-2 text-sm text-success"
           role="status"
           aria-live="polite"
         >
@@ -267,13 +267,13 @@ export default function SystemPromptEditor({
       {/* Side-by-side editor + preview */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Editor pane */}
-        <div className="rounded-lg border border-gray-800 bg-gray-900/40 overflow-hidden flex flex-col min-h-[24rem]">
-          <div className="px-3 py-1.5 border-b border-gray-800 bg-gray-900/60 text-xs uppercase tracking-wider text-gray-500 flex items-center justify-between">
+        <div className="rounded-lg border border-border bg-surface overflow-hidden flex flex-col min-h-[24rem]">
+          <div className="px-3 py-1.5 border-b border-border bg-surface text-xs uppercase tracking-wider text-text-muted flex items-center justify-between">
             <span>Markdown</span>
             <span
               className={
                 'tabular-nums ' +
-                (overLimit ? 'text-red-400' : 'text-gray-500')
+                (overLimit ? 'text-danger' : 'text-text-muted')
               }
               title="Character count / limit"
             >
@@ -288,8 +288,8 @@ export default function SystemPromptEditor({
               className="
                 select-none overflow-hidden
                 text-right pr-2 pl-3 py-2
-                font-mono text-xs leading-5 text-gray-600
-                bg-gray-900/30 border-r border-gray-800
+                font-mono text-xs leading-5 text-text-muted
+                bg-surface border-r border-border
               "
               style={{ minWidth: '3rem' }}
             >
@@ -309,27 +309,27 @@ export default function SystemPromptEditor({
               aria-label="System prompt markdown editor"
               className="
                 flex-1 min-w-0 resize-none
-                bg-transparent text-gray-100
+                bg-transparent text-text
                 font-mono text-sm leading-5
                 px-3 py-2
-                focus:outline-none focus:ring-1 focus:ring-indigo-500/40
+                focus:outline-none focus:ring-1 focus:ring-primary/40
               "
             />
           </div>
         </div>
 
         {/* Preview pane */}
-        <div className="rounded-lg border border-gray-800 bg-gray-900/40 overflow-hidden flex flex-col min-h-[24rem]">
-          <div className="px-3 py-1.5 border-b border-gray-800 bg-gray-900/60 text-xs uppercase tracking-wider text-gray-500">
+        <div className="rounded-lg border border-border bg-surface overflow-hidden flex flex-col min-h-[24rem]">
+          <div className="px-3 py-1.5 border-b border-border bg-surface text-xs uppercase tracking-wider text-text-muted">
             Preview
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-2">
             {previewText.length === 0 ? (
-              <p className="text-sm text-gray-500 italic">
+              <p className="text-sm text-text-muted italic">
                 Preview will render here as you type.
               </p>
             ) : (
-              <div className="markdown-content text-gray-200 text-sm">
+              <div className="markdown-content text-text text-sm">
                 <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
                   {previewText}
                 </ReactMarkdown>
@@ -341,11 +341,11 @@ export default function SystemPromptEditor({
 
       {/* Footer: counts + actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="text-xs text-gray-500">
+        <div className="text-xs text-text-muted">
           ~{tokenEstimate.toLocaleString()} tokens
           {isDirty && (
-            <span className="ml-2 inline-flex items-center gap-1 text-amber-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            <span className="ml-2 inline-flex items-center gap-1 text-warning">
+              <span className="w-1.5 h-1.5 rounded-full bg-warning" />
               Unsaved changes
             </span>
           )}
@@ -357,8 +357,8 @@ export default function SystemPromptEditor({
             disabled={!isDirty || saving}
             className="
               px-3 py-1.5 rounded text-sm
-              border border-gray-700 text-gray-300
-              hover:bg-gray-800
+              border border-border text-text-muted
+              hover:bg-surface
               disabled:opacity-40 disabled:cursor-not-allowed
             "
           >
@@ -370,8 +370,8 @@ export default function SystemPromptEditor({
             disabled={!canEdit || !isDirty || saving || overLimit}
             className="
               px-3 py-1.5 rounded text-sm font-medium
-              bg-indigo-600 text-white
-              hover:bg-indigo-500
+              bg-primary text-on-primary
+              hover:bg-primary/90
               disabled:opacity-40 disabled:cursor-not-allowed
             "
           >
