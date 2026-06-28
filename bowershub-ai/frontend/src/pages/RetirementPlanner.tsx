@@ -21,6 +21,14 @@ const EMPTY: RetirementFields = {
 
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`
 
+/** Round to cents (2 decimals). */
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** Dollar fields — kept at 2 decimals (the % and age fields are not). */
+const MONEY_KEYS: (keyof RetirementFields)[] = [
+  'current_balance', 'annual_salary', 'annual_contribution', 'annual_expenses',
+]
+
 export default function RetirementPlanner() {
   const [fields, setFields] = useState<RetirementFields>(EMPTY)
   const [projection, setProjection] = useState<Projection | null>(null)
@@ -29,7 +37,15 @@ export default function RetirementPlanner() {
   useEffect(() => {
     financeRetirement
       .getInputs()
-      .then(({ prefill }) => setFields({ ...EMPTY, ...prefill }))
+      .then(({ prefill }) => {
+        // Account-derived dollar prefills can carry float noise — snap to cents.
+        const cleaned = { ...prefill }
+        for (const k of MONEY_KEYS) {
+          const v = cleaned[k]
+          if (typeof v === 'number') cleaned[k] = round2(v)
+        }
+        setFields({ ...EMPTY, ...cleaned })
+      })
       .catch(() => toast.error('Could not load your retirement inputs.'))
       .finally(() => setLoaded(true))
   }, [])
@@ -53,7 +69,9 @@ export default function RetirementPlanner() {
 
   const set = useCallback(
     (k: keyof RetirementFields, raw: string, isPct = false) => {
-      const v = raw === '' ? null : isPct ? Number(raw) / 100 : Number(raw)
+      // Dollar/age fields snap to 2 decimals; percents stay full-precision
+      // (they're stored as fractions, e.g. 7.25% → 0.0725).
+      const v = raw === '' ? null : isPct ? Number(raw) / 100 : round2(Number(raw))
       setFields((f) => ({ ...f, [k]: Number.isNaN(v as number) ? null : v }))
     },
     [],

@@ -21,6 +21,7 @@ import QuickCapturePage from './pages/QuickCapturePage'
 import ToolFramePage from './pages/ToolFramePage'
 import DashboardPage from './pages/DashboardPage'
 import ShellLayout from './components/shell/ShellLayout'
+import { TEXT_SIZE_PX } from './lib/textSize'
 
 // Lazy-loaded DB Browser — code-split to avoid impacting chat page load
 const DbBrowserPage = lazy(() => import('./pages/DbBrowserPage'))
@@ -123,14 +124,7 @@ function App() {
   // larger size — chrome no longer outgrows the viewport.
   useEffect(() => {
     const root = document.documentElement
-    const px =
-      effectiveTextSize === 'small'
-        ? 15
-        : effectiveTextSize === 'large'
-          ? 19
-          : effectiveTextSize === 'extra_large'
-            ? 21
-            : 17 // medium
+    const px = TEXT_SIZE_PX[effectiveTextSize] ?? TEXT_SIZE_PX.medium
     root.style.setProperty('--bh-text-base', `${px}px`)
     // Clear any leftover root font-size override from a previous build —
     // we don't want to scale rem anymore.

@@ -27,6 +27,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { TEXT_SIZE_PX } from '../lib/textSize'
 import {
   useSettingsStore,
   type EffectiveTheme,
@@ -51,10 +52,10 @@ interface ThemeListEntry {
 // ---- Constants ------------------------------------------------------------
 
 const TEXT_SIZES: Array<{ value: TextSize; label: string; previewPx: number }> = [
-  { value: 'small', label: 'Small', previewPx: 15 },
-  { value: 'medium', label: 'Medium', previewPx: 17 },
-  { value: 'large', label: 'Large', previewPx: 19 },
-  { value: 'extra_large', label: 'Extra Large', previewPx: 21 },
+  { value: 'small', label: 'Small', previewPx: TEXT_SIZE_PX.small },
+  { value: 'medium', label: 'Medium', previewPx: TEXT_SIZE_PX.medium },
+  { value: 'large', label: 'Large', previewPx: TEXT_SIZE_PX.large },
+  { value: 'extra_large', label: 'Extra Large', previewPx: TEXT_SIZE_PX.extra_large },
 ]
 
 // Tokens shown as a row of swatches on each theme card.
