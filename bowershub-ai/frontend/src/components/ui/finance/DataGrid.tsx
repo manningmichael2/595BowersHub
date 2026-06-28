@@ -13,10 +13,13 @@ import { cn } from '../cn'
 
 export interface DataGridColumn<T> {
   id: string
-  header: string
+  /** Column header — text, or any node (e.g. a select-all checkbox). */
+  header: ReactNode
   /** Marks the column whose cell labels each row (a11y). */
   isRowHeader?: boolean
   allowsSorting?: boolean
+  /** Cell width hint (CSS width); useful for fixed action/checkbox columns. */
+  width?: string
   render: (row: T) => ReactNode
 }
 
@@ -30,6 +33,8 @@ export interface DataGridProps<T> {
   selectionMode?: 'none' | 'single' | 'multiple'
   emptyMessage?: string
   className?: string
+  /** Optional constant `data-testid` applied to every row. */
+  rowTestId?: string
 }
 
 /**
@@ -47,6 +52,7 @@ export function DataGrid<T>({
   selectionMode = 'none',
   emptyMessage = 'No rows',
   className,
+  rowTestId,
   ...aria
 }: DataGridProps<T>) {
   return (
@@ -63,7 +69,8 @@ export function DataGrid<T>({
             id={column.id}
             isRowHeader={column.isRowHeader}
             allowsSorting={column.allowsSorting}
-            className="cursor-default border-b border-border px-3 py-2 text-left text-xs font-medium text-text-muted outline-none"
+            style={column.width ? { width: column.width } : undefined}
+            className="border-b border-border px-3 py-2 text-left text-xs font-medium text-text-muted outline-none data-[allows-sorting]:cursor-pointer"
           >
             {column.header}
           </Column>
@@ -79,6 +86,7 @@ export function DataGrid<T>({
           <Row
             id={getRowId(item)}
             columns={columns}
+            data-testid={rowTestId}
             className="border-b border-border outline-none data-[hovered]:bg-surface-light data-[selected]:bg-primary/10"
           >
             {(column) => (

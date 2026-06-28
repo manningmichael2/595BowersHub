@@ -5,10 +5,17 @@
  * per child category; split parents shown once). Inline categorize/split folds in
  * next so this becomes the single finance transactions surface.
  */
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '../stores/toast'
 import SplitEditor from '../components/finance/SplitEditor'
-import { Combobox, DateRangePicker } from '../components/ui/finance'
+import {
+  Combobox,
+  DateRangePicker,
+  DataGrid,
+  type DataGridColumn,
+  type ComboboxOption,
+} from '../components/ui/finance'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui'
 import { parseDate } from '@internationalized/date'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { financeReview, type CategoryOption } from '../services/financeReview'
@@ -46,6 +53,53 @@ const DATE_PRESETS: { label: string; range: () => [string, string] }[] = [
   { label: 'Last 7 days', range: () => [daysAgo(7), todayStr()] },
   { label: 'All time', range: () => ['', ''] },
 ]
+
+type Txn = TxnSearchResult['items'][number]
+
+/**
+ * Click-to-edit category cell (Monarch-style inline categorize). Shows the
+ * category name; clicking swaps to a searchable Combobox; selecting categorizes
+ * and collapses back. Defined at module scope so per-cell edit state survives
+ * the page's re-renders. Transfers/investments/splits aren't categorizable.
+ */
+function CategoryCell({
+  t,
+  options,
+  onCategorize,
+}: {
+  t: Txn
+  options: ComboboxOption[]
+  onCategorize: (id: string, categoryId: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  if (t.is_split) return <span className="text-text-muted">(split)</span>
+  if (t.is_transfer) return <span className="text-accent">Transfer</span>
+  if (t.is_investment) return <span className="text-text-muted">Investment</span>
+  if (editing) {
+    return (
+      <Combobox
+        aria-label={`Category for ${t.description ?? t.id}`}
+        className="min-w-[160px]"
+        options={options}
+        selectedKey={t.category_id ?? null}
+        onSelectionChange={(k) => {
+          if (k != null) onCategorize(t.id, Number(k))
+          setEditing(false)
+        }}
+        placeholder="Search category…"
+      />
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="rounded px-1.5 py-0.5 text-left text-text transition-colors hover:bg-surface-light"
+    >
+      {t.category_name ?? <span className="italic text-text-muted">Uncategorized…</span>}
+    </button>
+  )
+}
 
 export default function TransactionsPage() {
   const [categories, setCategories] = useState<CategoryOption[]>([])
@@ -140,12 +194,6 @@ export default function TransactionsPage() {
     } catch (e) { toast.error(errorMessage(e)) }
   }
 
-  const toggleSort = (col: NonNullable<TxnQuery['sort']>) => {
-    if (sort === col) setOrder((o) => (o === 'asc' ? 'desc' : 'asc'))
-    else { setSort(col); setOrder('desc') }
-  }
-  const arrow = (col: string) => (sort === col ? (order === 'asc' ? ' ▲' : ' ▼') : '')
-
   const net = useMemo(() => result ? result.totals.income - result.totals.spending : 0, [result])
 
   // Shared cell renderers so the desktop table and mobile cards stay in sync.
@@ -174,6 +222,66 @@ export default function TransactionsPage() {
     ) : !t.is_transfer && !t.is_investment ? (
       <button className="text-[11px] text-text-muted hover:text-text" onClick={() => setSplittingId((id) => (id === t.id ? null : t.id))}>Split</button>
     ) : null
+
+  // Desktop grid columns. Selection uses the page's own `selected` set (plain
+  // checkboxes in render cells) rather than React Aria's selection so the bulk
+  // bar keeps working unchanged; sorting maps to the existing sort/order query.
+  const allSelected =
+    !!result && result.items.length > 0 && result.items.every((t) => selected.has(t.id))
+  const txnColumns: DataGridColumn<Txn>[] = [
+    {
+      id: 'select',
+      width: '2.25rem',
+      header: (
+        <input
+          type="checkbox"
+          aria-label="Select all"
+          checked={allSelected}
+          onChange={(e) =>
+            setSelected(e.target.checked && result ? new Set(result.items.map((t) => t.id)) : new Set())
+          }
+        />
+      ),
+      render: (t) => (
+        <input
+          type="checkbox"
+          aria-label={`Select ${t.description ?? t.id}`}
+          checked={selected.has(t.id)}
+          onChange={() => toggleSel(t.id)}
+        />
+      ),
+    },
+    { id: 'date', header: 'Date', allowsSorting: true, render: (t) => <span className="whitespace-nowrap">{t.posted_date}</span> },
+    {
+      id: 'description',
+      header: 'Description',
+      isRowHeader: true,
+      allowsSorting: true,
+      render: (t) => (
+        <div className="min-w-0">
+          <span className="break-words">{t.description ?? t.merchant_key ?? '—'}</span>
+          {attributionHint(t) && <span className="block text-xs text-text-muted">{attributionHint(t)}</span>}
+        </div>
+      ),
+    },
+    {
+      id: 'category',
+      header: 'Category',
+      allowsSorting: true,
+      render: (t) => <CategoryCell t={t} options={categoryOptions} onCategorize={categorize} />,
+    },
+    {
+      id: 'amount',
+      header: 'Amount',
+      allowsSorting: true,
+      render: (t) => <div className={`text-right ${t.amount < 0 ? '' : POS}`}>{money(t.amount)}</div>,
+    },
+    { id: 'actions', width: '3.5rem', header: '', render: (t) => renderSplitBtn(t) },
+  ]
+
+  // Desktop split editor lives in a modal (React Aria tables can't host inline
+  // detail rows); mobile keeps the inline editor in the card.
+  const splittingTxn = !isMobile && splittingId ? result?.items.find((t) => t.id === splittingId) : undefined
 
   return (
     <div className="max-w-[1100px] mx-auto p-4">
@@ -286,53 +394,19 @@ export default function TransactionsPage() {
               ))}
             </ul>
           ) : (
-            <table className="w-full border-collapse text-[13px]">
-              <thead>
-                <tr className="text-left text-text-muted border-b border-border">
-                  <th className="p-1.5">
-                    <input type="checkbox" aria-label="Select all"
-                      checked={result.items.length > 0 && result.items.every((t) => selected.has(t.id))}
-                      onChange={(e) => setSelected(e.target.checked ? new Set(result.items.map((t) => t.id)) : new Set())} />
-                  </th>
-                  <th className="p-1.5 cursor-pointer" onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
-                  <th className="p-1.5 cursor-pointer" onClick={() => toggleSort('description')}>Description{arrow('description')}</th>
-                  <th className="p-1.5 cursor-pointer" onClick={() => toggleSort('category')}>Category{arrow('category')}</th>
-                  <th className="p-1.5 cursor-pointer text-right" onClick={() => toggleSort('amount')}>Amount{arrow('amount')}</th>
-                  <th className="p-1.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {result.items.map((t) => (
-                  <Fragment key={t.id}>
-                    <tr data-testid="txn-row" className="border-b border-border">
-                      <td className="p-1.5">
-                        <input type="checkbox" aria-label={`Select ${t.description ?? t.id}`}
-                          checked={selected.has(t.id)} onChange={() => toggleSel(t.id)} />
-                      </td>
-                      <td className="p-1.5 whitespace-nowrap">{t.posted_date}</td>
-                      <td className="p-1.5">
-                        {t.description ?? t.merchant_key ?? '—'}
-                        {attributionHint(t) && (
-                          <span className="block text-xs text-text-muted">{attributionHint(t)}</span>
-                        )}
-                      </td>
-                      <td className="p-1.5">{renderCategory(t)}</td>
-                      <td className={`p-1.5 text-right ${t.amount < 0 ? '' : POS}`}>{money(t.amount)}</td>
-                      <td className="p-1.5 text-right whitespace-nowrap">{renderSplitBtn(t)}</td>
-                    </tr>
-                    {splittingId === t.id && (
-                      <tr>
-                        <td colSpan={6} className="px-1.5 pb-2">
-                          <SplitEditor amount={t.amount} categories={categories}
-                            onCancel={() => setSplittingId(null)}
-                            onSave={(allocs) => doSplit(t.id, allocs)} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+            <DataGrid<Txn>
+              aria-label="Transactions"
+              rowTestId="txn-row"
+              className="text-[13px]"
+              rows={result.items}
+              getRowId={(t) => t.id}
+              columns={txnColumns}
+              sortDescriptor={{ column: sort, direction: order === 'asc' ? 'ascending' : 'descending' }}
+              onSortChange={(d) => {
+                setSort(d.column as NonNullable<TxnQuery['sort']>)
+                setOrder(d.direction === 'ascending' ? 'asc' : 'desc')
+              }}
+            />
           )}
         </div>
 
@@ -351,6 +425,23 @@ export default function TransactionsPage() {
           </div>
         )}
       </div>
+
+      {/* Desktop split editor — modal (the table can't host an inline row). */}
+      {splittingTxn && (
+        <Dialog open onOpenChange={(o) => { if (!o) setSplittingId(null) }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Split transaction</DialogTitle>
+            </DialogHeader>
+            <SplitEditor
+              amount={splittingTxn.amount}
+              categories={categories}
+              onCancel={() => setSplittingId(null)}
+              onSave={(allocs) => doSplit(splittingTxn.id, allocs)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
