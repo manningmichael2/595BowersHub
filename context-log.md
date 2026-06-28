@@ -1191,3 +1191,17 @@ With the shell stable, began the finance UI build (owner-directed) by adopting t
 - **Bundle ceiling watch:** the lazy TransactionsPage chunk grew 200KB→357KB→444KB (≈110→136KB gzip) across #1→#3 as Table/ComboBox/Calendar/NumberField landed. Loaded only on the finance route + cached; acceptable for a power-tool, but flagged for an owner decision if it matters.
 
 - [Next] **Owner to redeploy backend + validate the finance pages live** (finance data won't load against the stale backend; the new controls render regardless but filtering/categorizing needs data). Confirm the two #3 tradeoffs feel right. Then: extend widgets to the other finance pages (CurrencyInput in Budgets/SplitEditor; possibly DataGrid for NetWorth/holdings), and decide on the bundle ceiling. Still pending from earlier: backend redeploy is ALSO the real fix for the Finance/Database nav gating (the /api/me/features 404).
+
+## [2026-06-28] Finance UI build — money inputs + adoption assessment — Claude Code
+
+Continued the finance UI build (owner thumbs-up) — extended the widgets to the other finance money/category inputs.
+
+- **#4 (0ecebbf)** — CurrencyInput where money is entered: SplitEditor (per-line Combobox category + CurrencyInput amount; amount state string→number, NaN=empty; inline styles modernized to tokens + Button primitive) and BudgetsPage ("set $" → CurrencyInput). React Aria NumberField commits on blur, so the existing BudgetsPage fireEvent test passes unchanged.
+- **Bundle:** Vite now extracts react-aria into a SHARED chunk across the lazy finance routes, so per-page finance chunks stay tiny (BudgetsPage ~2.7KB) and react-aria loads once for the whole finance area. Main bundle still verified free of react-aria.
+
+**Adoption assessment — widgets now applied everywhere they cleanly fit:**
+- Transactions: Combobox (filter/bulk) + DateRangePicker + DataGrid w/ inline-categorize. Splits: Combobox + CurrencyInput. Budgets: CurrencyInput. ✓
+- **RetirementPlanner — skipped (not a clean fit):** its custom `NumField` handles mixed `$`/`%`/age types consistently; only 4/10 fields are currency, so partial CurrencyInput would fragment it. A generic NumberField primitive (prefix/suffix/format) would be the right way to unify it — a larger primitive addition, deferred.
+- **NetWorthPage — skipped:** grouped accounts-by-type display list with subtotals; a flat sortable DataGrid isn't clearly better for net worth (no editing).
+
+- [Next] Finance-widget adoption is substantially complete. Owner to validate the finance pages live (still needs the backend redeploy). Open options: a generic NumberField widget to unify RetirementPlanner; bundle-ceiling decision; then merge `spec/design-system-and-shell` → `main` after the desktop pass.
