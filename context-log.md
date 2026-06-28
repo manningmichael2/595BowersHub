@@ -1154,3 +1154,25 @@ Completed Phase 4 token migration on `spec/design-system-and-shell`. Spec is now
 - **Softer follow-ups (not DoD gates, deferred):** wholesale swap of raw `<button>`/card/input markup onto the R2 `Button`/`Card`/`Input` *components* (colors are done; component adoption is cosmetic-debt); wire store `error` fields through `ErrorState`; migrate DashboardPage's state-driven tabs onto `SecondaryNav`; **adopt the React-Aria finance widgets in the finance pages** (this is finance-north-star work — re-check the main-chunk bundle ceiling when it lands).
 
 - [Next] Branch `spec/design-system-and-shell` carries Phases 1–4 (Phase 1+2 already merged to `main`; Phases 3–4 ahead). **Owner still hasn't done a live desktop+mobile visual pass** (no reachable backend in this checkout). Suggested: run the dev server, walk the shell + chat regression gate + the retoned finance pages, then merge to `main` so Kiro sees the finished design system. After merge, the **finance north star** is unblocked on a stable shell (per `ui-before-finance-priority`).
+
+---
+
+## [2026-06-28] design-system-and-shell — mobile shell chrome + nav hardening — Claude Code
+
+Live mobile validation pass with the owner (dev server over Tailscale) surfaced real gaps beyond the Phase-4 token work; fixed on `spec/design-system-and-shell`. All green throughout (340 frontend tests, tsc + build clean); each change its own commit.
+
+**Root-cause finding (owner action needed): the deployed backend is STALE.** `/api/me/features` returns 404 on the running backend (uptime ~3.4d → started ~2026-06-25), but that route shipped in `6c986b3` (role-aware nav) on 2026-06-26. So `loadFeatureAccess()` 404s → `featureAccess` stays null → gated nav (Finance/Database) was hidden on EVERY device, desktop included. **The real fix is a backend redeploy.** (Sibling protected routes return 401; only `/api/me/features` 404s — confirming it's route-not-registered, not auth.)
+
+**Mobile shell chrome (the big gap).** `ShellLayout` rendered NO top bar on mobile — only the bottom tab bar — so any page outside the 5 tabs had no title, no account/logout, and no up/back (browser-back unwound to chat).
+- `shell/MobileTopBar` (menu + brand + global-search entry) + `shell/NavDrawer` (scrollable left Sheet: all destinations incl. gated, tools, account + logout). New `ui/Sheet` primitive over Radix Dialog (focus-trap/ESC/scroll-lock) + slide/fade keyframes in tailwind.
+- Mobile `--shell-top-h` now = real bar height, so `.shell-content` AND `.bh-app-shell` (chat) offset below it with no per-surface edits. Owner confirmed chat + the fixed mobile conversation-sidebar render correctly under it.
+
+**Gated-nav hardening.** `isNavItemVisible()` renders gated items OPTIMISTICALLY while access is null (server still enforces on click) instead of fail-closed-hiding them — un-hides Finance/Database even against the stale backend. Wired into BottomTabBar/NavRail/NavDrawer. `loadFeatureAccess()` gained bounded retry w/ backoff. Tradeoff (documented): a less-privileged user may briefly see a button they can't use during the load window.
+
+**Settings master-detail (mobile).** The cramped horizontal-scroll chip row → full-width section LIST that drills into a pane with a back-to-LIST control (not `navigate(-1)`, which was the dump-to-chat trap). Desktop sidebar+pane unchanged. `activeSection` is now `SectionId | null`; pane switch extracted to `<SectionPane>`.
+
+**De-dup now that the shell owns chrome.** ChatHeader's search button removed (duplicated the shell's global search — was doubled on desktop too); chat Sidebar's legacy primary-nav link row removed (duplicated NavRail). `DbBrowserPage` had leftover manual `pb-14 sm:pb-0 sm:pt-11` offsets (T11 removed these from Dashboard/Finance but missed it) → double-offset, removed. ChatHeader/ChatArea mobile toggles re-pointed `md:hidden`→`sm:hidden` (canonical breakpoint).
+
+**Verified already-good (no change):** TransactionsPage is responsive (stacked cards vs table at `isMobile`, R5.3); dashboard widgets already use `ErrorState`+retry (`WidgetShell`).
+
+- [Next] Owner to: **redeploy backend** (the real Finance/Database fix), do a **desktop visual pass**, then merge `spec/design-system-and-shell` → `main`. Deferred (not blockers): finance-widget adoption in finance pages (north-star work — re-check React-Aria main-chunk ceiling then); chat Sidebar account/Settings/Admin footer still duplicates the drawer on mobile (owner undecided — Admin is the one non-redundant shortcut); DashboardNav stays state-driven (doesn't map to the route-based SecondaryNav without making dashboard pages routes).
