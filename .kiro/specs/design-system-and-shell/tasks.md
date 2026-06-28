@@ -133,8 +133,8 @@
 - **Effort:** M
 - **Dependencies:** Task 13
 - **Requirements:** R4.3
-- [ ] Stand up a Playwright screenshot-diff capability (mirroring the `ai-finance-insights` Phase 4 precedent); capture per-page baselines at mobile 390px and desktop ≥1024px to gate each migration step.
-- [ ] **Tests:** baseline capture + diff runs in CI/local; a deliberate change is caught by the diff.
+- **[DECISION 2026-06-28 — owner-approved] Deferred in favour of lightweight live visual checks.** Rather than stand up Playwright (browser install + auth fixture + baseline management) up front, Phase 4 migrates in small batches verified live on the running dev server (Tailscale `:5173` against the real backend). The token system makes regressions unlikely (utilities resolve to the same colors), and each batch is its own revertable commit. The full Playwright harness can be added later if churn warrants it.
+- [ ] (Deferred) Playwright screenshot-diff at 390px/≥1024px.
 
 ## Task 15: Migrate un-tokenized surfaces + remove dead hardcoding (incremental)
 - **Effort:** L
