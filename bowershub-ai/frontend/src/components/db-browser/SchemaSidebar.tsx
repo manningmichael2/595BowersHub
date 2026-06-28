@@ -596,9 +596,11 @@ function TableRow({
           }}
         >
           {table.has_link_table && <span className="text-xs shrink-0" title="Image support">📷</span>}
-          <span className="truncate">{table.name}</span>
+          {/* overflow-x-hidden (not `truncate`) so the ellipsis still clips
+              horizontally but descenders (g/p/y) aren't clipped vertically. */}
+          <span className="whitespace-nowrap overflow-x-hidden text-ellipsis">{table.name}</span>
           {schemaSuffix && (
-            <span className="text-xs ml-1 shrink-0 truncate" style={{ color: 'var(--color-text-muted)' }}>
+            <span className="text-xs ml-1 shrink-0 whitespace-nowrap overflow-x-hidden text-ellipsis" style={{ color: 'var(--color-text-muted)' }}>
               {schema}
             </span>
           )}
@@ -723,7 +725,7 @@ function SchemaGroup({
         >
           <polyline points="9 18 15 12 9 6" />
         </svg>
-        <span className="text-sm font-medium truncate">{name}</span>
+        <span className="text-sm font-medium whitespace-nowrap overflow-x-hidden text-ellipsis">{name}</span>
         <span className="text-xs ml-auto shrink-0" style={{ color: 'var(--color-text-muted)' }}>
           {tables.length}{hiddenCount > 0 ? ` (+${hiddenCount})` : ''}
         </span>
