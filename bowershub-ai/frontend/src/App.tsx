@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/auth'
 import { useSettingsStore } from './stores/settings'
@@ -17,12 +17,10 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import SettingsPage from './pages/SettingsPage'
 import AdminConsolePage from './pages/AdminConsolePage'
 import ScheduledPromptsPage from './pages/ScheduledPromptsPage'
-import QuickCaptureOverlay from './components/QuickCaptureOverlay'
 import QuickCapturePage from './pages/QuickCapturePage'
 import ToolFramePage from './pages/ToolFramePage'
 import DashboardPage from './pages/DashboardPage'
-import BottomTabBar from './components/BottomTabBar'
-import TopNav from './components/TopNav'
+import ShellLayout from './components/shell/ShellLayout'
 
 // Lazy-loaded DB Browser — code-split to avoid impacting chat page load
 const DbBrowserPage = lazy(() => import('./pages/DbBrowserPage'))
@@ -64,13 +62,6 @@ function App() {
   const loadSettings = useSettingsStore(s => s.loadSettings)
   const effectiveTheme = useSettingsStore(s => s.effectiveTheme)
   const effectiveTextSize = useSettingsStore(s => s.effectiveTextSize)
-
-  // Quick Capture overlay visibility. Driven by the global Ctrl/Cmd+Shift+K
-  // hotkey below. The `/quick-capture` route mounts its own copy of the
-  // overlay (via QuickCapturePage) so this state is only for the in-app
-  // hotkey path — nothing on this state needs to know about share-target
-  // navigations.
-  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false)
 
   // Fetch the user's resolved settings (theme + text size + voice + morning card)
   // once we know who they are. The store already hydrates `effectiveTheme` from
@@ -146,32 +137,8 @@ function App() {
     root.style.fontSize = ''
   }, [effectiveTextSize])
 
-  // Global keyboard shortcut: Ctrl+Shift+K (or Cmd+Shift+K on macOS) opens
-  // the Quick Capture overlay from anywhere in the app (R9.1). The handler
-  // is only attached when a user is logged in — otherwise the overlay's
-  // workspace lookup would have nothing to anchor to.
-  //
-  // We deliberately gate on `e.shiftKey && e.code === 'KeyK'` (not
-  // `e.key === 'K'`) so the binding survives keyboard layouts where Shift
-  // changes the printable character. We also skip if any other modal-like
-  // element has captured focus (currently we just trust the overlay's own
-  // Escape handler to compete cleanly — if multiple modals stack later we
-  // can revisit). AppShell already uses Ctrl/Cmd+K (no Shift) for the
-  // search palette, so requiring Shift keeps the two bindings distinct.
-  useEffect(() => {
-    if (!user) return
-    const handler = (e: KeyboardEvent) => {
-      const isMod = e.ctrlKey || e.metaKey
-      if (!isMod || !e.shiftKey) return
-      // `code` is layout-independent; `key` would be 'K' here too but
-      // checking code is more robust.
-      if (e.code !== 'KeyK' && e.key !== 'K' && e.key !== 'k') return
-      e.preventDefault()
-      setQuickCaptureOpen(prev => !prev)
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [user])
+  // Global command hotkeys (Cmd/Ctrl+K search, Cmd/Ctrl+Shift+K quick capture)
+  // live in ShellLayout now (R3.9), so they work on every section.
 
   if (!user) {
     return (
@@ -187,43 +154,34 @@ function App() {
 
   return (
     <>
-      {/* Desktop top navigation bar */}
-      <TopNav />
-
+      {/* All authenticated sections render inside the one app shell (R3.1):
+          a layout route whose <Outlet/> hosts the active section. */}
       <Routes>
-        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/admin/*" element={<AdminConsolePage />} />
-        <Route path="/quick-capture" element={<QuickCapturePage />} />
-        <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/finance" element={<FinanceLayout />}>
-          <Route index element={<Navigate to="/finance/transactions" replace />} />
-          <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
-          <Route path="ask" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceQaPage /></Suspense>} />
-          <Route path="insights" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><InsightsPage /></Suspense>} />
-          <Route path="retirement" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RetirementPlanner /></Suspense>} />
-          <Route path="review" element={<Navigate to="/finance/transactions" replace />} />
-          <Route path="recurring" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RecurringPage /></Suspense>} />
-          <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
-          <Route path="budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
+        <Route element={<ShellLayout />}>
+          <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin/*" element={<AdminConsolePage />} />
+          <Route path="/quick-capture" element={<QuickCapturePage />} />
+          <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/finance" element={<FinanceLayout />}>
+            <Route index element={<Navigate to="/finance/transactions" replace />} />
+            <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
+            <Route path="ask" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><FinanceQaPage /></Suspense>} />
+            <Route path="insights" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><InsightsPage /></Suspense>} />
+            <Route path="retirement" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RetirementPlanner /></Suspense>} />
+            <Route path="review" element={<Navigate to="/finance/transactions" replace />} />
+            <Route path="recurring" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><RecurringPage /></Suspense>} />
+            <Route path="net-worth" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><NetWorthPage /></Suspense>} />
+            <Route path="budgets" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><BudgetsPage /></Suspense>} />
+          </Route>
+          <Route path="/tools/:toolId" element={<ToolFramePage />} />
+          <Route path="/db/*" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><DbBrowserPage /></Suspense>} />
+          <Route path="/chat/*" element={<AppShell />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/*" element={<AppShell />} />
         </Route>
-        <Route path="/tools/:toolId" element={<ToolFramePage />} />
-        <Route path="/db/*" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><DbBrowserPage /></Suspense>} />
-        <Route path="/chat/*" element={<AppShell />} />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/*" element={<AppShell />} />
       </Routes>
-
-      {/* Hotkey-triggered Quick Capture overlay. The `/quick-capture`
-          route mounts its own copy via QuickCapturePage, so we render
-          this one only when the user opened it via Ctrl/Cmd+Shift+K. */}
-      {quickCaptureOpen && (
-        <QuickCaptureOverlay onClose={() => setQuickCaptureOpen(false)} />
-      )}
-
-      {/* Bottom tab bar - mobile only */}
-      <BottomTabBar />
     </>
   )
 }

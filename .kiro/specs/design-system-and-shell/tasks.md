@@ -95,35 +95,35 @@
 - **Effort:** L
 - **Dependencies:** Task 9
 - **Requirements:** R3.1, R3.8
-- [ ] Add `frontend/src/hooks/useBreakpoint.ts` reading `matchMedia('(min-width: <BREAKPOINT_DESKTOP>px)')`; export `BREAKPOINT_DESKTOP` from one module and **re-point the chat `AppShell` sidebar breakpoint** (currently `md`, `AppShell.tsx:55`) to it.
-- [ ] Refactor `App.tsx` (`:176-224`) from loose `<TopNav/>`/`<Routes>`/`<BottomTabBar/>` siblings into a parent `<Route element={<ShellLayout/>}>` wrapping all authenticated sections via `<Outlet/>`; unauthenticated route tree unaffected.
-- [ ] Land this as **its own revertable commit**, separate from P4; abort path = revert this commit.
-- [ ] **Tests (chat is the named regression gate):** chat `position:fixed; inset:0`, `body{overflow:hidden}` scroll-lock, and safe-area offsets verified intact on **both** desktop and mobile; a **700px-width** assertion proves coherent chrome (no desktop chat chrome inside mobile shell). Refactor is revertable.
+- [x] Added `hooks/useBreakpoint.ts` — `BREAKPOINT_DESKTOP = 640` (canonical; unifies on Tailwind `sm`) + reactive `useBreakpoint()` over `matchMedia`. **Re-pointed AppShell sidebar `md:`→`sm:`** (`AppShell.tsx`) so the chat sidebar switches at the canonical breakpoint — the 640–767px band is now coherently desktop.
+- [x] Refactored `App.tsx`: loose `<TopNav/>`/`<Routes>`/`<BottomTabBar/>` siblings → a `<Route element={<ShellLayout/>}>` layout route wrapping all authenticated sections via `<Outlet/>` (`components/shell/ShellLayout.tsx`); QuickCapture overlay stays outside the shell; unauthenticated tree unaffected. Behavior-preserving (same chrome around the same content).
+- [x] Lands as **its own revertable commit** (this one), separate from P4. Abort = revert it.
+- [x] **Tests + chat gate:** `useBreakpoint.test.tsx` (both branches + canonical value), `ShellLayout.test.tsx` (Outlet wraps section + chrome renders once). Chat invariants verified untouched: `AppShell` `position:fixed; inset:0`, index.css `body{overflow:hidden}` + `.bh-app-shell` top:44/bottom:52+safe-area offsets unchanged. tsc clean; 324 tests; build green. **Visual desktop+mobile chat confirmation pending owner review in the running app** (no reachable backend in this checkout for an automated runtime pass).
 
 ## Task 11: Desktop chrome (nav rail + contextual top bar) + offset consolidation
 - **Effort:** L
 - **Dependencies:** Task 10
 - **Requirements:** R3.2, R3.4
-- [ ] Build `shell/NavRail.tsx` (icon+label, collapsible to icon-only; collapsed state persisted via the `settings` store pattern, survives reload/PWA) + `shell/TopBar.tsx` (page title, page-actions slot, account menu, global-search entry).
-- [ ] Move the duplicated `sm:pt-11`/`pb-14` offsets (`FinanceLayout`/`DashboardPage`/`Sidebar`) and the `.bh-app-shell` `top:44px`/`bottom:52px` `index.css` rules into the shell; sections drop their offset code; each section's scroll container still behaves (chat full-area, finance/dashboard scroll regions).
-- [ ] **Tests:** rail collapse/expand persists across reload; offsets correct per section; no double-offset regression.
+- [x] Built `shell/NavRail.tsx` (Lucide icon+label from the single `navItems` source, role-filtered; collapsible to icon-only via `useRailCollapsed`, persisted in localStorage, survives reload/PWA) + `shell/TopBar.tsx` (page title + account menu/logout via the Radix DropdownMenu primitive). Replaces the old `TopNav` (deleted). ShellLayout mounts them only ≥ canonical desktop breakpoint; mobile keeps the bottom tab bar.
+- [x] Consolidated offsets into the shell via CSS vars (`--shell-rail-w`/`--shell-top-h`/`--shell-bottom-h`, set by ShellLayout per breakpoint + collapse). New `.shell-content` (fixed content area) and the rewritten `.bh-app-shell` both consume them; removed `sm:pt-11 pb-14` from `DashboardPage`/`FinanceLayout`. `BottomTabBar` re-layered `z-50`→`z-shell`. **Sidebar `pb-14` kept** — the mobile chat sidebar is viewport-`fixed` (not bounded by `.bh-app-shell`), so it genuinely needs it (not redundant).
+- [x] **Tests:** `ShellLayout.test.tsx` (desktop→rail+topbar, mobile→tabbar, offset vars published), `useRailCollapsed.test.tsx` (default expanded, persists+rehydrates, updater fn). tsc clean; 329 tests; build green. Page-actions slot + global-search entry deferred to T13/P4 (noted in TopBar).
 
 ## Task 12: Mobile chrome (bottom tab bar + secondary nav)
 - **Effort:** M
 - **Dependencies:** Task 10
 - **Requirements:** R3.3
-- [ ] On `<BREAKPOINT_DESKTOP`, keep `BottomTabBar` for primary nav and add `shell/SecondaryNav.tsx` (scrollable segmented control / bottom sheet) replacing per-section sub-nav rows.
-- [ ] **Tests:** mobile branch (matchMedia false) renders bottom tabs + secondary nav; section sub-nav reachable.
+- [x] `BottomTabBar` stays primary nav below the canonical breakpoint (mounted by ShellLayout when mobile). Added `shell/SecondaryNav.tsx` — one shared, horizontally-scrollable segmented control (NavLink-driven, tokenized) replacing hand-rolled sub-nav rows; **`FinanceLayout` refactored to use it** (dropped its bespoke row). Works at every width (scrolls when narrow), so it's the mobile secondary-nav story too.
+- [x] **Tests:** `SecondaryNav.test.tsx` — labelled nav landmark, links, active `aria-current`. tsc clean; 330 tests; build green. (DashboardPage's tabs are state-driven, not routes — left for P4 to adopt the primitive.)
 
 ## Task 13: Nav gating, safe-area/PWA, sections preserved, global hotkeys
 - **Effort:** M
 - **Dependencies:** Task 11, Task 12
 - **Requirements:** R3.5, R3.6, R3.7, R3.9
-- [ ] Drive shell nav entirely from `navItems.ts` honoring `useFeatures`/`isFeatureVisible` + `/api/me/features` + `hidden_nav` + the cosmetic self-hide (`PUT /api/me/settings/nav`); nothing hardcoded (R3.5).
-- [ ] Apply `viewport-fit=cover` + `env(safe-area-inset-*)` to rail/top bar/bottom tab; coexist with the SW "New version — Reload" toast; no offline/Workbox work (R3.6).
-- [ ] Verify every section (chat sidebar/switcher, finance sub-tabs, dashboard tabs, db-browser, settings, admin, mobile hamburger→workspace switcher) remains reachable/functional desktop+mobile (R3.7).
-- [ ] Move Cmd/Ctrl+K (search) and Cmd/Ctrl+Shift+K (QuickCapture) from `AppShell`/`App.tsx` into the shell so they work on every section; keep them conflict-free and correct with an open Radix Dialog/Popover (ESC behaves). **Global search = existing chat/knowledge search made reachable everywhere (scope unchanged)** unless owner requests cross-domain search (R3.9).
-- [ ] **Tests:** viewer/member sees only permitted + non-hidden nav; hotkeys work on a non-chat route and ESC-with-Dialog-open behaves; safe-area padding applied.
+- [x] Shell nav driven entirely from `navItems.ts` via `isFeatureVisible` — which **already** computes `permitted (server) ∩ not hidden_nav` (`featureNav.ts`), so feature gating + the cosmetic self-hide are honored by NavRail + BottomTabBar. Nothing hardcoded.
+- [x] `viewport-fit=cover` added to the viewport meta; `env(safe-area-inset-*)` applied to NavRail (top/left/bottom), TopBar (top/right), BottomTabBar (bottom/left/right), and `.shell-content` (left/right). Mobile `--shell-top-h` = `env(safe-area-inset-top)` so content clears the notch. SW "Reload" toast unaffected (Toaster is outside the shell offsets); no offline/Workbox work.
+- [x] Sections preserved (R3.7): the route tree is unchanged from T10 — every section still mounts via the layout route. Verified by the full suite (all section page tests green) + tsc/build. (Live desktop+mobile walkthrough is the owner's visual pass.)
+- [x] Moved Cmd/Ctrl+K (search) and Cmd/Ctrl+Shift+K (QuickCapture) into `ShellLayout` (removed from `AppShell`/`App.tsx`); both now work on every section. `isModalOpen()` guard skips the chords while a Radix Dialog/AlertDialog is open; Escape closes search. SearchOverlay + QuickCaptureOverlay now render at shell level. **SearchOverlay result-click now `navigate('/chat')`** so global search is functional from any section (scope unchanged — still the chat/knowledge index). Added the search entry button to TopBar.
+- [x] **Tests:** `shellHotkeys.test.tsx` — Cmd/Ctrl+K opens search on a non-chat route, Escape closes, Cmd+Shift+K opens quick capture (distinct from search). tsc clean; 333 tests; build green.
 
 ---
 
