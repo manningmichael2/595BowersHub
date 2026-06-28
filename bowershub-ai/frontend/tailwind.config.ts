@@ -97,6 +97,26 @@ export default {
       // Note: `tabular-nums` for monetary/figure alignment is a built-in
       // Tailwind utility (fontVariantNumeric) — no config needed; primitives
       // and finance figure displays apply it directly.
+
+      // Enter animations for the Sheet/drawer (Radix mounts content already-open,
+      // so these play on open; close unmounts without an exit animation). Honors
+      // the prefers-reduced-motion collapse in index.css.
+      keyframes: {
+        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'slide-in-left': {
+          from: { transform: 'translateX(-100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        'slide-in-right': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'slide-in-left': 'slide-in-left 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'slide-in-right': 'slide-in-right 200ms cubic-bezier(0.2, 0, 0, 1)',
+      },
     },
   },
   plugins: [],

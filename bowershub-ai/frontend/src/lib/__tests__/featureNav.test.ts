@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  roleMeets, roleRank, isFeatureVisible, visibleFeatureKeys, type FeatureAccess,
+  roleMeets, roleRank, isFeatureVisible, isNavItemVisible, visibleFeatureKeys, type FeatureAccess,
 } from '../featureNav'
 
 const access = (over: Partial<FeatureAccess> = {}): FeatureAccess => ({
@@ -48,6 +48,24 @@ describe('isFeatureVisible — permitted ∩ not self-hidden', () => {
   })
   it('returns false when access has not loaded yet', () => {
     expect(isFeatureVisible(null, 'finance')).toBe(false)
+  })
+})
+
+describe('isNavItemVisible — optimistic while access is unresolved', () => {
+  it('always shows an ungated item (no feature key)', () => {
+    expect(isNavItemVisible(null, undefined)).toBe(true)
+    expect(isNavItemVisible(access(), undefined)).toBe(true)
+  })
+  it('shows a gated item OPTIMISTICALLY while access is null (vs the strict false)', () => {
+    // The regression that hid Finance/Database when /api/me/features 404'd:
+    // strict isFeatureVisible fails closed, the nav helper does not.
+    expect(isFeatureVisible(null, 'finance')).toBe(false)
+    expect(isNavItemVisible(null, 'finance')).toBe(true)
+  })
+  it('applies the strict rule once access is resolved', () => {
+    expect(isNavItemVisible(access(), 'finance')).toBe(true) // permitted
+    expect(isNavItemVisible(access(), 'database')).toBe(false) // not permitted
+    expect(isNavItemVisible(access({ hidden_nav: ['finance'] }), 'finance')).toBe(false) // self-hidden
   })
 })
 
