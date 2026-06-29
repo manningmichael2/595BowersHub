@@ -2,7 +2,9 @@
 Lists Service — shopping lists, to-do lists, packing lists, etc.
 
 Items can be added, checked off, unchecked, and removed via chat or DB Admin.
-Each user can have multiple named lists.
+Lists are household-shared by default (is_shared) — both members add to and check
+off one list — while a list can still be private to its creator (is_shared=false).
+Resolution prefers the shared list of a given name (see `_resolve_list_id`).
 """
 import logging
 from datetime import datetime, timezone
@@ -13,6 +15,27 @@ from backend.database import get_pool
 logger = logging.getLogger(__name__)
 
 
+async def _resolve_list_id(conn, list_name: str, user_id: int, create: bool = False) -> Optional[int]:
+    """Resolve a list the user may access — a shared list of that name (any
+    member), or the user's own private list — preferring shared. Optionally
+    create it (shared by default) if absent."""
+    row = await conn.fetchrow(
+        "SELECT id FROM public.bh_lists "
+        "WHERE LOWER(name) = LOWER($1) AND (is_shared OR user_id = $2) "
+        "ORDER BY is_shared DESC, id LIMIT 1",
+        list_name.strip(), user_id,
+    )
+    if row:
+        return row["id"]
+    if create:
+        row = await conn.fetchrow(
+            "INSERT INTO public.bh_lists (name, user_id) VALUES ($1, $2) RETURNING id",
+            list_name.strip(), user_id,  # is_shared defaults true
+        )
+        return row["id"]
+    return None
+
+
 async def get_list(list_name: str, user_id: int = 1, show_checked: bool = False) -> dict:
     """
     Get all items on a list.
@@ -20,12 +43,8 @@ async def get_list(list_name: str, user_id: int = 1, show_checked: bool = False)
     """
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Find or create the list
-        list_row = await conn.fetchrow(
-            "SELECT id, name, description FROM public.bh_lists WHERE LOWER(name) = LOWER($1) AND user_id = $2",
-            list_name.strip(), user_id
-        )
-        if not list_row:
+        list_id = await _resolve_list_id(conn, list_name, user_id)
+        if not list_id:
             return {
                 "list": list_name,
                 "items": [],
@@ -36,12 +55,12 @@ async def get_list(list_name: str, user_id: int = 1, show_checked: bool = False)
         if show_checked:
             items = await conn.fetch(
                 "SELECT * FROM public.bh_list_items WHERE list_id = $1 ORDER BY checked, created_at",
-                list_row["id"]
+                list_id
             )
         else:
             items = await conn.fetch(
                 "SELECT * FROM public.bh_list_items WHERE list_id = $1 AND checked = false ORDER BY created_at",
-                list_row["id"]
+                list_id
             )
 
     items_list = [dict(r) for r in items]
@@ -64,16 +83,7 @@ async def add_items(list_name: str, items: list[str], user_id: int = 1) -> dict:
 
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Find or create list
-        list_row = await conn.fetchrow(
-            "SELECT id FROM public.bh_lists WHERE LOWER(name) = LOWER($1) AND user_id = $2",
-            list_name.strip(), user_id
-        )
-        if not list_row:
-            list_row = await conn.fetchrow(
-                "INSERT INTO public.bh_lists (name, user_id) VALUES ($1, $2) RETURNING id",
-                list_name.strip(), user_id
-            )
+        list_id = await _resolve_list_id(conn, list_name, user_id, create=True)
 
         # Add items (skip duplicates)
         added = []
@@ -87,20 +97,20 @@ async def add_items(list_name: str, items: list[str], user_id: int = 1) -> dict:
             # Check for existing unchecked duplicate
             existing = await conn.fetchval(
                 "SELECT id FROM public.bh_list_items WHERE list_id = $1 AND LOWER(text) = LOWER($2) AND checked = false",
-                list_row["id"], text
+                list_id, text
             )
             if existing:
                 continue  # Already on the list
 
             await conn.execute(
                 "INSERT INTO public.bh_list_items (list_id, text, quantity) VALUES ($1, $2, $3)",
-                list_row["id"], text, quantity
+                list_id, text, quantity
             )
             added.append(item_text)
 
         # Update list timestamp
         await conn.execute(
-            "UPDATE public.bh_lists SET updated_at = NOW() WHERE id = $1", list_row["id"]
+            "UPDATE public.bh_lists SET updated_at = NOW() WHERE id = $1", list_id
         )
 
     if not added:
@@ -124,11 +134,8 @@ async def check_items(list_name: str, items: list[str], user_id: int = 1) -> dic
 
     pool = get_pool()
     async with pool.acquire() as conn:
-        list_row = await conn.fetchrow(
-            "SELECT id FROM public.bh_lists WHERE LOWER(name) = LOWER($1) AND user_id = $2",
-            list_name.strip(), user_id
-        )
-        if not list_row:
+        list_id = await _resolve_list_id(conn, list_name, user_id)
+        if not list_id:
             return {"_display": f"No list named **{list_name}** found."}
 
         checked = []
@@ -141,7 +148,7 @@ async def check_items(list_name: str, items: list[str], user_id: int = 1) -> dic
                 UPDATE public.bh_list_items
                 SET checked = true, checked_at = NOW()
                 WHERE list_id = $1 AND checked = false AND LOWER(text) LIKE '%' || $2 || '%'
-            """, list_row["id"], item_text)
+            """, list_id, item_text)
             # Check if any rows were affected
             count = int(result.split(" ")[-1]) if result else 0
             if count > 0:
@@ -164,11 +171,8 @@ async def remove_items(list_name: str, items: list[str], user_id: int = 1) -> di
 
     pool = get_pool()
     async with pool.acquire() as conn:
-        list_row = await conn.fetchrow(
-            "SELECT id FROM public.bh_lists WHERE LOWER(name) = LOWER($1) AND user_id = $2",
-            list_name.strip(), user_id
-        )
-        if not list_row:
+        list_id = await _resolve_list_id(conn, list_name, user_id)
+        if not list_id:
             return {"_display": f"No list named **{list_name}** found."}
 
         removed = []
@@ -177,7 +181,7 @@ async def remove_items(list_name: str, items: list[str], user_id: int = 1) -> di
             result = await conn.execute("""
                 DELETE FROM public.bh_list_items
                 WHERE list_id = $1 AND LOWER(text) LIKE '%' || $2 || '%'
-            """, list_row["id"], item_text)
+            """, list_id, item_text)
             count = int(result.split(" ")[-1]) if result else 0
             if count > 0:
                 removed.append(item_text)
@@ -192,16 +196,13 @@ async def clear_checked(list_name: str, user_id: int = 1) -> dict:
     """Remove all checked items from a list (clean up after shopping trip)."""
     pool = get_pool()
     async with pool.acquire() as conn:
-        list_row = await conn.fetchrow(
-            "SELECT id FROM public.bh_lists WHERE LOWER(name) = LOWER($1) AND user_id = $2",
-            list_name.strip(), user_id
-        )
-        if not list_row:
+        list_id = await _resolve_list_id(conn, list_name, user_id)
+        if not list_id:
             return {"_display": f"No list named **{list_name}** found."}
 
         result = await conn.execute(
             "DELETE FROM public.bh_list_items WHERE list_id = $1 AND checked = true",
-            list_row["id"]
+            list_id
         )
         count = int(result.split(" ")[-1]) if result else 0
 
@@ -209,7 +210,8 @@ async def clear_checked(list_name: str, user_id: int = 1) -> dict:
 
 
 async def get_all_lists(user_id: int = 1) -> dict:
-    """Get all lists for a user with item counts."""
+    """Get all lists the user can see (household-shared + their own private) with
+    item counts."""
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
@@ -218,7 +220,7 @@ async def get_all_lists(user_id: int = 1) -> dict:
                    COUNT(i.id) FILTER (WHERE i.checked = true) as done
             FROM public.bh_lists l
             LEFT JOIN public.bh_list_items i ON i.list_id = l.id
-            WHERE l.user_id = $1 AND l.is_archived = false
+            WHERE (l.is_shared OR l.user_id = $1) AND l.is_archived = false
             GROUP BY l.id, l.name, l.description
             ORDER BY l.updated_at DESC
         """, user_id)
@@ -232,6 +234,56 @@ async def get_all_lists(user_id: int = 1) -> dict:
         done = r["done"]
         lines.append(f"- **{r['name']}** — {pending} item{'s' if pending != 1 else ''}{f' (+{done} checked)' if done else ''}")
     return {"lists": [dict(r) for r in rows], "_display": "\n".join(lines)}
+
+
+# ---- ID-based operations (for the UI; the chat path above is text/fuzzy) ------
+
+async def get_items(list_name: str, user_id: int = 1) -> dict:
+    """Full item list WITH ids (checked + unchecked), for the UI. Creates nothing."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        list_id = await _resolve_list_id(conn, list_name, user_id)
+        if not list_id:
+            return {"list": list_name, "items": []}
+        rows = await conn.fetch(
+            "SELECT id, text, quantity, checked, added_by FROM public.bh_list_items "
+            "WHERE list_id = $1 ORDER BY checked, created_at",
+            list_id,
+        )
+    return {"list": list_name, "items": [dict(r) for r in rows]}
+
+
+async def _item_accessible(conn, item_id: int, user_id: int) -> Optional[int]:
+    """Return the item id if it lives on a list the user may access, else None."""
+    return await conn.fetchval(
+        "SELECT i.id FROM public.bh_list_items i JOIN public.bh_lists l ON l.id = i.list_id "
+        "WHERE i.id = $1 AND (l.is_shared OR l.user_id = $2)",
+        item_id, user_id,
+    )
+
+
+async def set_checked(item_id: int, checked: bool, user_id: int = 1) -> bool:
+    """Check/uncheck a single item by id. Returns False if not accessible."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        if not await _item_accessible(conn, item_id, user_id):
+            return False
+        await conn.execute(
+            "UPDATE public.bh_list_items SET checked = $2, "
+            "checked_at = CASE WHEN $2 THEN NOW() ELSE NULL END WHERE id = $1",
+            item_id, checked,
+        )
+    return True
+
+
+async def delete_item(item_id: int, user_id: int = 1) -> bool:
+    """Delete a single item by id. Returns False if not accessible."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        if not await _item_accessible(conn, item_id, user_id):
+            return False
+        await conn.execute("DELETE FROM public.bh_list_items WHERE id = $1", item_id)
+    return True
 
 
 # ---- Helpers ----------------------------------------------------------------

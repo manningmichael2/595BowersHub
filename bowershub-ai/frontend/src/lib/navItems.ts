@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Wallet,
+  ListChecks,
   Database,
   Settings,
   Workflow,
@@ -29,6 +30,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { path: '/chat', label: 'Chat', Icon: MessageSquare },
+  { path: '/lists', label: 'Lists', Icon: ListChecks },
   { path: '/finance', label: 'Finance', Icon: Wallet, feature: 'finance' },
   { path: '/db', label: 'Database', Icon: Database, feature: 'database' },
   { path: '/settings', label: 'Settings', Icon: Settings },
