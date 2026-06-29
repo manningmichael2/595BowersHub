@@ -401,7 +401,14 @@ class ModelProvider:
             logger.warning("  ⚠ No model providers configured!")
 
     def _resolve_provider(self, model: str) -> BaseProvider:
-        """Determine which provider handles a given model ID."""
+        """Determine which provider handles a given model ID.
+
+        ⚠️ Adding a non-Anthropic provider (Ollama/Bedrock/DeepSeek/…)? The chat's
+        web search is an Anthropic SERVER-SIDE tool (see router_engine
+        `web_search_tool`) and only works on Claude models — it silently no-ops on
+        other providers. Make web search client-side before switching the default
+        chat model off Anthropic.
+        """
         if model.startswith("claude") and "anthropic" in self.providers:
             return self.providers["anthropic"]
         elif (model.startswith("us.") or model.startswith("amazon.") or model.startswith("anthropic.")) and "bedrock" in self.providers:
