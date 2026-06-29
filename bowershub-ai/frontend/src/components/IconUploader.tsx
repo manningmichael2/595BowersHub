@@ -161,6 +161,28 @@ async function postJson(path: string): Promise<void> {
   }
 }
 
+interface LibraryEntry {
+  id: string
+  kind: 'active' | 'previous' | 'history'
+  label: string
+  active: boolean
+}
+
+async function getLibrary(): Promise<LibraryEntry[]> {
+  const token = useAuthStore.getState().accessToken
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  try {
+    const res = await fetch('/api/branding/library', { headers })
+    if (!res.ok) return []
+    const data = await res.json().catch(() => ({ entries: [] }))
+    return data.entries ?? []
+  } catch {
+    // Library is a non-critical enhancement — if it can't load, just hide it.
+    return []
+  }
+}
+
 // ---- Component ------------------------------------------------------------
 
 export default function IconUploader() {
@@ -172,18 +194,40 @@ export default function IconUploader() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [busyAction, setBusyAction] = useState<
-    null | 'upload' | 'revert' | 'rollback'
+    null | 'upload' | 'revert' | 'rollback' | 'activate'
   >(null)
   const [errors, setErrors] = useState<string[]>([])
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [library, setLibrary] = useState<LibraryEntry[]>([])
 
-  // Initial load — pulls active manifest into the store.
+  const loadLibrary = async () => {
+    setLibrary(await getLibrary())
+  }
+
+  // Initial load — pulls active manifest into the store + the saved-icon library.
   useEffect(() => {
     if (urls == null && !isLoading) {
       refresh()
     }
+    loadLibrary()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const onActivate = async (entry: LibraryEntry) => {
+    if (entry.active) return
+    clearMessages()
+    setBusyAction('activate')
+    try {
+      await postJson(`/api/branding/library/${entry.id}/activate`)
+      await refresh()
+      await loadLibrary()
+      setSuccessMsg('Switched the app icon. Installed PWAs pick it up on next launch.')
+    } catch (err: any) {
+      setErrors([err?.message || 'Could not switch icon.'])
+    } finally {
+      setBusyAction(null)
+    }
+  }
 
   const clearMessages = () => {
     setErrors([])
@@ -212,6 +256,7 @@ export default function IconUploader() {
     try {
       await uploadIconRequest(file)
       await refresh()
+      await loadLibrary()
       setSuccessMsg(
         `Uploaded new icon (${result.width}×${result.height}). Installed PWAs will pick it up on next launch.`,
       )
@@ -235,6 +280,7 @@ export default function IconUploader() {
     try {
       await postJson('/api/branding/icon/revert-to-default')
       await refresh()
+      await loadLibrary()
       setSuccessMsg('Reverted to default icon.')
     } catch (err: any) {
       setErrors([err?.message || 'Revert failed.'])
@@ -256,6 +302,7 @@ export default function IconUploader() {
     try {
       await postJson('/api/branding/icon/rollback')
       await refresh()
+      await loadLibrary()
       setSuccessMsg('Rolled back to previous icon.')
     } catch (err: any) {
       setErrors([err?.message || 'Rollback failed.'])
@@ -312,6 +359,43 @@ export default function IconUploader() {
           </p>
         )}
       </section>
+
+      {/* ---- Saved icon library ---- */}
+      {library.length > 1 && (
+        <section>
+          <h3 className="text-sm font-medium text-text mb-1">Saved icons</h3>
+          <p className="text-xs text-text-muted mb-3">
+            Every icon you've used is kept. Click one to make it the active app icon.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {library.map((entry) => (
+              <button
+                key={entry.id}
+                onClick={() => onActivate(entry)}
+                disabled={entry.active || isBusy}
+                aria-label={entry.active ? 'Active icon' : `Switch to ${entry.label}`}
+                className={
+                  'group relative flex flex-col items-center gap-1 rounded-lg border p-2 transition-colors ' +
+                  (entry.active
+                    ? 'border-primary bg-primary/10 cursor-default'
+                    : 'border-border hover:border-primary hover:bg-surface-light/40')
+                }
+              >
+                <img
+                  src={`/api/branding/library/${entry.id}/preview?v=${version}`}
+                  alt=""
+                  width={56}
+                  height={56}
+                  className="h-14 w-14 rounded-md object-cover"
+                />
+                <span className="text-[10px] text-text-muted">
+                  {entry.active ? 'Active' : entry.kind === 'previous' ? 'Previous' : 'Saved'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ---- Messages ---- */}
       {errors.length > 0 && (
