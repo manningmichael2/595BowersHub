@@ -36,6 +36,7 @@ const TransactionsPage = lazy(() => import('./pages/TransactionsPage'))
 const FinanceQaPage = lazy(() => import('./pages/FinanceQaPage'))
 const InsightsPage = lazy(() => import('./pages/InsightsPage'))
 const RetirementPlanner = lazy(() => import('./pages/RetirementPlanner'))
+const ListsPage = lazy(() => import('./pages/ListsPage'))
 
 /**
  * Theme tokens we apply as CSS custom properties on `:root`.
@@ -158,6 +159,7 @@ function App() {
           <Route path="/quick-capture" element={<QuickCapturePage />} />
           <Route path="/scheduled-prompts" element={<ScheduledPromptsPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/lists" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><ListsPage /></Suspense>} />
           <Route path="/finance" element={<FinanceLayout />}>
             <Route index element={<Navigate to="/finance/transactions" replace />} />
             <Route path="transactions" element={<Suspense fallback={<div className="flex items-center justify-center h-full" style={{ color: 'var(--color-text-muted)' }}>Loading…</div>}><TransactionsPage /></Suspense>} />
