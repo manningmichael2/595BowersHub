@@ -11,9 +11,45 @@ from pathlib import Path
 from typing import Set
 
 from backend.database import get_pool
-from backend.services.pushover import send_notification
+from backend.services import authz
 
 logger = logging.getLogger(__name__)
+
+# Constructed lazily from env on first use (env is fixed for the process'
+# lifetime, so one instance is fine). Routes through NotificationService so
+# alerts honor each household member's per-user prefs + quiet hours, instead of
+# the old single-shared-account `pushover.send_notification`.
+_notifier = None
+
+
+def _get_notifier():
+    global _notifier
+    if _notifier is None:
+        from backend.config import load_config
+        from backend.services.notifications import NotificationService
+
+        _notifier = NotificationService(load_config())
+    return _notifier
+
+
+async def _all_active_user_ids(conn) -> list[int]:
+    """Every active household member."""
+    rows = await conn.fetch("SELECT id FROM public.bh_users WHERE is_active = true")
+    return [r["id"] for r in rows]
+
+
+async def _finance_user_ids(conn) -> list[int]:
+    """Active members who can read finance (budgets are shared household-wide,
+    so everyone with finance access gets budget alerts)."""
+    rows = await conn.fetch(
+        "SELECT id, role, settings_json FROM public.bh_users WHERE is_active = true"
+    )
+    out: list[int] = []
+    for r in rows:
+        user = {"id": r["id"], "role": r["role"], "settings_json": r["settings_json"]}
+        if authz.resolve(user, "finance.read"):
+            out.append(r["id"])
+    return out
 
 # In-memory debounce: track which budget alerts have fired today
 _budget_alerts_fired_today: Set[str] = set()
@@ -35,6 +71,7 @@ async def check_budgets():
 
     pool = get_pool()
     async with pool.acquire() as conn:
+        finance_users = await _finance_user_ids(conn)
         from backend.services.budgets import alert_thresholds
         warn_ratio, over_ratio = await alert_thresholds(conn)  # DB-driven (R3.5)
         # Allocation-aware MTD spend via public.real_activity (split children
@@ -67,7 +104,9 @@ async def check_budgets():
             key = f"{category}:100"
             if key not in _budget_alerts_fired_today:
                 _budget_alerts_fired_today.add(key)
-                await send_notification(
+                await _get_notifier().notify_users(
+                    finance_users,
+                    event_type="budget",
                     title=f"🚨 Budget exceeded: {category}",
                     message=f"You've spent <b>${spent:,.0f}</b> of your <b>${budget:,.0f}</b> {category} budget ({pct:.0f}%).",
                     priority=1,
@@ -79,7 +118,9 @@ async def check_budgets():
             key = f"{category}:80"
             if key not in _budget_alerts_fired_today:
                 _budget_alerts_fired_today.add(key)
-                await send_notification(
+                await _get_notifier().notify_users(
+                    finance_users,
+                    event_type="budget",
                     title=f"⚠️ Budget warning: {category}",
                     message=f"You've spent <b>${spent:,.0f}</b> of your <b>${budget:,.0f}</b> {category} budget ({pct:.0f}%).",
                     priority=0,
@@ -107,7 +148,12 @@ async def check_inbox():
         return
 
     _last_inbox_alert = now
-    await send_notification(
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        recipients = await _all_active_user_ids(conn)  # shared household inbox
+    await _get_notifier().notify_users(
+        recipients,
+        event_type="inbox",
         title=f"📥 {count} files in inbox",
         message=f"You have <b>{count}</b> unprocessed files waiting in your inbox.",
         priority=0,
@@ -132,8 +178,10 @@ async def check_reminders():
         """, now)
 
         for r in reminders:
-            # Deliver via Pushover
-            success = await send_notification(
+            # Reminders are per-user — deliver to the owner's own channels.
+            result = await _get_notifier().notify_users(
+                [r["user_id"]],
+                event_type="reminder",
                 title="⏰ Reminder",
                 message=r["message"],
                 priority=1,
@@ -141,12 +189,19 @@ async def check_reminders():
                 url_title="Open BowersHub AI",
             )
 
-            # Mark as delivered
-            if success:
+            # Mark delivered once we've actually attempted for an awake user
+            # (i.e. not suppressed by quiet hours) — otherwise it re-fires next
+            # tick and delivers when quiet hours end, rather than looping forever
+            # for a user with no working channel.
+            if result["attempted"] > 0:
                 await conn.execute(
                     "UPDATE public.bh_reminders SET delivered_at = $1 WHERE id = $2",
                     now, r["id"],
                 )
-                logger.info(f"Reminder delivered: id={r['id']}, message={r['message'][:50]}")
+                logger.info(
+                    f"Reminder delivered: id={r['id']}, "
+                    f"web_push={result['web_push_count']}, pushover={result['pushover_sent']}, "
+                    f"message={r['message'][:50]}"
+                )
             else:
-                logger.warning(f"Failed to deliver reminder id={r['id']}")
+                logger.info(f"Reminder held (quiet hours): id={r['id']}")

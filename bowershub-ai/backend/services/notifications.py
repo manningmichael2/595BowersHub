@@ -59,6 +59,68 @@ class NotificationService:
 
         return sent
 
+    async def notify_users(
+        self,
+        user_ids: list[int],
+        event_type: str,
+        title: str,
+        message: str,
+        priority: int = 0,
+        url: Optional[str] = None,
+        url_title: Optional[str] = None,
+    ) -> dict:
+        """Deliver one notification to several household members, honoring each
+        user's prefs + quiet hours.
+
+        Web push is genuinely per-user (each person's registered devices).
+        Pushover, however, targets the SINGLE shared household account (one
+        PUSHOVER_USER_KEY), so it fires AT MOST ONCE per call even when several
+        recipients opted in — otherwise the shared phone would buzz N times for
+        one event. It fires if any awake (not in quiet hours) recipient has
+        Pushover enabled.
+
+        Returns a summary: how many users got a web push, whether the shared
+        Pushover fired, how many recipients were processed while awake
+        (`attempted`), and an overall `delivered` flag.
+        """
+        web_push_count = 0
+        pushover_sent = False
+        attempted = 0
+        seen: set[int] = set()
+
+        for uid in user_ids:
+            if uid is None or uid in seen:
+                continue
+            seen.add(uid)
+            prefs = await self._get_preferences(uid, event_type)
+            if self._in_quiet_hours(prefs):
+                continue
+            attempted += 1
+
+            if prefs.get("web_push", True):
+                try:
+                    if await self._send_web_push(uid, title, message):
+                        web_push_count += 1
+                except Exception as e:
+                    logger.warning(f"Web Push failed for user {uid}: {e}")
+
+            if prefs.get("pushover", False) and not pushover_sent:
+                try:
+                    if await self.send_pushover(
+                        title=title, message=message,
+                        url=url, url_title=url_title, priority=priority,
+                    ):
+                        pushover_sent = True
+                except Exception as e:
+                    logger.warning(f"Pushover failed: {e}")
+
+        return {
+            "delivered": web_push_count > 0 or pushover_sent,
+            "attempted": attempted,
+            "web_push_count": web_push_count,
+            "pushover_sent": pushover_sent,
+        }
+
     async def _get_preferences(self, user_id: int, event_type: str) -> dict:
         """Get notification preferences for a user + event type.
 

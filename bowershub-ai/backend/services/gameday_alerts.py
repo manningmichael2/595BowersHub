@@ -14,8 +14,9 @@ from typing import Set
 import httpx
 from backend.http_client import get_http_client
 
-from backend.services.pushover import send_notification
+from backend.services.alerts import _all_active_user_ids, _get_notifier
 from backend.services.sports_score import MY_TEAMS, TEAM_LEAGUE_MAP, LEAGUES, _expand_team_filter
+from backend.database import get_pool
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,12 @@ async def check_gameday_alerts():
                 minutes_int = int(minutes_until)
                 message += f"\n\n<i>Starts in ~{minutes_int} minutes</i>"
 
-                await send_notification(
+                pool = get_pool()
+                async with pool.acquire() as conn:
+                    recipients = await _all_active_user_ids(conn)
+                await _get_notifier().notify_users(
+                    recipients,
+                    event_type="gameday",
                     title=title,
                     message=message,
                     priority=0,
