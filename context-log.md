@@ -1301,3 +1301,13 @@ Owner chose **per-user routing** for the gap flagged above. Built + merged (`c63
 **State:** 5 new DB-backed tests (`test_notification_routing.py`): notify_users dedup / quiet-hours-skip / shared-Pushover-once, recipient resolvers, seed-SQL on-conflict. Suites green. Migration 0046 applies on `fresh_db` (the test fixture) and on the live deploy.
 
 - [Next] Owner: set quiet hours + toggle Pushover per person in Settings → Notifications and confirm budget/reminder alerts now honor them (use the "Send test notification" button). Remaining optional tail: per-event notification granularity, route hook_engine scheduled-prompt push through notify_users, DB-driven per-skill `min_role`, quiet-hours timezone (still server-local), C6 `any`-at-API-boundary cleanup.
+
+### Notification channels — future direction (owner asked; decision logged, not built)
+
+The single shared Pushover account is the only thing keeping notifications from being *fully* per-user (web push already is). Owner asked about more-configurable / per-user channels + "a container that sends texts." Options surveyed:
+- **ntfy** (self-hosted container; per-user via per-topic subscriptions; Android self-hosts cleanly, **iOS instant push must relay through ntfy.sh** because of APNs) — closest to "Pushover you own, per-user."
+- **Telegram bot** (no infra, per-user via each person's `chat_id`, cross-platform, rich) — lowest-friction truly-per-user option.
+- **SMS/texts**: `android-sms-gateway` container (old phone + your SIM) or `gammu-smsd` + GSM modem = self-hosted real texts but uses your cell plan + dedicated device; **Twilio** = reliable but recurring per-message cost; carrier email→SMS = free but flaky (and `email_sender.py` already exists).
+- **Recommendation:** ntfy if owner wants to own the infra, Telegram if "just works per-person" matters more; reserve SMS (Twilio) for a few *critical* alerts only. **Integration is mechanical now** — `notify_users` already resolves channels per-user, so a new channel = a `BaseProvider`-style sender + a per-user config field (topic / chat_id / number) surfaced in the same Settings → Notifications panel. No re-architecture.
+
+**Settings-sweep session wrap-up:** the settings "outdated" pass is complete — wired 3 placeholder sections + editable Profile, real web-push subscribe flow, "send test notification" + send() accuracy fix, WorkspaceSettingsPanel dead-code removal, and per-user notification routing (the big one). All merged + deployed; migration 0046 live. Notifications are now genuinely per-user/self-service (each member configures their own in Settings → Notifications); only the Pushover *destination* is shared (infra, see above).
