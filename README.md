@@ -22,13 +22,11 @@
 
 ## 📸 Screenshots
 
-> Generate these locally with one command — see [`docs/screenshots/`](docs/screenshots/README.md) (`npm run screenshots`). Authenticated views require a login, so they're captured on your machine, not committed by default.
-
 | Desktop | Mobile |
 |---|---|
-| ![Dashboard — desktop](docs/screenshots/dashboard-desktop.png) | ![Chat — mobile](docs/screenshots/chat-mobile.png) |
-| ![Lists — desktop](docs/screenshots/lists-desktop.png) | ![Lists — mobile](docs/screenshots/lists-mobile.png) |
-| ![Finance — desktop](docs/screenshots/finance-desktop.png) | ![Settings — mobile](docs/screenshots/settings-mobile.png) |
+| ![Sign-in — desktop](docs/screenshots/login-desktop.png) | ![Sign-in — mobile](docs/screenshots/login-mobile.png) |
+
+> Authenticated views (dashboard, chat, lists, finance, settings) are captured against a **seeded local test stack** rather than the live app (which holds real finances). Regenerate any view at both viewports with the Playwright capture script — see [`docs/screenshots/`](docs/screenshots/README.md).
 
 ---
 
