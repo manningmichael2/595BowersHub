@@ -1353,3 +1353,19 @@ Owner asks: are themes per-user/device; a UMich dark-OLED theme; "add my icons b
 **State:** tsc clean, 352 FE tests, build clean; backend branding+library tests green; migrations 0053 applied; health ok. Live-verified: `/api/branding/library` 401 (gated), `/api/branding/library/active/preview` 200 (public).
 
 - [Next] Owner: pick the Michigan theme in Settings → Appearance; in Admin → Icon Management, the **Saved icons** grid shows whatever's in `branding/history/` — your prior custom icons should appear there to re-activate (if the grid only shows the current icon, the history volume may have been reset at some point and you'd re-upload — but going forward every icon is kept). Note: `/files/branding/` must be a persistent volume for history to survive redeploys.
+
+## [2026-06-28] NEXT TASK queued — Grocery/Lists v2 (owner direction) — Claude Code
+
+Owner feedback after using the Lists feature: it's intentionally simple and they want it expanded — **this is the first task to pick up next session** (not built yet). Captured here + in the `grocery-list-v2` memory.
+
+Wants:
+- **Store dropdown** — shop-by-store (Meijer/Kroger/Costco…); tag/filter items or lists by store.
+- **Department/aisle grouping** — group items by department (Produce, Dairy, Frozen…).
+- **Sort options** — by department, alphabetical, recently-added, checked-state.
+- **Multiple user-created shared lists** — create & name new shared lists. Data model already supports multiple named `is_shared` lists; UI only switches between existing ones → needs a "+ New list" create/rename/delete flow.
+
+> Owner: "i appreciate how simple it is, but i want more in the future … it's a little too simple."
+
+**EXTEND, don't rewrite.** Foundations exist: `bh_lists`/`bh_list_items`, `services/lists.py` (shared-resolver), `routers/lists.py` (id-based ops), `pages/ListsPage.tsx`. Likely: migration (item `department` + a `store` concept — decide per-list vs per-item), backend list create/rename/delete + sort/group params, ListsPage grouping/sort/store UI + create-list dialog. Multi-feature → consider `/spec grocery-list-v2`. (Lists are part of the household/assistant module — see true-north-star + household-setup memories.)
+
+- [Next] Start here: Grocery/Lists v2 per the above.
