@@ -379,9 +379,6 @@ Present this data in a clear, conversational way. Use markdown formatting (table
         elif command == "/sports":
             return await self._handle_sports_command(args)
 
-        elif command == "/news":
-            return await self._handle_news_command(args)
-
         elif command in ("/schedule", "/calendar"):
             return await self._handle_schedule_command(args)
 
@@ -755,25 +752,6 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             result = await get_sports_score(team=args)
 
         display = result.get("_display", "No results available.")
-        return RoutingResult(layer="L1", content=display)
-
-    async def _handle_news_command(self, args: str) -> RoutingResult:
-        """Handle /news — fetch current headlines.
-
-        Usage:
-            /news              → Top headlines (NPR)
-            /news sports       → Sports headlines (ESPN)
-            /news tech         → Tech news (Ars Technica)
-            /news world        → World news
-            /news business     → Business news
-        """
-        from backend.services.news import get_news
-
-        args = args.strip()
-        category = args if args else "top"
-
-        result = await get_news(category=category)
-        display = result.get("_display", str(result))
         return RoutingResult(layer="L1", content=display)
 
     async def _handle_weather_command(self, args: str, context: RoutingContext) -> RoutingResult:
@@ -1246,6 +1224,16 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         # like sports scores, current news, today's weather forecast,
         # or anything that wouldn't be in the model's training cutoff.
         # https://docs.claude.com/en/docs/build-with-claude/tool-use/web-search-tool
+        #
+        # ⚠️ PROVIDER-COUPLED: this is an ANTHROPIC server-side tool. It only works
+        # when the resolved model is a Claude model. If the workspace/default model
+        # is ever switched to Ollama, Bedrock, DeepSeek, or any non-Anthropic
+        # provider, web search SILENTLY STOPS WORKING (the tool is handed to a
+        # provider that can't execute it). To make web search provider-independent,
+        # replace this with a CLIENT-SIDE search tool — the app runs the search
+        # (SearXNG self-hosted, or Tavily/Brave/SerpAPI) and feeds results back as a
+        # normal tool_result, which works with any model. Don't assume web search
+        # survives a provider change.
         web_search_tool = {
             "type": "web_search_20250305",
             "name": "web_search",
