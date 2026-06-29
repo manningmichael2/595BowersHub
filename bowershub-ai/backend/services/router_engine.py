@@ -376,7 +376,7 @@ Present this data in a clear, conversational way. Use markdown formatting (table
             # Legacy alias — redirect to /email
             return await self._handle_email_command(args)
 
-        elif command in ("/sports", "/score"):
+        elif command == "/sports":
             return await self._handle_sports_command(args)
 
         elif command == "/news":
