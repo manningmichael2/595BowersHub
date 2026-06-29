@@ -135,8 +135,17 @@ afterEach(() => {
 // ------------------------------------------------------------------
 
 describe('IconUploader — client-side validation', () => {
+  // The component fetches the saved-icon library on mount; stub that so the only
+  // call we assert against is the upload POST (which must be skipped on a
+  // validation failure).
+  const stubLibraryFetch = () =>
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ entries: [] }),
+    } as any)
+
   it('rejects a non-PNG file with a descriptive message and skips the POST', async () => {
-    const fetchMock = vi.spyOn(global, 'fetch')
+    const fetchMock = stubLibraryFetch()
 
     const { container } = render(<IconUploader />)
     const input = container.querySelector('input[type="file"]') as HTMLInputElement
@@ -149,15 +158,19 @@ describe('IconUploader — client-side validation', () => {
     const err = await screen.findByText(/must be a PNG/i)
     expect(err).toBeTruthy()
 
-    // No backend call happened — pure client-side rejection.
-    expect(fetchMock).not.toHaveBeenCalled()
+    // No UPLOAD call happened — pure client-side rejection (the mount-time
+    // library GET is expected and allowed).
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/branding/icon',
+      expect.objectContaining({ method: 'POST' }),
+    )
     // Version is unchanged.
     expect(useBrandingStore.getState().version).toBe('v1')
   })
 
   it('rejects a 511px PNG (one pixel below the minimum) with a min-dimension message', async () => {
     mockImageDimensions = { width: 511, height: 511 }
-    const fetchMock = vi.spyOn(global, 'fetch')
+    const fetchMock = stubLibraryFetch()
 
     const { container } = render(<IconUploader />)
     const input = container.querySelector('input[type="file"]') as HTMLInputElement
@@ -169,7 +182,10 @@ describe('IconUploader — client-side validation', () => {
     const err = await screen.findByText(/minimum is 512.{0,5}512/i)
     expect(err).toBeTruthy()
 
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/branding/icon',
+      expect.objectContaining({ method: 'POST' }),
+    )
     expect(useBrandingStore.getState().version).toBe('v1')
   })
 })

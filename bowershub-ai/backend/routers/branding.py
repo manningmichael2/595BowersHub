@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 
 from backend.middleware.audit import AuditLogger
 from backend.middleware.auth import get_current_user, require_admin
@@ -143,6 +143,49 @@ async def rollback_icon(
         target_type="branding",
         target_id=None,
         details={"version": result["version"]},
+        ip_address=_client_ip(request),
+    )
+    return result
+
+
+# ---- Icon library — pick from previously-used icon sets --------------------
+
+
+@router.get("/library")
+async def list_library(user: dict = Depends(require_admin)):
+    """List every available icon set (active + rollback + archived history) so
+    the admin can pick one to re-activate."""
+    return {"entries": await branding_store.list_library()}
+
+
+@router.get("/library/{entry_id:path}/preview")
+async def library_preview(entry_id: str):
+    """192px PNG thumbnail for a library entry. Public (loaded via <img>, which
+    can't send an auth header) — consistent with the already-public /icons/ mount;
+    icon images are non-sensitive app branding. Listing the library stays admin."""
+    try:
+        data = branding_store.library_preview_bytes(entry_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown icon set.")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Preview not found.")
+    return Response(content=data, media_type="image/png")
+
+
+@router.post("/library/{entry_id:path}/activate")
+async def activate_library(entry_id: str, request: Request, user: dict = Depends(require_admin)):
+    """Make a previously-used icon set the active app icon."""
+    try:
+        result = await branding_store.activate_library_entry(entry_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    await AuditLogger.log(
+        user_id=user["id"],
+        action="branding_icon_library_activate",
+        target_type="branding",
+        target_id=None,
+        details={"entry": entry_id, "version": result.get("version")},
         ip_address=_client_ip(request),
     )
     return result

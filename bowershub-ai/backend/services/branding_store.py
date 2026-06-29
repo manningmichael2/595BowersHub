@@ -628,3 +628,95 @@ async def get_manifest() -> dict[str, Any]:
         "urls": _build_urls(str(version)),
         "has_rollback": has_rollback,
     }
+
+
+# -----------------------------------------------------------------------------
+# Icon library — pick from previously-used icon sets (active + previous +
+# archived history), instead of only the single active icon + one rollback slot.
+# -----------------------------------------------------------------------------
+
+
+def _read_set(d: Path) -> dict[str, bytes]:
+    """Read the variant PNG bytes from an icon-set directory."""
+    return {name: (d / name).read_bytes() for name in _VARIANT_FILENAMES if (d / name).exists()}
+
+
+def _resolve_library_dir(branding_root: Path, entry_id: str) -> Path:
+    """Map a library entry id to its directory, rejecting anything outside the
+    known set (active / previous / history/<ts>) — prevents path traversal."""
+    if entry_id == "active":
+        return branding_root / "active"
+    if entry_id == "previous":
+        return branding_root / "previous"
+    if entry_id.startswith("history/"):
+        ts = entry_id.split("/", 1)[1]
+        if ts and "/" not in ts and ".." not in ts:
+            candidate = branding_root / "history" / ts
+            if candidate.is_dir():
+                return candidate
+    raise ValueError(f"Unknown icon library entry: {entry_id!r}")
+
+
+async def list_library() -> list[dict[str, Any]]:
+    """Every available icon set — the current active one, the rollback slot, and
+    all archived history sets (newest first) — each with a stable id and whether
+    it's currently active. Backs the Admin icon-library picker."""
+    root = _branding_root()
+    entries: list[dict[str, Any]] = []
+    if _dir_has_files(root / "active"):
+        entries.append({"id": "active", "kind": "active", "label": "Current", "active": True})
+    if _dir_has_files(root / "previous"):
+        entries.append({"id": "previous", "kind": "previous", "label": "Previous", "active": False})
+    history = root / "history"
+    if history.exists():
+        hist_dirs = [p for p in history.iterdir() if p.is_dir() and _dir_has_files(p)]
+        for d in sorted(hist_dirs, key=lambda p: p.name, reverse=True):
+            entries.append({"id": f"history/{d.name}", "kind": "history", "label": d.name, "active": False})
+    return entries
+
+
+def library_preview_bytes(entry_id: str) -> Optional[bytes]:
+    """The 192px PNG bytes for a library entry, for thumbnail preview. None if
+    absent. Raises ValueError on an unknown entry id."""
+    d = _resolve_library_dir(_branding_root(), entry_id)
+    f = d / "icon-192.png"
+    return f.read_bytes() if f.exists() else None
+
+
+async def activate_library_entry(entry_id: str) -> dict[str, Any]:
+    """Make a previously-used icon set the active app icon.
+
+    - "active"   → no-op (already active).
+    - "previous" → the existing clean active↔previous swap (rollback()).
+    - history/<ts> → install that set as active (rotating the prior active into
+      the rollback slot) and drop the now-redundant history copy.
+    """
+    if entry_id == "active":
+        return await get_manifest()
+    if entry_id == "previous":
+        return await rollback()  # clean swap, updates DB pointers
+
+    root = _branding_root()
+    src = _resolve_library_dir(root, entry_id)  # raises ValueError if unknown
+    files = _read_set(src)
+    if set(files) != set(_VARIANT_FILENAMES):
+        raise ValueError("That icon set is incomplete and can't be activated.")
+
+    _atomic_install_active(root, files)
+    # Its content is now `active`; drop the duplicate history copy.
+    shutil.rmtree(src, ignore_errors=True)
+
+    version = _new_version()
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            prior_active = await _read_setting(conn, "app_icon_active_filename")
+            prior_active_filename = (prior_active or {}).get("filename")
+            await _write_version_and_filenames(
+                conn,
+                version=version,
+                active_filename=f"icon-set-restored-{version}",
+                previous_filename=prior_active_filename,
+            )
+    logger.info("Activated icon library entry %s → version=%s", entry_id, version)
+    return {"version": version, "urls": _build_urls(version)}
