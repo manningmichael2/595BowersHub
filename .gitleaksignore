@@ -1,0 +1,13 @@
+# gitleaks false-positive allowlist (fingerprint = commit:file:rule:line).
+#
+# These are throwaway TEST admin-password literals that lived inline in an
+# ADMIN_PASSWORD=... assignment in test_provisioning.py at commit cbac0965 (the
+# value itself is intentionally not reproduced here so this file doesn't itself
+# trip the scanner). They are not real
+# secrets — the current code already extracts them to a named constant
+# (_FIRST_ADMIN_PW) precisely to avoid this. But `gitleaks detect` scans full
+# history, so the old commit keeps tripping the gate. Fingerprinting these two
+# known-safe findings (rather than allowlisting the whole test path) keeps the
+# secret scan green while still catching any NEW real secret.
+cbac09653f27016b627d6c220fc1a4f77531b9d7:bowershub-ai/backend/tests/test_provisioning.py:generic-api-key:170
+cbac09653f27016b627d6c220fc1a4f77531b9d7:bowershub-ai/backend/tests/test_provisioning.py:generic-api-key:185

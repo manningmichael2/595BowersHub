@@ -16,27 +16,20 @@
 import { useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useDbBrowserStore } from '../../stores/db-browser'
-import { useAuthStore } from '../../stores/auth'
+import { api } from '../../services/api'
 
 export interface UndoRedoProviderProps {
   children: ReactNode
 }
 
 /**
- * Sends the clear-session request to the backend.
- * Uses raw fetch to include the X-DB-Session-Id header.
+ * Sends the clear-session request to the backend. Routed through the api client
+ * so it inherits auth-token injection + 401 refresh; the X-DB-Session-Id header
+ * goes via the client's extra-headers arg.
  */
 async function clearSession(sessionId: string): Promise<void> {
-  const token = useAuthStore.getState().accessToken
   try {
-    await fetch('/api/db/undo/clear-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        'X-DB-Session-Id': sessionId,
-      },
-    })
+    await api.post('/api/db/undo/clear-session', undefined, { 'X-DB-Session-Id': sessionId })
   } catch {
     // Best-effort cleanup — if it fails, server-side TTL will handle it
   }
