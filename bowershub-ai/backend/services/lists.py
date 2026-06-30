@@ -315,6 +315,43 @@ async def set_checked(item_id: int, checked: bool, user_id: int = 1) -> bool:
     return True
 
 
+async def update_item(item_id: int, changes: dict, user_id: int = 1) -> bool:
+    """Update an item's fields by id (checked/text/category/due_date/assignee +
+    JSONB attributes), validated against the list's effective schema. LWW; returns
+    False if inaccessible, raises ListSchemaError on a bad value."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        list_id = await conn.fetchval(
+            "SELECT i.list_id FROM public.bh_list_items i JOIN public.bh_lists l ON l.id = i.list_id "
+            "WHERE i.id = $1 AND (l.is_shared OR l.user_id = $2)", item_id, user_id)
+        if list_id is None:
+            return False
+        changes = dict(changes)
+        sort_order = changes.pop("sort_order", None)
+        checked = changes.pop("checked", None)
+        schema = await list_schema.resolve_schema(conn, list_id)
+        nested = changes.pop("attributes", None) or {}
+        field_values = {k: v for k, v in {**changes, **nested}.items() if k != "attributes"}
+        cols, attrs = list_schema.partition_item_values(schema, field_values)
+        sets, args = [], []
+        for col, val in cols.items():
+            args.append(val); sets.append(f"{col} = ${len(args)}")
+        if attrs:
+            args.append(json.dumps(attrs)); sets.append(f"attributes = attributes || ${len(args)}::jsonb")
+        if sort_order is not None:
+            args.append(sort_order); sets.append(f"sort_order = ${len(args)}")
+        if checked is not None:
+            args.append(checked)
+            sets.append(f"checked = ${len(args)}")
+            sets.append(f"checked_at = CASE WHEN ${len(args)} THEN NOW() ELSE NULL END")
+        if not sets:
+            return True
+        args.append(item_id)
+        await conn.execute(
+            f"UPDATE public.bh_list_items SET {', '.join(sets)} WHERE id = ${len(args)}", *args)
+    return True
+
+
 async def delete_item(item_id: int, user_id: int = 1) -> bool:
     """Delete a single item by id. Returns False if not accessible."""
     pool = get_pool()

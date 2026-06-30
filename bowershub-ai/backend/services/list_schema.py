@@ -15,6 +15,7 @@ so core columns and the JSONB tail are handled uniformly. See
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field as dc_field
 from datetime import date, datetime
@@ -190,6 +191,95 @@ def validate_value(field: FieldDef, value: Any) -> None:
     if ct in ("text", "url") and field.validation and field.validation.get("regex"):
         if not re.search(field.validation["regex"], str(value)):
             raise ListSchemaError(f"'{field.label}' has an invalid format")
+
+
+def field_to_dict(f: FieldDef) -> dict:
+    """Serialise a field def for the API (renderer reads this)."""
+    return {
+        "key": f.key, "label": f.label, "col_type": f.col_type, "storage": f.storage,
+        "scope": f.scope, "required": f.required, "groupable": f.groupable,
+        "sortable": f.sortable, "filterable": f.filterable, "options": f.options,
+        "options_source": f.options_source, "sort_order": f.sort_order,
+    }
+
+
+# ── Field-definition mutation (per-list overrides; integrity-guarded, R6.5) ───
+
+async def create_list_field(conn, list_id: int, key: str, label: str, col_type: str,
+                            options: Optional[list] = None, required: bool = False) -> None:
+    """Add a user-defined custom column to a single list (scope='list')."""
+    if col_type not in COL_TYPES:
+        raise ListSchemaError(f"unknown column type {col_type!r}")
+    if not re.match(r"^[a-z0-9_]+$", key or ""):
+        raise ListSchemaError("field key must be lowercase letters, numbers, underscores")
+    exists = await conn.fetchval(
+        "SELECT 1 FROM public.bh_list_field_defs WHERE scope='list' AND list_id=$1 AND key=$2",
+        list_id, key)
+    if exists:
+        raise ListSchemaError(f"this list already has a field '{key}'")
+    await conn.execute(
+        "INSERT INTO public.bh_list_field_defs "
+        "(scope, list_id, key, label, col_type, storage, options, required, "
+        " groupable, sortable, filterable) "
+        "VALUES ('list',$1,$2,$3,$4,'attribute',$5::jsonb,$6,$7,$7,$7)",
+        list_id, key, label, col_type,
+        json.dumps(options) if options is not None else None,
+        required, col_type in ("single_select", "multi_select", "text", "date", "number"),
+    )
+
+
+async def _ensure_list_override(conn, list_id: int, key: str):
+    """Return the scope='list' override row for (list_id,key), creating it from the
+    underlying core/type def if absent. Core/type rows themselves are NEVER mutated
+    — this is the integrity boundary that stops a per-list edit changing a field for
+    every list, and (since it's keyed by list_id) stops cross-list mutation."""
+    row = await conn.fetchrow(
+        "SELECT * FROM public.bh_list_field_defs WHERE scope='list' AND list_id=$1 AND key=$2",
+        list_id, key)
+    if row:
+        return row
+    # Find the underlying core/type def this list resolves for that key.
+    type_id = await conn.fetchval("SELECT list_type_id FROM public.bh_lists WHERE id=$1", list_id)
+    base = await conn.fetchrow(
+        "SELECT * FROM public.bh_list_field_defs "
+        "WHERE (scope='type' AND list_type_id=$1 AND key=$2) OR (scope='core' AND key=$2) "
+        "ORDER BY (scope='type') DESC LIMIT 1", type_id, key)
+    if base is None:
+        raise ListSchemaError(f"no field '{key}' on this list")
+    new_id = await conn.fetchval(
+        "INSERT INTO public.bh_list_field_defs "
+        "(scope, list_id, key, label, col_type, storage, options, options_source, "
+        " required, groupable, sortable, filterable, sort_order) "
+        "VALUES ('list',$1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12) RETURNING id",
+        list_id, key, base["label"], base["col_type"], base["storage"],
+        json.dumps(base["options"]) if base["options"] is not None else None,
+        base["options_source"], base["required"], base["groupable"],
+        base["sortable"], base["filterable"], base["sort_order"])
+    return await conn.fetchrow("SELECT * FROM public.bh_list_field_defs WHERE id=$1", new_id)
+
+
+async def update_list_field(conn, list_id: int, key: str, *, label: Optional[str] = None,
+                            sort_order: Optional[int] = None, is_active: Optional[bool] = None,
+                            options: Optional[list] = None) -> None:
+    """Rename / reorder / soft-remove / re-option a field FOR THIS LIST ONLY, by
+    writing a scope='list' override (R6.5). A core field can be hidden for one list
+    (is_active=false) without affecting any other list or the core definition."""
+    await _ensure_list_override(conn, list_id, key)
+    sets, args = [], []
+    if label is not None:
+        args.append(label); sets.append(f"label=${len(args)}")
+    if sort_order is not None:
+        args.append(sort_order); sets.append(f"sort_order=${len(args)}")
+    if is_active is not None:
+        args.append(is_active); sets.append(f"is_active=${len(args)}")
+    if options is not None:
+            args.append(json.dumps(options)); sets.append(f"options=${len(args)}::jsonb")
+    if not sets:
+        return
+    args.extend([list_id, key])
+    await conn.execute(
+        f"UPDATE public.bh_list_field_defs SET {', '.join(sets)}, updated_at=now() "
+        f"WHERE scope='list' AND list_id=${len(args)-1} AND key=${len(args)}", *args)
 
 
 def partition_item_values(
