@@ -24,6 +24,14 @@ class ListError(Exception):
     """A list operation failed in a way the caller should surface (e.g. 404/409)."""
 
 
+def _coerce_due(val):
+    """ISO date/datetime string → datetime for the timestamptz column (asyncpg
+    binds Python datetimes, not strings). Already-datetime values pass through."""
+    if val is None or isinstance(val, datetime):
+        return val
+    return datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+
+
 async def resolve_only(conn, list_name: str, user_id: int) -> Optional[int]:
     """Resolve an EXISTING list the user may access (shared of that name, or the
     user's own private), preferring shared. Never creates — this is the path the
@@ -248,9 +256,10 @@ async def clear_checked(list_name: str, user_id: int = 1) -> dict:
     return {"_display": f"🧹 Cleared {count} checked item(s) from **{list_name}**."}
 
 
-async def get_all_lists(user_id: int = 1) -> dict:
+async def get_all_lists(user_id: int = 1, archived: bool = False) -> dict:
     """Get all lists the user can see (household-shared + their own private) with
-    item counts."""
+    item counts. By default only active lists; ``archived=True`` returns the
+    archived ones (for the 'show archived / unarchive' UI)."""
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
@@ -261,13 +270,13 @@ async def get_all_lists(user_id: int = 1) -> dict:
             FROM public.bh_lists l
             LEFT JOIN public.bh_list_types t ON t.id = l.list_type_id
             LEFT JOIN public.bh_list_items i ON i.list_id = l.id
-            WHERE (l.is_shared OR l.user_id = $1) AND l.is_archived = false
+            WHERE (l.is_shared OR l.user_id = $1) AND l.is_archived = $2
             GROUP BY l.id, l.name, l.description, l.list_type_id, t.name, t.icon
             ORDER BY l.updated_at DESC
-        """, user_id)
+        """, user_id, archived)
 
     if not rows:
-        return {"_display": "You don't have any lists yet. Try: *add milk to my shopping list*"}
+        return {"lists": [], "_display": "You don't have any lists yet. Try: *add milk to my shopping list*"}
 
     lines = ["## 📋 Your Lists", ""]
     for r in rows:
@@ -337,7 +346,8 @@ async def update_item(item_id: int, changes: dict, user_id: int = 1) -> bool:
         cols, attrs = list_schema.partition_item_values(schema, field_values)
         sets, args = [], []
         for col, val in cols.items():
-            args.append(val); sets.append(f"{col} = ${len(args)}")
+            args.append(_coerce_due(val) if col == "due_date" else val)
+            sets.append(f"{col} = ${len(args)}")
         if attrs:
             args.append(json.dumps(attrs)); sets.append(f"attributes = attributes || ${len(args)}::jsonb")
         if sort_order is not None:
@@ -437,7 +447,8 @@ async def add_items_by_id(list_id: int, items: list, user_id: int = 1) -> dict:
                 "(list_id, text, quantity, sort_order, category, due_date, assignee_user_id, attributes) "
                 "VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)",
                 list_id, text, quantity, next_so,
-                cols.get("category"), cols.get("due_date"), cols.get("assignee_user_id"),
+                cols.get("category"), _coerce_due(cols.get("due_date")),
+                cols.get("assignee_user_id"),
                 json.dumps(attrs),
             )
             added.append(text)

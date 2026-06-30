@@ -110,8 +110,9 @@ class AislesBody(BaseModel):
 # ── Literal collection / config routes (registered first) ─────────────────────
 
 @router.get("")
-async def all_lists(user: dict = Depends(get_current_user)) -> dict:
-    return await svc.get_all_lists(user_id=user["id"])
+async def all_lists(archived: bool = Query(False),
+                    user: dict = Depends(get_current_user)) -> dict:
+    return await svc.get_all_lists(user_id=user["id"], archived=archived)
 
 
 @router.post("")

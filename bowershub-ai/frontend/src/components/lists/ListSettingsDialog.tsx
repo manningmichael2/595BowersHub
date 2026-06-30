@@ -34,8 +34,13 @@ export default function ListSettingsDialog({ list, types, onClose, onChanged, on
   const [name, setName] = useState(list.name)
   const [fields, setFields] = useState<Field[]>([])
   const [stores, setStores] = useState<Store[]>([])
-  const [newCol, setNewCol] = useState({ key: '', label: '', col_type: 'text' })
+  const [newCol, setNewCol] = useState({ key: '', label: '', col_type: 'text', options: '' })
   const [newStore, setNewStore] = useState('')
+  const [aisleFor, setAisleFor] = useState<number | null>(null)
+  const [aisleText, setAisleText] = useState('')
+
+  const parseOptions = (s: string) =>
+    s.split(',').map((o) => o.trim()).filter(Boolean).map((o) => ({ value: o, label: o }))
 
   const loadFields = useCallback(async () => {
     try {
@@ -82,16 +87,42 @@ export default function ListSettingsDialog({ list, types, onClose, onChanged, on
     catch { toast.error("Couldn't delete.") }
   }
 
+  const isSelect = (t: string) => t === 'single_select' || t === 'multi_select'
+
   const addColumn = async () => {
     const key = newCol.key.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
     if (!key || !newCol.label.trim()) return
+    if (isSelect(newCol.col_type) && !newCol.options.trim()) {
+      toast.error('Add at least one option for a select column.')
+      return
+    }
     try {
-      await api.post(`/api/lists/${list.id}/fields`, { key, label: newCol.label.trim(), col_type: newCol.col_type })
-      setNewCol({ key: '', label: '', col_type: 'text' })
+      await api.post(`/api/lists/${list.id}/fields`, {
+        key, label: newCol.label.trim(), col_type: newCol.col_type,
+        options: isSelect(newCol.col_type) ? parseOptions(newCol.options) : null,
+      })
+      setNewCol({ key: '', label: '', col_type: 'text', options: '' })
       loadFields(); onChanged()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Couldn't add the column.")
     }
+  }
+
+  const saveOptions = async (f: Field, optionsText: string) => {
+    try {
+      await api.patch(`/api/lists/${list.id}/fields/${encodeURIComponent(f.key)}`,
+        { options: parseOptions(optionsText) })
+      loadFields(); onChanged()
+    } catch { toast.error("Couldn't update options.") }
+  }
+
+  const saveAisles = async (storeId: number) => {
+    const departments = aisleText.split(',').map((d) => d.trim()).filter(Boolean)
+    try {
+      await api.put(`/api/lists/stores/${storeId}/aisles`, { departments })
+      setAisleFor(null); setAisleText(''); onStoresChanged()
+      toast.success('Aisle order saved.')
+    } catch { toast.error("Couldn't save aisle order.") }
   }
 
   const removeColumn = async (f: Field) => {
@@ -163,29 +194,29 @@ export default function ListSettingsDialog({ list, types, onClose, onChanged, on
             <div className="space-y-3">
               <ul className="space-y-1">
                 {fields.map((f) => (
-                  <li key={f.key} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-surface-light/50">
-                    <span className="flex-1 text-sm">{f.label}
-                      <span className="ml-2 text-xs text-text-muted">{f.col_type}</span>
-                      {f.scope !== 'list' && <span className="ml-2 text-[10px] uppercase text-text-muted">{f.scope}</span>}
-                    </span>
-                    <button aria-label={`Remove ${f.label}`} onClick={() => removeColumn(f)}
-                      className="rounded p-1 text-text-muted hover:text-danger"><Trash2 size={14} /></button>
-                  </li>
+                  <ColumnRow key={f.key} field={f} onRemove={() => removeColumn(f)}
+                    onSaveOptions={(txt) => saveOptions(f, txt)} editableOptions={isSelect(f.col_type) && !f.options_source} />
                 ))}
               </ul>
-              <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-                <Input className="w-28" placeholder="key" value={newCol.key}
-                  onChange={(e) => setNewCol({ ...newCol, key: e.target.value })} aria-label="Column key" />
-                <Input className="w-28" placeholder="Label" value={newCol.label}
-                  onChange={(e) => setNewCol({ ...newCol, label: e.target.value })} aria-label="Column label" />
-                <Select value={newCol.col_type} onValueChange={(v) => setNewCol({ ...newCol, col_type: v })}>
-                  <SelectTrigger className="w-32" aria-label="Column type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {COL_TYPES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button size="icon" aria-label="Add column" onClick={addColumn}
-                  disabled={!newCol.key.trim() || !newCol.label.trim()}><Plus size={16} /></Button>
+              <div className="space-y-2 border-t border-border pt-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input className="w-28" placeholder="key" value={newCol.key}
+                    onChange={(e) => setNewCol({ ...newCol, key: e.target.value })} aria-label="Column key" />
+                  <Input className="w-28" placeholder="Label" value={newCol.label}
+                    onChange={(e) => setNewCol({ ...newCol, label: e.target.value })} aria-label="Column label" />
+                  <Select value={newCol.col_type} onValueChange={(v) => setNewCol({ ...newCol, col_type: v })}>
+                    <SelectTrigger className="w-32" aria-label="Column type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {COL_TYPES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="icon" aria-label="Add column" onClick={addColumn}
+                    disabled={!newCol.key.trim() || !newCol.label.trim()}><Plus size={16} /></Button>
+                </div>
+                {isSelect(newCol.col_type) && (
+                  <Input placeholder="Options, comma-separated (e.g. low, medium, high)" value={newCol.options}
+                    onChange={(e) => setNewCol({ ...newCol, options: e.target.value })} aria-label="Options" />
+                )}
               </div>
             </div>
           )}
@@ -194,10 +225,22 @@ export default function ListSettingsDialog({ list, types, onClose, onChanged, on
             <div className="space-y-3">
               <ul className="space-y-1">
                 {stores.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-surface-light/50">
-                    <span className="flex-1 text-sm">{s.name}</span>
-                    <button aria-label={`Remove ${s.name}`} onClick={() => removeStore(s)}
-                      className="rounded p-1 text-text-muted hover:text-danger"><Trash2 size={14} /></button>
+                  <li key={s.id} className="rounded px-2 py-1.5 hover:bg-surface-light/50">
+                    <div className="flex items-center gap-2">
+                      <span className="flex-1 text-sm">{s.name}</span>
+                      <button aria-label={`Aisle order for ${s.name}`}
+                        onClick={() => { setAisleFor(aisleFor === s.id ? null : s.id); setAisleText('') }}
+                        className="rounded px-1.5 py-0.5 text-xs text-text-muted hover:text-text">Aisles</button>
+                      <button aria-label={`Remove ${s.name}`} onClick={() => removeStore(s)}
+                        className="rounded p-1 text-text-muted hover:text-danger"><Trash2 size={14} /></button>
+                    </div>
+                    {aisleFor === s.id && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Input placeholder="Departments in walk order, comma-separated" value={aisleText}
+                          onChange={(e) => setAisleText(e.target.value)} aria-label="Aisle order" />
+                        <Button size="sm" onClick={() => saveAisles(s.id)} disabled={!aisleText.trim()}>Save</Button>
+                      </div>
+                    )}
                   </li>
                 ))}
                 {stores.length === 0 && <li className="px-2 py-2 text-sm text-text-muted">No stores yet.</li>}
@@ -219,5 +262,38 @@ export default function ListSettingsDialog({ list, types, onClose, onChanged, on
         </div>
       </div>
     </div>
+  )
+}
+
+function ColumnRow({ field, onRemove, onSaveOptions, editableOptions }: {
+  field: Field
+  onRemove: () => void
+  onSaveOptions: (text: string) => void
+  editableOptions: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState((field.options ?? []).map((o) => o.label).join(', '))
+  return (
+    <li className="rounded px-2 py-1.5 hover:bg-surface-light/50">
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-sm">{field.label}
+          <span className="ml-2 text-xs text-text-muted">{field.col_type}</span>
+          {field.scope !== 'list' && <span className="ml-2 text-[10px] uppercase text-text-muted">{field.scope}</span>}
+        </span>
+        {editableOptions && (
+          <button className="rounded px-1.5 py-0.5 text-xs text-text-muted hover:text-text"
+            onClick={() => setOpen((o) => !o)} aria-label={`Options for ${field.label}`}>Options</button>
+        )}
+        <button aria-label={`Remove ${field.label}`} onClick={onRemove}
+          className="rounded p-1 text-text-muted hover:text-danger"><Trash2 size={14} /></button>
+      </div>
+      {open && editableOptions && (
+        <div className="mt-2 flex items-center gap-2">
+          <Input value={text} onChange={(e) => setText(e.target.value)}
+            placeholder="Options, comma-separated" aria-label="Edit options" />
+          <Button size="sm" onClick={() => { onSaveOptions(text); setOpen(false) }}>Save</Button>
+        </div>
+      )}
+    </li>
   )
 }

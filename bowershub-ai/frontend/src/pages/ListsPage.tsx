@@ -8,7 +8,7 @@
  * skill writes the same lists ("add milk to the list").
  */
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Check, Trash2, Plus, Settings2, ChevronDown } from 'lucide-react'
+import { Check, Trash2, Plus, Settings2, ChevronDown, Pencil, GripVertical, Archive } from 'lucide-react'
 import { api } from '../services/api'
 import { toast } from '../stores/toast'
 import {
@@ -16,6 +16,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../components/ui'
 import ListSettingsDialog from '../components/lists/ListSettingsDialog'
+import ItemEditorDialog from '../components/lists/ItemEditorDialog'
 
 export interface Field {
   key: string
@@ -59,6 +60,8 @@ export interface ListType {
   name: string
   label: string
   icon: string | null
+  group_by?: string | null
+  category_set?: { key: string; label: string }[] | null
 }
 
 interface SortOption { key: string; label: string }
@@ -78,8 +81,19 @@ export default function ListsPage() {
   const [busy, setBusy] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<Item | null>(null)
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [archivedOpen, setArchivedOpen] = useState(false)
 
   const storeField = useMemo(() => schema.find((f) => f.key === 'store'), [schema])
+  const activeType = useMemo(
+    () => types.find((t) => t.name === (lists.find((l) => l.id === activeId)?.type ?? '')) ?? null,
+    [types, lists, activeId])
+  const categoryOptions = useMemo(
+    () => (activeType?.category_set ?? []).map((c) => c.key), [activeType])
+  // Drag-reorder is only meaningful on a flat (ungrouped) list in manual order.
+  const grouped = groups.some((g) => g.label != null)
+  const canReorder = !grouped && (sort === '' || sort === 'manual')
 
   const loadLists = useCallback(async () => {
     try {
@@ -176,6 +190,31 @@ export default function ListsPage() {
     }
   }
 
+  const onDrop = async (targetId: number) => {
+    if (dragId == null || dragId === targetId || activeId == null) { setDragId(null); return }
+    const flat = groups.flatMap((g) => g.items).map((i) => i.id)
+    const from = flat.indexOf(dragId)
+    const to = flat.indexOf(targetId)
+    if (from < 0 || to < 0) { setDragId(null); return }
+    flat.splice(to, 0, flat.splice(from, 1)[0])
+    setDragId(null)
+    // Optimistic: reorder the single group locally.
+    setGroups((gs) => {
+      const byId = new Map(gs.flatMap((g) => g.items).map((i) => [i.id, i]))
+      return gs.map((g, idx) => idx === 0 ? { ...g, items: flat.map((id) => byId.get(id)!).filter(Boolean) } : g)
+    })
+    try {
+      await api.post(`/api/lists/${activeId}/items/reorder`, { ordered_item_ids: flat })
+    } catch {
+      toast.error("Couldn't reorder."); if (activeId != null) loadView(activeId)
+    }
+  }
+
+  const unarchive = async (id: number) => {
+    try { await api.post(`/api/lists/${id}/unarchive`); loadLists() }
+    catch { toast.error("Couldn't unarchive.") }
+  }
+
   const createList = async (name: string, list_type_id: number) => {
     try {
       const res = await api.post('/api/lists', { name, list_type_id })
@@ -240,6 +279,9 @@ export default function ListsPage() {
               Clear {checkedCount} checked
             </Button>
           )}
+          <Button variant="ghost" size="icon" aria-label="Archived lists" onClick={() => setArchivedOpen(true)}>
+            <Archive size={16} aria-hidden />
+          </Button>
           {activeId != null && (
             <Button variant="ghost" size="icon" aria-label="List settings" onClick={() => setSettingsOpen(true)}>
               <Settings2 size={17} aria-hidden />
@@ -280,7 +322,11 @@ export default function ListsPage() {
                 )}
                 <ul className="space-y-1">
                   {g.items.map((i) => (
-                    <ItemRow key={i.id} item={i} attrFields={attrFields} onToggle={toggle} onRemove={remove} />
+                    <ItemRow key={i.id} item={i} attrFields={attrFields}
+                      onToggle={toggle} onRemove={remove} onEdit={() => setEditing(i)}
+                      draggable={canReorder}
+                      onDragStart={() => setDragId(i.id)}
+                      onDropItem={() => onDrop(i.id)} />
                   ))}
                 </ul>
               </section>
@@ -302,24 +348,79 @@ export default function ListsPage() {
           onStoresChanged={loadMeta}
         />
       )}
+      {editing && activeId != null && (
+        <ItemEditorDialog
+          listId={activeId}
+          item={editing}
+          fields={schema}
+          categoryOptions={categoryOptions}
+          onClose={() => setEditing(null)}
+          onSaved={refresh}
+        />
+      )}
+      {archivedOpen && (
+        <ArchivedDialog onClose={() => setArchivedOpen(false)} onUnarchive={unarchive} />
+      )}
     </div>
   )
 }
 
-function ItemRow({ item, attrFields, onToggle, onRemove }: {
+function ArchivedDialog({ onClose, onUnarchive }: { onClose: () => void; onUnarchive: (id: number) => void }) {
+  const [rows, setRows] = useState<ListSummary[]>([])
+  useEffect(() => {
+    api.get('/api/lists?archived=true').then((r) => setRows(r.data.lists ?? [])).catch(() => {})
+  }, [])
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="mb-3 text-base font-medium">Archived lists</h2>
+        {rows.length === 0 ? (
+          <p className="py-4 text-center text-sm text-text-muted">No archived lists.</p>
+        ) : (
+          <ul className="space-y-1">
+            {rows.map((l) => (
+              <li key={l.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-surface-light/50">
+                <span className="flex-1 text-sm">{l.name}</span>
+                <Button variant="ghost" size="sm" onClick={() => onUnarchive(l.id)}>Restore</Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="mt-3 flex justify-end"><Button variant="ghost" size="sm" onClick={onClose}>Done</Button></div>
+      </div>
+    </div>
+  )
+}
+
+function ItemRow({ item, attrFields, onToggle, onRemove, onEdit, draggable, onDragStart, onDropItem }: {
   item: Item
   attrFields: Field[]
   onToggle: (i: Item) => void
   onRemove: (i: Item) => void
+  onEdit: () => void
+  draggable: boolean
+  onDragStart: () => void
+  onDropItem: () => void
 }) {
   const chips: string[] = []
   for (const f of attrFields) {
     const v = item.attributes?.[f.key]
-    if (v == null) continue
+    if (v == null || (Array.isArray(v) && v.length === 0)) continue
     chips.push(`${f.label}: ${Array.isArray(v) ? v.join(', ') : String(v)}`)
   }
   return (
-    <li className="group flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-light/50">
+    <li
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={(e) => draggable && e.preventDefault()}
+      onDrop={onDropItem}
+      className="group flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-surface-light/50"
+    >
+      {draggable && (
+        <span className="shrink-0 cursor-grab text-text-muted opacity-0 group-hover:opacity-100" aria-hidden>
+          <GripVertical size={14} />
+        </span>
+      )}
       <button
         onClick={() => onToggle(item)}
         aria-label={item.checked ? `Uncheck ${item.text}` : `Check ${item.text}`}
@@ -339,6 +440,10 @@ function ItemRow({ item, attrFields, onToggle, onRemove }: {
           </span>
         )}
       </span>
+      <button onClick={onEdit} aria-label={`Edit ${item.text}`}
+        className="shrink-0 rounded p-1 text-text-muted opacity-0 transition-opacity hover:text-text group-hover:opacity-100">
+        <Pencil size={14} aria-hidden />
+      </button>
       <button
         onClick={() => onRemove(item)}
         aria-label={`Remove ${item.text}`}

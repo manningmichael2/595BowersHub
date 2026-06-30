@@ -141,3 +141,37 @@ async def test_name_shim_still_works(env):
     r = await c.get("/api/lists/shopping", headers=h)
     assert r.status_code == 200
     assert any(i["text"] == "bananas" for i in r.json()["items"])
+
+
+async def test_set_due_date_assignee_and_select_options(env):
+    c, h = env["client"], env["h"]
+    # Custom single-select column with options, then set a value on an item.
+    lid = (await c.post("/api/lists", json={"name": "Tasks"}, headers=h)).json()["id"]
+    assert (await c.post(f"/api/lists/{lid}/fields", json={
+        "key": "priority", "label": "Priority", "col_type": "single_select",
+        "options": [{"value": "low", "label": "Low"}, {"value": "high", "label": "High"}],
+    }, headers=h)).status_code == 200
+    add = await c.post(f"/api/lists/{lid}/items", json={"items": [{"text": "ship it"}]}, headers=h)
+    item_id = add.json()["items"][0]["id"]
+    # due_date (ISO date string → timestamptz) + a valid select value.
+    ok = await c.patch(f"/api/lists/items/{item_id}",
+                       json={"due_date": "2026-07-01", "attributes": {"priority": "high"}}, headers=h)
+    assert ok.status_code == 200
+    # An invalid select value is rejected.
+    bad = await c.patch(f"/api/lists/items/{item_id}", json={"attributes": {"priority": "nope"}}, headers=h)
+    assert bad.status_code == 422
+
+
+async def test_archived_listing_and_unarchive(env):
+    c, h = env["client"], env["h"]
+    lid = (await c.post("/api/lists", json={"name": "OldList"}, headers=h)).json()["id"]
+    await c.post(f"/api/lists/{lid}/archive", headers=h)
+    # Default listing excludes it; archived=true includes it.
+    active = (await c.get("/api/lists", headers=h)).json()["lists"]
+    archived = (await c.get("/api/lists?archived=true", headers=h)).json()["lists"]
+    assert all(l["id"] != lid for l in active)
+    assert any(l["id"] == lid for l in archived)
+    # Unarchive brings it back.
+    await c.post(f"/api/lists/{lid}/unarchive", headers=h)
+    active2 = (await c.get("/api/lists", headers=h)).json()["lists"]
+    assert any(l["id"] == lid for l in active2)
