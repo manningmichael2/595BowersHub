@@ -100,7 +100,20 @@ jobs:
         # cascade over finance.eval_labels and fails the build if transfer
         # detection or end-to-end accuracy regresses below the baselines — so any
         # change to a tier, the `categorizer` role, or the thresholds is gated here.
-        run: PYTHONPATH=. python -m pytest -q
+        #
+        # -ra prints a short summary (incl. every FAILED test) at the end of the
+        # log, and --junitxml writes a machine-readable report uploaded below — so
+        # an intermittent failure names the exact test even after the run log is
+        # purged (which is why a past backend flake was un-diagnosable).
+        run: PYTHONPATH=. python -m pytest -q -ra --junitxml=pytest-report.xml
+      - name: Upload test report
+        if: always()  # capture on failure (and success) so flakes are diagnosable
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-pytest-report
+          path: bowershub-ai/pytest-report.xml
+          retention-days: 30
+          if-no-files-found: warn
 
   restore-test:
     name: Restore drill (backup is restorable)
