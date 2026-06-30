@@ -106,7 +106,7 @@ async def store_aisle_order(conn, store_name: str) -> Optional[list[str]]:
 async def routing_config(conn) -> dict:
     val = await conn.fetchval(
         "SELECT value_json FROM public.bh_platform_settings WHERE key='lists.routing'")
-    return val or {"match_threshold": 0.55, "create_threshold": 0.35, "ambiguity_margin": 0.07}
+    return val or {"match_threshold": 0.40, "create_threshold": 0.35, "ambiguity_margin": 0.04}
 
 
 async def get_default_list_id(conn) -> Optional[int]:

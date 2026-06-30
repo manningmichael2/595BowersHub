@@ -33,10 +33,16 @@ def compute_hash(text: str) -> str:
 # SQL fragment assembling an entity's embedded text (R2.2: name + summary). Used in
 # BOTH the SELECT (so Python embeds it) and the digest() change-check, so they agree.
 _ENTITY_CONTENT_SQL = "(e.name || ' ' || COALESCE(e.summary, ''))"
-# A list's routable identity = name · type label · description. Item names are
-# deliberately excluded (they churn on every add and would re-embed constantly).
+# A list's routable identity = name · type label · [list description] · type description.
+# The TYPE description carries the routing anchor (example item terms, see migration
+# 0055) so a list routes well even with no per-list description — calibration showed
+# the old name·label·list-desc document was too thin (~71%, real mis-routes) because
+# real lists rarely have a description. Live item names are still deliberately excluded
+# (they churn on every add and would re-embed constantly); the type-level examples are
+# stable, so this adds no re-embedding churn. concat_ws drops NULL/empty segments.
 _LIST_CONTENT_SQL = (
-    "(l.name || ' · ' || COALESCE(t.label, '') || ' · ' || COALESCE(l.description, ''))"
+    "concat_ws(' · ', l.name, NULLIF(t.label, ''), NULLIF(l.description, ''), "
+    "NULLIF(t.description, ''))"
 )
 
 

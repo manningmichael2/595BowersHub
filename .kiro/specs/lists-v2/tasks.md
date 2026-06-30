@@ -101,13 +101,15 @@
 - [ ] Adding a store option (→ `bh_stores`) immediately repopulates the active-store dropdown (R5.4).
 - [ ] **Tests:** add a `number`/`single_select` column → set value → bad-typed value rejected → remove keeps values; add a store → appears in active-store dropdown.
 
-## Task 11: Threshold calibration + end-to-end routing fixture
+## Task 11: Threshold calibration + end-to-end routing fixture — DONE (2026-06-30)
 - **Effort:** M
 - **Dependencies:** Task 5, Task 6
 - **Requirements:** R4.3, R4.4
-- [ ] Fixture setup: seed representative lists, **run `_reconcile_lists` so `kb_chunks` is populated**, then measure — never calibrate against an empty `kb_chunks`.
-- [ ] Build a labeled `item → expected list` fixture set; measure the bge-m3 cosine distribution; **UPSERT** `lists.routing` `match_threshold`/`create_threshold`/`ambiguity_margin` from it (the seeded values are placeholders).
-- [ ] **Tests:** fixtured set achieves the ≥90% routing goal with zero duplicate-list creations; test fails loudly if placeholder thresholds underperform (forces real calibration).
+- [x] Fixture setup: seed representative lists, **run `_reconcile_lists` so `kb_chunks` is populated**, then measure — never calibrate against an empty `kb_chunks`.
+- [x] Build a labeled `item → expected list` fixture set; measure the bge-m3 cosine distribution; **UPSERT** `lists.routing` `match_threshold`/`create_threshold`/`ambiguity_margin` from it (the seeded values are placeholders).
+- [x] **Tests:** fixtured set achieves the ≥90% routing goal with zero duplicate-list creations; test fails loudly if placeholder thresholds underperform (forces real calibration).
+
+> **Design amendment (calibration finding).** Real bge-m3 calibration showed the as-built routing document — `name · type_label · LIST.description` — was too thin (~71% accuracy, real mis-routes; correct/noise overlapped with NO separating threshold), because real lists rarely carry a per-list description, so the embedded text was often just `"Groceries · Grocery · "`. Fix (migration `0055` + `embedding_worker._LIST_CONTENT_SQL`): fold the **TYPE** description into the document via `concat_ws`, and enrich the seeded type descriptions with representative item terms (stable, type-level — NOT churning per-list item names, so no re-embed storm; the "item names excluded" decision stands in spirit). This lifts routing to **90.3%** (0 noise-leak, 1 mis-route) with clean separation, calibrating thresholds at **match=0.40 / margin=0.04** (was the 0.55/0.07 placeholder). Verified three ways: calibration script (real Ollama), deterministic fixture test (`test_list_routing_calibration.py`, CI-safe, also asserts the placeholder *fails*), and a live end-to-end run through real pgvector halfvec (6/6). Fixture: `backend/tests/fixtures/lists_routing_calibration.json`.
 
 ## Definition of Done
 

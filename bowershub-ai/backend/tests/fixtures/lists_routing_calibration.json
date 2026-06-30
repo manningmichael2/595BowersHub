@@ -1,0 +1,1204 @@
+{
+  "_comment": "Captured real bge-m3 cosine scores for Task 11 routing calibration. Deterministic \u2014 no Ollama needed to replay. Document format: name \u00b7 type_label \u00b7 [list_desc] \u00b7 type_desc (enriched, migration 0055).",
+  "model": "bge-m3",
+  "recommended": {
+    "match_threshold": 0.4,
+    "create_threshold": 0.35,
+    "ambiguity_margin": 0.04
+  },
+  "lists": [
+    {
+      "name": "Groceries",
+      "type": "grocery",
+      "doc": "Groceries \u00b7 Grocery \u00b7 Groceries and household shopping by department \u2014 food, kitchen and home supplies. Examples: milk, eggs, bread, bananas, produce, chicken, yogurt, juice, snacks, paper towels, dish soap."
+    },
+    {
+      "name": "Home Chores",
+      "type": "chores",
+      "doc": "Home Chores \u00b7 Chores \u00b7 Household chores, cleaning and maintenance tasks assigned to people. Examples: vacuum, mow the lawn, clean the bathroom, do laundry, take out the trash, dishes, dusting."
+    },
+    {
+      "name": "Gift Ideas",
+      "type": "gifts",
+      "doc": "Gift Ideas \u00b7 Gifts \u00b7 Gift ideas and presents for family and friends, with recipient and link. Examples: birthday present, christmas gift, gift card, toy, book, jewelry, necklace."
+    },
+    {
+      "name": "To-Do",
+      "type": "todo",
+      "doc": "To-Do \u00b7 To-Do \u00b7 General to-dos, errands, reminders and appointments by due date. Examples: call the dentist, pay bills, renew registration, schedule appointment, email, follow up."
+    },
+    {
+      "name": "Trip Packing",
+      "type": "packing",
+      "doc": "Trip Packing \u00b7 Packing \u00b7 Packing list of things to bring on a trip or vacation, by section. Examples: swimsuit, sunscreen, passport, toothbrush, charger, beach towel, travel adapter, clothes."
+    },
+    {
+      "name": "Hardware Store",
+      "type": "simple",
+      "doc": "Hardware Store \u00b7 List \u00b7 Tools and home-improvement supplies \u00b7 A simple checklist for anything."
+    },
+    {
+      "name": "Shopping",
+      "type": "simple",
+      "doc": "Shopping \u00b7 List \u00b7 A simple checklist for anything."
+    }
+  ],
+  "items": [
+    {
+      "text": "milk",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Groceries",
+          0.444327
+        ],
+        [
+          "Shopping",
+          0.393592
+        ],
+        [
+          "Gift Ideas",
+          0.357373
+        ],
+        [
+          "Hardware Store",
+          0.336982
+        ],
+        [
+          "Trip Packing",
+          0.331317
+        ],
+        [
+          "To-Do",
+          0.328483
+        ],
+        [
+          "Home Chores",
+          0.308978
+        ]
+      ]
+    },
+    {
+      "text": "eggs",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Groceries",
+          0.493297
+        ],
+        [
+          "Home Chores",
+          0.417154
+        ],
+        [
+          "Shopping",
+          0.405582
+        ],
+        [
+          "Gift Ideas",
+          0.401891
+        ],
+        [
+          "Trip Packing",
+          0.379673
+        ],
+        [
+          "To-Do",
+          0.374383
+        ],
+        [
+          "Hardware Store",
+          0.359007
+        ]
+      ]
+    },
+    {
+      "text": "bananas",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Groceries",
+          0.458014
+        ],
+        [
+          "Gift Ideas",
+          0.373741
+        ],
+        [
+          "Shopping",
+          0.364322
+        ],
+        [
+          "Trip Packing",
+          0.361004
+        ],
+        [
+          "To-Do",
+          0.315435
+        ],
+        [
+          "Home Chores",
+          0.313287
+        ],
+        [
+          "Hardware Store",
+          0.305427
+        ]
+      ]
+    },
+    {
+      "text": "a loaf of bread",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Shopping",
+          0.50478
+        ],
+        [
+          "Groceries",
+          0.497165
+        ],
+        [
+          "Hardware Store",
+          0.442026
+        ],
+        [
+          "Home Chores",
+          0.421353
+        ],
+        [
+          "Gift Ideas",
+          0.420624
+        ],
+        [
+          "Trip Packing",
+          0.417231
+        ],
+        [
+          "To-Do",
+          0.40799
+        ]
+      ]
+    },
+    {
+      "text": "paper towels",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Trip Packing",
+          0.538789
+        ],
+        [
+          "Shopping",
+          0.486058
+        ],
+        [
+          "Groceries",
+          0.477616
+        ],
+        [
+          "To-Do",
+          0.460336
+        ],
+        [
+          "Home Chores",
+          0.450251
+        ],
+        [
+          "Hardware Store",
+          0.439918
+        ],
+        [
+          "Gift Ideas",
+          0.420113
+        ]
+      ]
+    },
+    {
+      "text": "chicken breast",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Groceries",
+          0.451201
+        ],
+        [
+          "Shopping",
+          0.40105
+        ],
+        [
+          "Home Chores",
+          0.375055
+        ],
+        [
+          "Hardware Store",
+          0.363879
+        ],
+        [
+          "Trip Packing",
+          0.344105
+        ],
+        [
+          "To-Do",
+          0.343112
+        ],
+        [
+          "Gift Ideas",
+          0.338476
+        ]
+      ]
+    },
+    {
+      "text": "orange juice",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Groceries",
+          0.422448
+        ],
+        [
+          "Shopping",
+          0.39461
+        ],
+        [
+          "To-Do",
+          0.36868
+        ],
+        [
+          "Trip Packing",
+          0.358915
+        ],
+        [
+          "Hardware Store",
+          0.355509
+        ],
+        [
+          "Gift Ideas",
+          0.338833
+        ],
+        [
+          "Home Chores",
+          0.329115
+        ]
+      ]
+    },
+    {
+      "text": "greek yogurt",
+      "expected": "Groceries",
+      "scored": [
+        [
+          "Groceries",
+          0.447769
+        ],
+        [
+          "Shopping",
+          0.337976
+        ],
+        [
+          "Hardware Store",
+          0.303758
+        ],
+        [
+          "Gift Ideas",
+          0.300062
+        ],
+        [
+          "Trip Packing",
+          0.28635
+        ],
+        [
+          "To-Do",
+          0.269617
+        ],
+        [
+          "Home Chores",
+          0.2652
+        ]
+      ]
+    },
+    {
+      "text": "vacuum the living room",
+      "expected": "Home Chores",
+      "scored": [
+        [
+          "Home Chores",
+          0.486309
+        ],
+        [
+          "Hardware Store",
+          0.397494
+        ],
+        [
+          "Shopping",
+          0.390695
+        ],
+        [
+          "To-Do",
+          0.364725
+        ],
+        [
+          "Trip Packing",
+          0.36316
+        ],
+        [
+          "Groceries",
+          0.341319
+        ],
+        [
+          "Gift Ideas",
+          0.316085
+        ]
+      ]
+    },
+    {
+      "text": "mow the lawn",
+      "expected": "Home Chores",
+      "scored": [
+        [
+          "Home Chores",
+          0.481177
+        ],
+        [
+          "To-Do",
+          0.454691
+        ],
+        [
+          "Shopping",
+          0.400819
+        ],
+        [
+          "Trip Packing",
+          0.374772
+        ],
+        [
+          "Hardware Store",
+          0.370192
+        ],
+        [
+          "Groceries",
+          0.356151
+        ],
+        [
+          "Gift Ideas",
+          0.342911
+        ]
+      ]
+    },
+    {
+      "text": "clean the bathroom",
+      "expected": "Home Chores",
+      "scored": [
+        [
+          "Home Chores",
+          0.505482
+        ],
+        [
+          "Hardware Store",
+          0.468431
+        ],
+        [
+          "To-Do",
+          0.458785
+        ],
+        [
+          "Shopping",
+          0.453553
+        ],
+        [
+          "Trip Packing",
+          0.439166
+        ],
+        [
+          "Groceries",
+          0.409055
+        ],
+        [
+          "Gift Ideas",
+          0.317703
+        ]
+      ]
+    },
+    {
+      "text": "take out the trash",
+      "expected": "Home Chores",
+      "scored": [
+        [
+          "Trip Packing",
+          0.496533
+        ],
+        [
+          "Home Chores",
+          0.481355
+        ],
+        [
+          "Shopping",
+          0.476922
+        ],
+        [
+          "Hardware Store",
+          0.459472
+        ],
+        [
+          "To-Do",
+          0.452933
+        ],
+        [
+          "Groceries",
+          0.419628
+        ],
+        [
+          "Gift Ideas",
+          0.371984
+        ]
+      ]
+    },
+    {
+      "text": "do the laundry",
+      "expected": "Home Chores",
+      "scored": [
+        [
+          "Home Chores",
+          0.570748
+        ],
+        [
+          "Shopping",
+          0.5462
+        ],
+        [
+          "To-Do",
+          0.536937
+        ],
+        [
+          "Trip Packing",
+          0.52295
+        ],
+        [
+          "Hardware Store",
+          0.520017
+        ],
+        [
+          "Groceries",
+          0.509234
+        ],
+        [
+          "Gift Ideas",
+          0.396389
+        ]
+      ]
+    },
+    {
+      "text": "birthday present for mom",
+      "expected": "Gift Ideas",
+      "scored": [
+        [
+          "Gift Ideas",
+          0.533705
+        ],
+        [
+          "Shopping",
+          0.425701
+        ],
+        [
+          "Trip Packing",
+          0.419194
+        ],
+        [
+          "Hardware Store",
+          0.394586
+        ],
+        [
+          "Groceries",
+          0.361162
+        ],
+        [
+          "To-Do",
+          0.354384
+        ],
+        [
+          "Home Chores",
+          0.318243
+        ]
+      ]
+    },
+    {
+      "text": "lego set for the kids",
+      "expected": "Gift Ideas",
+      "scored": [
+        [
+          "Gift Ideas",
+          0.44585
+        ],
+        [
+          "Shopping",
+          0.435085
+        ],
+        [
+          "Groceries",
+          0.404033
+        ],
+        [
+          "Trip Packing",
+          0.402408
+        ],
+        [
+          "Hardware Store",
+          0.376903
+        ],
+        [
+          "Home Chores",
+          0.350222
+        ],
+        [
+          "To-Do",
+          0.317338
+        ]
+      ]
+    },
+    {
+      "text": "gift card for dad",
+      "expected": "Gift Ideas",
+      "scored": [
+        [
+          "Gift Ideas",
+          0.512668
+        ],
+        [
+          "Trip Packing",
+          0.437729
+        ],
+        [
+          "Shopping",
+          0.432399
+        ],
+        [
+          "Hardware Store",
+          0.404946
+        ],
+        [
+          "Groceries",
+          0.363034
+        ],
+        [
+          "To-Do",
+          0.359557
+        ],
+        [
+          "Home Chores",
+          0.260379
+        ]
+      ]
+    },
+    {
+      "text": "necklace for grandma",
+      "expected": "Gift Ideas",
+      "scored": [
+        [
+          "Gift Ideas",
+          0.482583
+        ],
+        [
+          "Shopping",
+          0.417414
+        ],
+        [
+          "Hardware Store",
+          0.359632
+        ],
+        [
+          "Trip Packing",
+          0.349819
+        ],
+        [
+          "Groceries",
+          0.3317
+        ],
+        [
+          "To-Do",
+          0.320513
+        ],
+        [
+          "Home Chores",
+          0.308749
+        ]
+      ]
+    },
+    {
+      "text": "call the dentist",
+      "expected": "To-Do",
+      "scored": [
+        [
+          "To-Do",
+          0.575793
+        ],
+        [
+          "Shopping",
+          0.397201
+        ],
+        [
+          "Home Chores",
+          0.3745
+        ],
+        [
+          "Hardware Store",
+          0.374012
+        ],
+        [
+          "Trip Packing",
+          0.37169
+        ],
+        [
+          "Groceries",
+          0.362038
+        ],
+        [
+          "Gift Ideas",
+          0.354559
+        ]
+      ]
+    },
+    {
+      "text": "renew the car registration",
+      "expected": "To-Do",
+      "scored": [
+        [
+          "To-Do",
+          0.420504
+        ],
+        [
+          "Shopping",
+          0.364583
+        ],
+        [
+          "Hardware Store",
+          0.341928
+        ],
+        [
+          "Trip Packing",
+          0.331501
+        ],
+        [
+          "Gift Ideas",
+          0.311267
+        ],
+        [
+          "Home Chores",
+          0.258784
+        ],
+        [
+          "Groceries",
+          0.253979
+        ]
+      ]
+    },
+    {
+      "text": "schedule an oil change",
+      "expected": "To-Do",
+      "scored": [
+        [
+          "To-Do",
+          0.472522
+        ],
+        [
+          "Trip Packing",
+          0.406896
+        ],
+        [
+          "Shopping",
+          0.405191
+        ],
+        [
+          "Hardware Store",
+          0.384522
+        ],
+        [
+          "Home Chores",
+          0.348364
+        ],
+        [
+          "Gift Ideas",
+          0.328942
+        ],
+        [
+          "Groceries",
+          0.325017
+        ]
+      ]
+    },
+    {
+      "text": "pay the electric bill",
+      "expected": "To-Do",
+      "scored": [
+        [
+          "To-Do",
+          0.435877
+        ],
+        [
+          "Shopping",
+          0.43269
+        ],
+        [
+          "Trip Packing",
+          0.403591
+        ],
+        [
+          "Hardware Store",
+          0.40174
+        ],
+        [
+          "Groceries",
+          0.386843
+        ],
+        [
+          "Home Chores",
+          0.379463
+        ],
+        [
+          "Gift Ideas",
+          0.366435
+        ]
+      ]
+    },
+    {
+      "text": "swimsuit",
+      "expected": "Trip Packing",
+      "scored": [
+        [
+          "Trip Packing",
+          0.486547
+        ],
+        [
+          "Shopping",
+          0.425323
+        ],
+        [
+          "Hardware Store",
+          0.35383
+        ],
+        [
+          "Groceries",
+          0.350525
+        ],
+        [
+          "Gift Ideas",
+          0.341263
+        ],
+        [
+          "To-Do",
+          0.326644
+        ],
+        [
+          "Home Chores",
+          0.29887
+        ]
+      ]
+    },
+    {
+      "text": "beach towel",
+      "expected": "Trip Packing",
+      "scored": [
+        [
+          "Trip Packing",
+          0.520741
+        ],
+        [
+          "Shopping",
+          0.363816
+        ],
+        [
+          "To-Do",
+          0.358428
+        ],
+        [
+          "Groceries",
+          0.342384
+        ],
+        [
+          "Home Chores",
+          0.324283
+        ],
+        [
+          "Hardware Store",
+          0.320841
+        ],
+        [
+          "Gift Ideas",
+          0.311124
+        ]
+      ]
+    },
+    {
+      "text": "sunscreen",
+      "expected": "Trip Packing",
+      "scored": [
+        [
+          "Trip Packing",
+          0.479296
+        ],
+        [
+          "Shopping",
+          0.385224
+        ],
+        [
+          "Groceries",
+          0.35051
+        ],
+        [
+          "Hardware Store",
+          0.330511
+        ],
+        [
+          "To-Do",
+          0.321338
+        ],
+        [
+          "Gift Ideas",
+          0.296326
+        ],
+        [
+          "Home Chores",
+          0.276785
+        ]
+      ]
+    },
+    {
+      "text": "passport",
+      "expected": "Trip Packing",
+      "scored": [
+        [
+          "Trip Packing",
+          0.473842
+        ],
+        [
+          "Shopping",
+          0.37103
+        ],
+        [
+          "To-Do",
+          0.365096
+        ],
+        [
+          "Gift Ideas",
+          0.332512
+        ],
+        [
+          "Groceries",
+          0.326806
+        ],
+        [
+          "Hardware Store",
+          0.321102
+        ],
+        [
+          "Home Chores",
+          0.267528
+        ]
+      ]
+    },
+    {
+      "text": "travel adapter",
+      "expected": "Trip Packing",
+      "scored": [
+        [
+          "Trip Packing",
+          0.558176
+        ],
+        [
+          "Hardware Store",
+          0.385035
+        ],
+        [
+          "Shopping",
+          0.380736
+        ],
+        [
+          "Gift Ideas",
+          0.353209
+        ],
+        [
+          "To-Do",
+          0.319969
+        ],
+        [
+          "Groceries",
+          0.312922
+        ],
+        [
+          "Home Chores",
+          0.23951
+        ]
+      ]
+    },
+    {
+      "text": "drill bits",
+      "expected": "Hardware Store",
+      "scored": [
+        [
+          "Hardware Store",
+          0.412698
+        ],
+        [
+          "Shopping",
+          0.401981
+        ],
+        [
+          "To-Do",
+          0.38497
+        ],
+        [
+          "Home Chores",
+          0.365148
+        ],
+        [
+          "Gift Ideas",
+          0.356585
+        ],
+        [
+          "Trip Packing",
+          0.353331
+        ],
+        [
+          "Groceries",
+          0.339525
+        ]
+      ]
+    },
+    {
+      "text": "wood screws",
+      "expected": "Hardware Store",
+      "scored": [
+        [
+          "Hardware Store",
+          0.456552
+        ],
+        [
+          "Shopping",
+          0.386719
+        ],
+        [
+          "Home Chores",
+          0.385757
+        ],
+        [
+          "Gift Ideas",
+          0.361699
+        ],
+        [
+          "To-Do",
+          0.346424
+        ],
+        [
+          "Groceries",
+          0.336853
+        ],
+        [
+          "Trip Packing",
+          0.31809
+        ]
+      ]
+    },
+    {
+      "text": "sandpaper",
+      "expected": "Hardware Store",
+      "scored": [
+        [
+          "Trip Packing",
+          0.398296
+        ],
+        [
+          "Shopping",
+          0.374209
+        ],
+        [
+          "Groceries",
+          0.335845
+        ],
+        [
+          "Hardware Store",
+          0.335637
+        ],
+        [
+          "To-Do",
+          0.320649
+        ],
+        [
+          "Home Chores",
+          0.292605
+        ],
+        [
+          "Gift Ideas",
+          0.292593
+        ]
+      ]
+    },
+    {
+      "text": "paint roller",
+      "expected": "Hardware Store",
+      "scored": [
+        [
+          "Hardware Store",
+          0.325352
+        ],
+        [
+          "Shopping",
+          0.306884
+        ],
+        [
+          "To-Do",
+          0.304869
+        ],
+        [
+          "Trip Packing",
+          0.279474
+        ],
+        [
+          "Home Chores",
+          0.265095
+        ],
+        [
+          "Groceries",
+          0.238579
+        ],
+        [
+          "Gift Ideas",
+          0.227705
+        ]
+      ]
+    },
+    {
+      "text": "wall anchors",
+      "expected": "Hardware Store",
+      "scored": [
+        [
+          "Home Chores",
+          0.433569
+        ],
+        [
+          "Hardware Store",
+          0.398372
+        ],
+        [
+          "Shopping",
+          0.395509
+        ],
+        [
+          "Trip Packing",
+          0.376361
+        ],
+        [
+          "Gift Ideas",
+          0.366127
+        ],
+        [
+          "To-Do",
+          0.353557
+        ],
+        [
+          "Groceries",
+          0.336699
+        ]
+      ]
+    },
+    {
+      "text": "asdfghjkl",
+      "expected": null,
+      "scored": [
+        [
+          "Shopping",
+          0.32684
+        ],
+        [
+          "Hardware Store",
+          0.321699
+        ],
+        [
+          "Gift Ideas",
+          0.295521
+        ],
+        [
+          "Groceries",
+          0.289223
+        ],
+        [
+          "To-Do",
+          0.274155
+        ],
+        [
+          "Trip Packing",
+          0.259735
+        ],
+        [
+          "Home Chores",
+          0.239219
+        ]
+      ]
+    },
+    {
+      "text": "what is the weather today",
+      "expected": null,
+      "scored": [
+        [
+          "To-Do",
+          0.36551
+        ],
+        [
+          "Trip Packing",
+          0.361712
+        ],
+        [
+          "Home Chores",
+          0.350588
+        ],
+        [
+          "Gift Ideas",
+          0.336154
+        ],
+        [
+          "Shopping",
+          0.334718
+        ],
+        [
+          "Groceries",
+          0.311709
+        ],
+        [
+          "Hardware Store",
+          0.29679
+        ]
+      ]
+    },
+    {
+      "text": "explain quantum mechanics",
+      "expected": null,
+      "scored": [
+        [
+          "To-Do",
+          0.32311
+        ],
+        [
+          "Gift Ideas",
+          0.310745
+        ],
+        [
+          "Home Chores",
+          0.309426
+        ],
+        [
+          "Trip Packing",
+          0.305138
+        ],
+        [
+          "Hardware Store",
+          0.30225
+        ],
+        [
+          "Shopping",
+          0.300746
+        ],
+        [
+          "Groceries",
+          0.289209
+        ]
+      ]
+    }
+  ]
+}
