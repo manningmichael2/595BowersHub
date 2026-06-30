@@ -207,6 +207,13 @@ async def handle_chat_message(
     content = data.get("content", "").strip()
     model = data.get("model", "auto")
     attachments = data.get("attachments", [])
+    # Chat-bar Shared/Private toggle: visibility the Context Harvester applies to
+    # facts captured from this message. Default 'shared' (matches the household
+    # shared-context model); the user flips to Private per conversation. Untrusted
+    # client input, so clamp to the known values.
+    capture_visibility = data.get("capture_visibility", "shared")
+    if capture_visibility not in ("private", "shared"):
+        capture_visibility = "shared"
 
     if not content:
         await websocket.send_json({
@@ -353,6 +360,7 @@ async def handle_chat_message(
                 user_message=content,
                 assistant_message=result.content,
                 skill_name=result.skill_name,
+                capture_visibility=capture_visibility,
             ))
         except Exception as e:
             logger.debug(f"message_received hook dispatch failed (non-blocking): {e}")

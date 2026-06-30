@@ -39,9 +39,12 @@ class HybridRetriever:
         source_type: str,
         limit: int = 10,
         accessible_workspaces: Optional[List[int]] = None,
+        viewer_user_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Hybrid search. `accessible_workspaces` scopes message results (R3.3);
-        None = unscoped (caller already authorized)."""
+        None = unscoped (caller already authorized). `viewer_user_id` scopes
+        entity results to shared + the viewer's own private facts (privacy
+        boundary, migration 0057); None = shared-only (system caller)."""
         query_vector = None
         try:
             query_vector = await self.client.embed(query)
@@ -54,7 +57,8 @@ class HybridRetriever:
                 return await self._search_messages(
                     conn, query, query_vector, limit, overfetch_limit, accessible_workspaces
                 )
-            return await self._search_entities(conn, query, query_vector, limit, overfetch_limit)
+            return await self._search_entities(conn, query, query_vector, limit, overfetch_limit,
+                                               viewer_user_id=viewer_user_id)
 
     def _vector_cte(self, source_type: str, vec_param: str, limit_param: str) -> str:
         """The vector ANN CTE for hybrid mode (current-version rows only)."""
@@ -125,9 +129,19 @@ class HybridRetriever:
             rows = await conn.fetch(sql, query, self._rrf_k, workspaces, limit, overfetch_limit)
         return [dict(r) for r in rows]
 
-    async def _search_entities(self, conn, query, query_vector, limit, overfetch_limit):
+    async def _search_entities(self, conn, query, query_vector, limit, overfetch_limit,
+                               viewer_user_id=None):
+        # Privacy scope: a viewer sees shared entities plus their OWN private ones.
+        # A NULL viewer (system/unauthenticated caller) sees shared only. Auto-
+        # captured facts default to private, so this is what keeps one household
+        # member's harvested facts out of another's recall (see migration 0057).
+        visibility_clause = (
+            "e.is_active = true "
+            "AND (e.visibility = 'shared' "
+            "     OR ({viewer}::int IS NOT NULL AND e.created_by = {viewer}::int))"
+        )
         if query_vector is not None:
-            # hybrid: $1 vec, $2 overfetch, $3 query, $4 rrf_k, $5 limit
+            # hybrid: $1 vec, $2 overfetch, $3 query, $4 rrf_k, $5 limit, $6 viewer
             sql = f"""
             WITH {self._vector_cte('entity', '$1', '$2')}
             fts_search AS (
@@ -147,14 +161,15 @@ class HybridRetriever:
             SELECT h.source_id, h.rrf_score, e.name, e.summary, e.is_active
             FROM hybrid h
             JOIN public.bh_entities e ON e.id = h.source_id
-            WHERE e.is_active = true
+            WHERE {visibility_clause.format(viewer='$6')}
             ORDER BY h.rrf_score DESC
             LIMIT $5
             """
-            rows = await conn.fetch(sql, query_vector, overfetch_limit, query, self._rrf_k, limit)
+            rows = await conn.fetch(sql, query_vector, overfetch_limit, query,
+                                    self._rrf_k, limit, viewer_user_id)
         else:
-            # FTS-only degrade (R3.3): $1 query, $2 rrf_k, $3 limit, $4 overfetch
-            sql = """
+            # FTS-only degrade (R3.3): $1 query, $2 rrf_k, $3 limit, $4 overfetch, $5 viewer
+            sql = f"""
             WITH fts_search AS (
                 SELECT source_id,
                        ROW_NUMBER() OVER (ORDER BY ts_rank_cd(fts, plainto_tsquery('english', $1)) DESC) AS rank
@@ -166,9 +181,10 @@ class HybridRetriever:
             SELECT f.source_id, (1.0 / ($2 + f.rank)) AS rrf_score, e.name, e.summary, e.is_active
             FROM fts_search f
             JOIN public.bh_entities e ON e.id = f.source_id
-            WHERE e.is_active = true
+            WHERE {visibility_clause.format(viewer='$5')}
             ORDER BY rrf_score DESC
             LIMIT $3
             """
-            rows = await conn.fetch(sql, query, self._rrf_k, limit, overfetch_limit)
+            rows = await conn.fetch(sql, query, self._rrf_k, limit, overfetch_limit,
+                                    viewer_user_id)
         return [dict(r) for r in rows]

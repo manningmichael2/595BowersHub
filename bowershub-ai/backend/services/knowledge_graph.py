@@ -49,11 +49,18 @@ async def remember_entity(
     attributes: Optional[Dict[str, Any]] = None,
     source: str = "chat",
     user_id: Optional[int] = None,
+    visibility: str = "shared",
 ) -> dict:
     """
     Create or update an entity in the knowledge graph.
     If an entity with the same name and type exists, updates it (merge attributes).
-    
+
+    `visibility` ('shared'|'private') is applied only on INSERT. Manual /remember
+    leaves it 'shared'; the Context Harvester passes 'private' so auto-captured
+    facts are scoped to their author on the recall path (see hybrid_retrieval).
+    On UPDATE the existing visibility is preserved — a re-capture must never flip
+    a fact a user already shared (or kept private) to the other state.
+
     Returns the entity dict.
     """
     pool = get_pool()
@@ -81,11 +88,11 @@ async def remember_entity(
             """, existing["id"], summary, json.dumps(merged_attrs), source)
         else:
             row = await conn.fetchrow("""
-                INSERT INTO public.bh_entities (name, entity_type, summary, attributes, source, created_by)
-                VALUES ($1, $2, $3, $4::jsonb, $5, $6)
+                INSERT INTO public.bh_entities (name, entity_type, summary, attributes, source, created_by, visibility)
+                VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
                 RETURNING *
             """, name.strip(), entity_type.strip(), summary,
-                json.dumps(attributes or {}), source, user_id)
+                json.dumps(attributes or {}), source, user_id, visibility)
 
     logger.info(f"Knowledge graph: {'updated' if existing else 'created'} entity '{name}' ({entity_type})")
     return dict(row)
@@ -156,16 +163,28 @@ async def recall_entities(
     query: Optional[str] = None,
     entity_type: Optional[str] = None,
     limit: int = 20,
+    user_id: Optional[int] = None,
 ) -> List[dict]:
     """
     Search entities by name (full-text), type, or both.
     Returns a list of entity dicts with their relationship counts.
+
+    `user_id` is the viewer: results are scoped to shared facts plus the viewer's
+    own private facts (privacy boundary, migration 0057). None = shared only.
     """
     pool = get_pool()
     async with pool.acquire() as conn:
         conditions = ["e.is_active = true"]
         params = []
         idx = 1
+
+        # Privacy scope: shared, or the viewer's own private facts.
+        conditions.append(
+            f"(e.visibility = 'shared' "
+            f"OR (${idx}::int IS NOT NULL AND e.created_by = ${idx}::int))"
+        )
+        params.append(user_id)
+        idx += 1
 
         if query:
             conditions.append(f"to_tsvector('english', e.name || ' ' || COALESCE(e.summary, '')) @@ plainto_tsquery('english', ${idx})")
@@ -230,11 +249,15 @@ async def recall_related(entity_name: str, depth: int = 1) -> dict:
     }
 
 
-async def recall_graph(query: str, limit: int = 15) -> dict:
+async def recall_graph(query: str, limit: int = 15, user_id: Optional[int] = None) -> dict:
     """
     Hybrid (vector + full-text) search across the entire knowledge graph.
     Returns matching entities with their connections.
-    
+
+    `user_id` is the viewer: entity results are scoped to shared facts plus the
+    viewer's own private facts (privacy boundary, migration 0057). None = a
+    system caller with no viewer → shared facts only.
+
     Satisfies R3.2, R3.3.
     """
     retriever = _get_hybrid_retriever()
@@ -243,7 +266,8 @@ async def recall_graph(query: str, limit: int = 15) -> dict:
         rows = await retriever.search_hybrid(
             query=query,
             source_type='entity',
-            limit=limit
+            limit=limit,
+            viewer_user_id=user_id,
         )
         
         if not rows:
@@ -271,6 +295,8 @@ async def recall_graph(query: str, limit: int = 15) -> dict:
                                plainto_tsquery('english', $1)) as rank
                 FROM public.bh_entities e
                 WHERE e.is_active = true
+                  AND (e.visibility = 'shared'
+                       OR ($3::int IS NOT NULL AND e.created_by = $3::int))
                   AND (
                       to_tsvector('english', e.name || ' ' || COALESCE(e.summary, '')) @@ plainto_tsquery('english', $1)
                       OR LOWER(e.name) LIKE '%' || LOWER($1) || '%'
@@ -278,7 +304,7 @@ async def recall_graph(query: str, limit: int = 15) -> dict:
                   )
                 ORDER BY rank DESC, e.updated_at DESC
                 LIMIT $2
-            """, query, limit)
+            """, query, limit, user_id)
 
     if not entities:
         return {"found": False, "query": query, "entities": [], "_display": f"No knowledge found for **{query}**. Try `/remember` to teach me something."}

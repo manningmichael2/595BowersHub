@@ -102,6 +102,77 @@ async def test_fts_only_degrade_when_embedding_down(fresh_db, db_settings):
         await close_pool()
 
 
+async def _add_scoped_entity(conn, name, summary, *, created_by, visibility):
+    return await conn.fetchval(
+        """
+        INSERT INTO public.bh_entities (name, entity_type, summary, source, created_by, visibility)
+        VALUES ($1,'fact',$2,'context_capture',$3,$4) RETURNING id
+        """,
+        name, summary, created_by, visibility,
+    )
+
+
+async def test_entity_recall_scopes_private_to_owner(fresh_db, db_settings):
+    """Privacy boundary (0057): a private entity is visible to its author and to a
+    shared-only/system viewer NOT at all; a shared entity is visible to everyone.
+    Covers the hybrid (query_vector present) branch."""
+    pool = await apply_migrations(fresh_db, db_settings)
+    try:
+        async with pool.acquire() as conn:
+            await seed_user_and_conversation(conn)  # user 1 (the author)
+            other = await conn.fetchval(
+                "INSERT INTO public.bh_users (email,password_hash,display_name,role) "
+                "VALUES ('o@t','x','Other','member') RETURNING id")
+            priv = await _add_scoped_entity(conn, "Surprise", "buying Manon a bike for her birthday",
+                                            created_by=1, visibility="private")
+            shared = await _add_scoped_entity(conn, "Trip", "the family is going to Italy in July",
+                                              created_by=1, visibility="shared")
+        await EmbeddingWorker(FakeEmbeddingsClient(), pool).run_tick()
+
+        retr = HybridRetriever(FakeEmbeddingsClient(), pool)
+        # Author sees their own private fact + the shared one.
+        as_author = {r["source_id"] for r in
+                     await retr.search_hybrid("birthday Italy", "entity", limit=10, viewer_user_id=1)}
+        assert priv in as_author and shared in as_author
+        # The other household member sees only the shared fact, never the private one.
+        as_other = {r["source_id"] for r in
+                    await retr.search_hybrid("birthday Italy", "entity", limit=10, viewer_user_id=other)}
+        assert shared in as_other and priv not in as_other
+        # A system caller (no viewer) sees shared only.
+        as_system = {r["source_id"] for r in
+                     await retr.search_hybrid("birthday Italy", "entity", limit=10)}
+        assert shared in as_system and priv not in as_system
+    finally:
+        await close_pool()
+
+
+async def test_entity_recall_scoping_holds_in_fts_degrade(fresh_db, db_settings):
+    """The same private/shared scoping applies on the FTS-only degrade path
+    (query embedding unavailable)."""
+    pool = await apply_migrations(fresh_db, db_settings)
+    try:
+        async with pool.acquire() as conn:
+            await seed_user_and_conversation(conn)  # user 1
+            other = await conn.fetchval(
+                "INSERT INTO public.bh_users (email,password_hash,display_name,role) "
+                "VALUES ('o2@t','x','Other','member') RETURNING id")
+            priv = await _add_scoped_entity(conn, "Secret", "codename bluebird launch plan",
+                                            created_by=1, visibility="private")
+        await EmbeddingWorker(FakeEmbeddingsClient(), pool).run_tick()
+
+        down = FakeEmbeddingsClient()
+        down.fail = True  # force FTS-only
+        retr = HybridRetriever(down, pool)
+        as_author = {r["source_id"] for r in
+                     await retr.search_hybrid("bluebird launch", "entity", limit=10, viewer_user_id=1)}
+        as_other = {r["source_id"] for r in
+                    await retr.search_hybrid("bluebird launch", "entity", limit=10, viewer_user_id=other)}
+        assert priv in as_author
+        assert priv not in as_other
+    finally:
+        await close_pool()
+
+
 async def test_entity_retrieval_excludes_inactive(fresh_db, db_settings):
     pool = await apply_migrations(fresh_db, db_settings)
     try:

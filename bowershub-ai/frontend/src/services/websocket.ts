@@ -81,13 +81,14 @@ class WebSocketClient {
     this.setStatus('disconnected')
   }
 
-  sendMessage(conversationId: number, content: string, model: string = 'auto', attachments: any[] = []) {
+  sendMessage(conversationId: number, content: string, model: string = 'auto', attachments: any[] = [], captureVisibility: 'private' | 'shared' = 'shared') {
     const msg = {
       type: 'message',
       conversation_id: conversationId,
       content,
       model,
       attachments,
+      capture_visibility: captureVisibility,
     }
 
     if (this.ws?.readyState === WebSocket.OPEN) {

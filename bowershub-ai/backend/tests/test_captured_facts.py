@@ -89,6 +89,59 @@ async def test_delete_is_scoped_and_soft(env):
         await admin.delete_captured_fact(cap_id, user={"id": env["uid"]})
 
 
+async def test_list_includes_visibility(env):
+    async with env["pool"].acquire() as conn:
+        await _add_entity(conn, "f", "auto fact", "context_capture", env["uid"])
+    out = await admin.list_captured_facts(user={"id": env["uid"]}, limit=50, offset=0)
+    assert out["facts"][0]["visibility"] == "shared"  # column default until flipped
+
+
+async def test_visibility_flip_scoped_to_auto_captured(env):
+    async with env["pool"].acquire() as conn:
+        cap_id = await _add_entity(conn, "f", "auto fact", "context_capture", env["uid"])
+        chat_id = await _add_entity(conn, "m", "manual fact", "chat", env["uid"])
+
+    from fastapi import HTTPException
+
+    # Flip the auto-captured fact to private.
+    res = await admin.set_captured_fact_visibility(
+        cap_id, admin.CapturedFactVisibilityUpdate(visibility="private"),
+        user={"id": env["uid"]})
+    assert res["visibility"] == "private"
+    async with env["pool"].acquire() as conn:
+        vis = await conn.fetchval("SELECT visibility FROM public.bh_entities WHERE id=$1", cap_id)
+    assert vis == "private"
+
+    # A bad value is rejected.
+    with pytest.raises(HTTPException) as ei:
+        await admin.set_captured_fact_visibility(
+            cap_id, admin.CapturedFactVisibilityUpdate(visibility="public"),
+            user={"id": env["uid"]})
+    assert ei.value.status_code == 400
+
+    # Cannot touch a manually-taught /remember entity through this endpoint.
+    with pytest.raises(HTTPException) as ei:
+        await admin.set_captured_fact_visibility(
+            chat_id, admin.CapturedFactVisibilityUpdate(visibility="private"),
+            user={"id": env["uid"]})
+    assert ei.value.status_code == 404
+
+
+async def test_captures_are_shared_by_default(env):
+    """Shared-by-default: a freshly auto-captured fact lands 'shared' (the column
+    default; no backfill flips it to private). Private is opt-in via the toggle."""
+    async with env["pool"].acquire() as conn:
+        owned = await _add_entity(conn, "a", "auto owned", "context_capture", env["uid"])
+        orphan = await _add_entity(conn, "b", "auto no-owner", "context_capture", None)
+        manual = await _add_entity(conn, "c", "manual", "chat", env["uid"])
+        vis = {r["id"]: r["visibility"] for r in await conn.fetch(
+            "SELECT id, visibility FROM public.bh_entities WHERE id = ANY($1::int[])",
+            [owned, orphan, manual])}
+    assert vis[owned] == "shared"
+    assert vis[orphan] == "shared"
+    assert vis[manual] == "shared"
+
+
 # ── weekly digest ─────────────────────────────────────────────────────────────
 
 class _StubNotifier:
