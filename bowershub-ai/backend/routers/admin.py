@@ -1022,13 +1022,15 @@ async def list_captured_facts(
     offset: int = Query(0, ge=0),
 ):
     """List facts the Context Harvester auto-captured (bh_entities, source=
-    'context_capture') for review, newest first. Household-shared, so all are
-    listed; the per-row `captured_by` shows from whom each was learned."""
+    'context_capture') for review, newest first. Each row's `visibility`
+    ('private' = scoped to the author on recall, 'shared' = whole household) and
+    `captured_by` show how/from whom it was learned. Auto-captured facts default
+    to private; flip via PATCH .../visibility."""
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT e.id, e.name, e.entity_type, e.summary, e.created_at,
+            SELECT e.id, e.name, e.entity_type, e.summary, e.created_at, e.visibility,
                    e.attributes->>'captured_by' AS captured_by,
                    e.attributes->>'topic'       AS topic
             FROM public.bh_entities e
@@ -1051,11 +1053,38 @@ async def list_captured_facts(
                 "summary": r["summary"],
                 "captured_by": r["captured_by"],
                 "topic": r["topic"],
+                "visibility": r["visibility"],
                 "created_at": r["created_at"].isoformat(),
             }
             for r in rows
         ],
     }
+
+
+class CapturedFactVisibilityUpdate(BaseModel):
+    visibility: str  # 'private' | 'shared'
+
+
+@router.patch("/captured-facts/{entity_id}/visibility")
+async def set_captured_fact_visibility(
+    entity_id: int, body: CapturedFactVisibilityUpdate,
+    user: dict = Depends(require_admin),
+):
+    """Flip an auto-captured fact between private (scoped to its author on recall)
+    and shared (whole household). Scoped to source='context_capture' so it can't
+    touch a manually-taught /remember entity."""
+    if body.visibility not in ("private", "shared"):
+        raise HTTPException(status_code=400, detail="visibility must be 'private' or 'shared'")
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE public.bh_entities SET visibility = $2, updated_at = now() "
+            "WHERE id = $1 AND source = 'context_capture' AND is_active = true "
+            "RETURNING id, visibility",
+            entity_id, body.visibility)
+    if not row:
+        raise HTTPException(status_code=404, detail="Captured fact not found")
+    return {"id": row["id"], "visibility": row["visibility"]}
 
 
 @router.delete("/captured-facts/{entity_id}")

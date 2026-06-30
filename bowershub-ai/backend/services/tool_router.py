@@ -374,8 +374,12 @@ def get_l3_tools() -> list[dict]:
     ]
 
 
-async def execute_l3_tool(tool_name: str, tool_input: dict) -> str:
-    """Execute a tool call from L3 (Sonnet's tool-use loop)."""
+async def execute_l3_tool(tool_name: str, tool_input: dict, user_id: Optional[int] = None) -> str:
+    """Execute a tool call from L3 (Sonnet's tool-use loop).
+
+    `user_id` is the viewer, threaded into knowledge-graph reads so private-fact
+    scoping applies (migration 0057).
+    """
     if tool_name == "http_request":
         result = await execute_api_call(
             url=tool_input.get("url", ""),
@@ -411,6 +415,7 @@ async def execute_l3_tool(tool_name: str, tool_input: dict) -> str:
         result = await recall_graph(
             query=tool_input.get("query", ""),
             limit=10,
+            user_id=user_id,
         )
         return result.get("_display", json.dumps(result.get("entities", []), indent=2)[:3000])
 

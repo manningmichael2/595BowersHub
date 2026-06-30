@@ -85,6 +85,50 @@ async def test_captured_fact_mirrored_into_knowledge_graph(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_captured_fact_defaults_to_private(tmp_path, monkeypatch):
+    """With no visibility passed (the default), the mirrored entity is 'private' —
+    auto-capture never silently shares a fact across the household (0057)."""
+    calls = []
+
+    async def _fake_remember_entity(**kwargs):
+        calls.append(kwargs)
+        return {"id": 1}
+
+    monkeypatch.setattr("backend.services.knowledge_graph.remember_entity",
+                        _fake_remember_entity)
+
+    cap = _capture(tmp_path, [{"topic": "preferences",
+                               "statement": "Michael is allergic to walnuts"}])
+    await cap.evaluate(
+        "I'm allergic to walnuts.", "Noted.",
+        workspace_name="General", captured_by="Michael", user_id=7,
+    )
+    assert calls and calls[0]["visibility"] == "private"
+
+
+@pytest.mark.asyncio
+async def test_captured_fact_shared_when_toggled(tmp_path, monkeypatch):
+    """When the chat-bar toggle says Shared, the mirrored entity is 'shared'."""
+    calls = []
+
+    async def _fake_remember_entity(**kwargs):
+        calls.append(kwargs)
+        return {"id": 1}
+
+    monkeypatch.setattr("backend.services.knowledge_graph.remember_entity",
+                        _fake_remember_entity)
+
+    cap = _capture(tmp_path, [{"topic": "household",
+                               "statement": "We are going to Italy in July"}])
+    await cap.evaluate(
+        "We're going to Italy in July.", "Sounds great.",
+        workspace_name="General", captured_by="Michael", user_id=7,
+        visibility="shared",
+    )
+    assert calls and calls[0]["visibility"] == "shared"
+
+
+@pytest.mark.asyncio
 async def test_graph_mirror_failure_does_not_lose_markdown(tmp_path, monkeypatch):
     """If the graph write throws, the markdown capture must still succeed (graph is
     best-effort; the file is the source of truth)."""

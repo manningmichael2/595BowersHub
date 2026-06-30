@@ -498,7 +498,7 @@ Gathered results:
             return await self._handle_weather_command(args, context)
 
         elif command == "/recall":
-            return await self._handle_recall_command(args)
+            return await self._handle_recall_command(args, context)
 
         return RoutingResult(layer="L1", content=f"Unknown command: {command}")
 
@@ -889,7 +889,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         display = result.get("_display", str(result))
         return RoutingResult(layer="L1", content=display)
 
-    async def _handle_recall_command(self, args: str) -> RoutingResult:
+    async def _handle_recall_command(self, args: str, context: RoutingContext) -> RoutingResult:
         """Handle /recall — search knowledge base.
 
         Usage:
@@ -903,7 +903,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
             # Show all knowledge topics from the graph
             from backend.services.knowledge_graph import get_stats, recall_entities
             stats = await get_stats()
-            entities = await recall_entities(limit=30)
+            entities = await recall_entities(limit=30, user_id=context.user_id)
             lines = [f"## 🧠 Knowledge Base ({stats['entities']} entities, {stats['relationships']} connections)", ""]
             if stats.get("types"):
                 type_list = ", ".join(f"{t}: {c}" for t, c in stats["types"].items())
@@ -915,7 +915,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
 
         if cleaned in ("recent", "latest", "last"):
             from backend.services.knowledge_graph import recall_entities
-            entities = await recall_entities(limit=10)
+            entities = await recall_entities(limit=10, user_id=context.user_id)
             if not entities:
                 return RoutingResult(layer="L1", content="No knowledge saved yet. Try `/remember <topic> <fact>`")
             lines = ["## 🧠 Recent Knowledge", ""]
@@ -928,8 +928,11 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
         if not cleaned:
             return RoutingResult(layer="L1", content="What would you like to recall? Usage: `/recall <search term>`")
 
-        # Use the skill handler (searches both graph + markdown)
-        result = await self.skill_executor.execute("recall", {"query": cleaned}, 1, 1)
+        # Use the skill handler (searches both graph + markdown). Pass the real
+        # viewer so private-fact scoping applies (migration 0057) — previously
+        # hardcoded user/workspace 1, which would have run recall as the wrong user.
+        result = await self.skill_executor.execute(
+            "recall", {"query": cleaned}, context.user_id, context.workspace_id)
         formatted = self.skill_executor.format_response(result)
         return RoutingResult(layer="L1", content=formatted)
 
@@ -1506,7 +1509,7 @@ _Note: This model is smaller than Claude — great for simple questions, brainst
                 if tc["name"] in TOOLBOX_TOOLS:
                     try:
                         from backend.services.tool_router import execute_l3_tool
-                        result_text = await execute_l3_tool(tc["name"], tc["arguments"])
+                        result_text = await execute_l3_tool(tc["name"], tc["arguments"], context.user_id)
                         await ws_manager.send_skill_status(
                             context.user_id, context.conversation_id, tc["name"], "complete"
                         )

@@ -16,11 +16,15 @@ async def handle_recall(params: dict) -> dict:
     if not query:
         return {"_display": "What would you like me to search for?"}
 
+    # The viewer (injected by skill_executor as _user_id) scopes graph recall to
+    # shared facts + this user's own private facts (privacy boundary, 0057).
+    user_id = params.get("_user_id")
+
     # Search both systems in parallel
     import asyncio
     markdown_result, graph_result = await asyncio.gather(
         recall(query=query),
-        recall_graph(query=query),
+        recall_graph(query=query, user_id=user_id),
         return_exceptions=True,
     )
 
