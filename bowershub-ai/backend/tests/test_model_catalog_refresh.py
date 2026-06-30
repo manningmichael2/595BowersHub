@@ -44,9 +44,14 @@ class FakeSource:
         self._complete = complete
         self.gate = gate
         self.calls = 0
+        # Set the instant discover() begins, so a concurrency test can wait for
+        # the task to actually be *inside* discover() (deterministic) instead of
+        # guessing with a fixed sleep.
+        self.entered = asyncio.Event()
 
     async def discover(self) -> DiscoveryResult:
         self.calls += 1
+        self.entered.set()
         if self.gate is not None:
             await self.gate.wait()
         return DiscoveryResult(models=list(self._models), complete=self._complete)
@@ -181,9 +186,16 @@ async def test_single_flight_and_audit_log(fresh_db, db_settings):
         cr = CatalogRefresh(pool, [gated])   # one instance → one lock shared by both calls
 
         t1 = asyncio.create_task(cr.refresh(trigger="scheduled"))
-        await asyncio.sleep(0)               # t1 acquires the lock, calls discover(), blocks at the gate
+        # Deterministic: wait until t1 is actually inside discover() (lock held,
+        # parked at the gate) rather than assuming one scheduler tick gets it there
+        # — refresh() acquires the DB pool first, so a fixed sleep is racy (flaked
+        # the backend CI job intermittently).
+        await gated.entered.wait()
         t2 = asyncio.create_task(cr.refresh(trigger="admin"))
-        await asyncio.sleep(0.02)
+        # Drain ready callbacks so t2 runs as far as it can — which is up to the
+        # single-flight lock t1 holds. No wall-clock wait, so no CI-load flake.
+        for _ in range(10):
+            await asyncio.sleep(0)
         assert gated.calls == 1              # t2 is blocked on the lock — its discover() hasn't run (R2.5 single-flight)
         gate.set()
         await t1
