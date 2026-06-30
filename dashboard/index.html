@@ -84,6 +84,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/gridstack@10/dist/gridstack-all.js"></script>
     <script>
+    // Single host for every service link below — change the address in one place
+    // instead of editing the IP inline throughout (design-review: hardcoded IPs).
+    const HOST = '100.106.180.101';
     // ========== TILE DEFINITIONS ==========
     const TILES = {
         weather:      { title: 'Weather — Clawson, MI', w:4, h:3, x:0, y:0 },
@@ -231,7 +234,7 @@
 
     async function loadContainers() {
         const el=document.getElementById('containers'); if(!el)return;
-        const cs=[{n:'BowersHub AI',u:'https://595bowershub.tailc4d58a.ts.net'},{n:'n8n',u:'http://100.106.180.101:5678'},{n:'postgres'},{n:'filewriter'},{n:'db-admin',u:'http://100.106.180.101:5002'},{n:'📸 Upload to Inbox',u:'http://100.106.180.101:5002/upload'},{n:'netdata',u:'http://100.106.180.101:19999'},{n:'portainer',u:'https://100.106.180.101:9443'},{n:'audiobookshelf',u:'http://100.106.180.101:13378'},{n:'ollama'},{n:'dashboard',u:'http://100.106.180.101:8080'}];
+        const cs=[{n:'BowersHub AI',u:'https://595bowershub.tailc4d58a.ts.net'},{n:'n8n',u:`http://${HOST}:5678`},{n:'postgres'},{n:'filewriter'},{n:'db-admin',u:`http://${HOST}:5002`},{n:'📸 Upload to Inbox',u:`http://${HOST}:5002/upload`},{n:'netdata',u:`http://${HOST}:19999`},{n:'portainer',u:`https://${HOST}:9443`},{n:'audiobookshelf',u:`http://${HOST}:13378`},{n:'ollama'},{n:'dashboard',u:`http://${HOST}:8080`}];
         el.innerHTML=cs.map(c=>`<div class="metric"><span class="label">${c.u?`<a href="${c.u}" target="_blank"><span class="status-dot green"></span>${c.n}</a>`:`<span class="status-dot green"></span>${c.n}`}</span><span class="value green">●</span></div>`).join('');
     }
 
@@ -313,14 +316,14 @@
         if(d&&d.ok){
             let html=`<div class="metric"><span class="label">Library</span><span class="value">${d.total_items} books</span></div><div class="metric"><span class="label">Authors</span><span class="value muted">${d.total_authors}</span></div><div class="metric"><span class="label">Total Duration</span><span class="value muted">${d.total_hours} hrs</span></div><div class="metric"><span class="label">Size</span><span class="value muted">${d.total_size_gb} GB</span></div>`;
             if(d.in_progress&&d.in_progress.length>0){html+=`<div style="margin-top:0.5rem;border-top:1px solid #21262d;padding-top:0.5rem"><h2 style="margin-bottom:0.4rem">Currently Reading</h2>`;for(const b of d.in_progress){html+=`<div class="metric"><span class="label" style="font-size:0.8rem">${b.title.slice(0,30)}</span><span class="value muted" style="font-size:0.8rem">${b.progress_pct}%</span></div>`;}html+=`</div>`;}
-            html+=`<div class="metric" style="margin-top:0.5rem"><span class="label"><a href="http://100.106.180.101:13378" target="_blank">Open Audiobookshelf →</a></span></div>`;
+            html+=`<div class="metric" style="margin-top:0.5rem"><span class="label"><a href="http://${HOST}:13378" target="_blank">Open Audiobookshelf →</a></span></div>`;
             el.innerHTML=html;
-        } else {el.innerHTML=`<div class="metric"><span class="label">Service</span><span class="value green"><a href="http://100.106.180.101:13378" target="_blank">Open →</a></span></div><div class="metric"><span class="label">Status</span><span class="value muted">${d?d.error:'Unavailable'}</span></div>`;}
+        } else {el.innerHTML=`<div class="metric"><span class="label">Service</span><span class="value green"><a href="http://${HOST}:13378" target="_blank">Open →</a></span></div><div class="metric"><span class="label">Status</span><span class="value muted">${d?d.error:'Unavailable'}</span></div>`;}
     }
 
     async function loadActivity() {
         const el=document.getElementById('activity'); if(!el)return;
-        el.innerHTML=`<div class="activity-item">Activity feed — coming in daily digest workflow. <a href="http://100.106.180.101:5678/executions" target="_blank">n8n executions →</a></div>`;
+        el.innerHTML=`<div class="activity-item">Activity feed — coming in daily digest workflow. <a href="http://${HOST}:5678/executions" target="_blank">n8n executions →</a></div>`;
     }
 
     // ========== REFRESH ==========

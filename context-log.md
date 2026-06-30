@@ -1516,3 +1516,17 @@ Track 2 of the design-review follow-through (branch `feat/frontend-hardening`, o
 **3. Diagnose-the-next-one.** Since purged logs were why the flake was a mystery: backend CI now runs `pytest -ra --junitxml` and uploads the report as a 30-day artifact, so the next intermittent failure names the exact test.
 
 - [Next] Push branch + PR; its own CI run validates gitleaks-green + backend. Then resume **Track 3** (n8n sunset). PR #55 (privacy, shared-by-default) still open; #56 merged.
+
+## [2026-06-30] Track 3 (n8n sunset) — part 1: hygiene, NOT the decommission — Claude Code
+
+Started Track 3 (branch `chore/n8n-sunset`). **Key finding that reshapes the track:** the backend STILL depends on n8n at runtime — `routers/quick_capture.py` delegates to the n8n smart-capture pipeline and `config.py` requires `N8N_BASE` (`os.environ["N8N_BASE"]`). So "decommission the n8n container" is NOT a cleanup — it requires first porting the 42KB `smart-capture.json` workflow to Python and repointing quick-capture off n8n. That's a separate, larger effort gated on a deploy decision; deliberately NOT auto-built here.
+
+**This PR (part 1) = the safe, real, low-risk slice from the design review's "Purge Hardcoded IPs" item:**
+- Deleted the stray untracked `bowershub-ai/frontend/vite.expose.config.ts` (dev server bound `0.0.0.0` + `allowedHosts:true` — left over from a remote visual pass).
+- `dashboard/app.py` (live host-network Flask service, own compose): the 4 hardcoded `100.106.180.101` service URLs now derive from one env-overridable `BOWERSHUB_HOST` (default keeps the current address). The dashboard runs on the host network and reaches services over Tailscale, so a single host var — not Docker DNS — is the right fix.
+- `dashboard/index.html`: the inline service links now build from a single `const HOST` instead of the IP hardcoded across the tile array + 3 template literals. A host change is now one line in each file, addressing the review's "a single IP change will break all surrounding services."
+- Left `n8n-workflows/_config.py` as-is — already env-overridable (`N8N_URL` default), and the whole `n8n-workflows/` build-script dir is on death row with n8n anyway.
+
+Verified: `app.py` parses; index.html has the IP in exactly one place (the `HOST` const); no runtime/behavior change (defaults preserve the current address).
+
+- [Next] Push + PR. **The real n8n decommission remains** and needs its own plan: (1) port `smart-capture.json` → Python (the categorizer/finance-query/inbox workflows too), (2) repoint `quick_capture.py` + drop the `N8N_BASE` requirement, (3) `docker compose down n8n` + remove from `infrastructure/docker-compose.yml`, (4) delete `n8n-workflows/`. That's owner-gated (deploy + feature-parity risk). PR #55 (privacy) still open; #56 + #57 merged, main green.
