@@ -8,7 +8,7 @@
  * skill writes the same lists ("add milk to the list").
  */
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { Check, Trash2, Plus, Settings2, ChevronDown, Pencil, GripVertical, Archive } from 'lucide-react'
+import { Check, Trash2, Plus, Settings2, ChevronDown, Pencil, GripVertical, Archive, List, Table2, SlidersHorizontal } from 'lucide-react'
 import { api } from '../services/api'
 import { toast } from '../stores/toast'
 import {
@@ -84,6 +84,9 @@ export default function ListsPage() {
   const [editing, setEditing] = useState<Item | null>(null)
   const [dragId, setDragId] = useState<number | null>(null)
   const [archivedOpen, setArchivedOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'table'>('list')
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set())
+  const [colMenuOpen, setColMenuOpen] = useState(false)
 
   const storeField = useMemo(() => schema.find((f) => f.key === 'store'), [schema])
   const activeType = useMemo(
@@ -94,6 +97,35 @@ export default function ListsPage() {
   // Drag-reorder is only meaningful on a flat (ungrouped) list in manual order.
   const grouped = groups.some((g) => g.label != null)
   const canReorder = !grouped && (sort === '' || sort === 'manual')
+
+  // Per-list view preferences (mode + hidden columns), remembered per device.
+  useEffect(() => {
+    if (activeId == null) return
+    try {
+      const raw = localStorage.getItem(`lists:view:${activeId}`)
+      const v = raw ? JSON.parse(raw) : null
+      setViewMode(v?.mode === 'table' ? 'table' : 'list')
+      setHiddenCols(new Set<string>(v?.hidden ?? []))
+    } catch { setViewMode('list'); setHiddenCols(new Set()) }
+  }, [activeId])
+
+  const persistView = useCallback((mode: 'list' | 'table', hidden: Set<string>) => {
+    if (activeId == null) return
+    try { localStorage.setItem(`lists:view:${activeId}`, JSON.stringify({ mode, hidden: [...hidden] })) } catch { /* */ }
+  }, [activeId])
+
+  const setMode = (m: 'list' | 'table') => { setViewMode(m); persistView(m, hiddenCols) }
+  const toggleCol = (key: string) => {
+    setHiddenCols((cur) => {
+      const next = new Set(cur)
+      next.has(key) ? next.delete(key) : next.add(key)
+      persistView(viewMode, next)
+      return next
+    })
+  }
+  // Columns selectable in the view editor (everything except the item label + internal fields).
+  const columnFields = schema.filter((f) => !['text', 'checked', 'sort_order'].includes(f.key))
+  const visibleColumns = columnFields.filter((f) => !hiddenCols.has(f.key))
 
   const loadLists = useCallback(async () => {
     try {
@@ -274,6 +306,39 @@ export default function ListsPage() {
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          {/* View mode: List / Table */}
+          <div className="flex overflow-hidden rounded-md border border-border">
+            <button aria-label="List view" onClick={() => setMode('list')}
+              className={'px-2 py-1 ' + (viewMode === 'list' ? 'bg-surface-light text-text' : 'text-text-muted')}>
+              <List size={15} aria-hidden />
+            </button>
+            <button aria-label="Table view" onClick={() => setMode('table')}
+              className={'px-2 py-1 ' + (viewMode === 'table' ? 'bg-surface-light text-text' : 'text-text-muted')}>
+              <Table2 size={15} aria-hidden />
+            </button>
+          </div>
+          {/* Column visibility editor (the "edit the view" control) */}
+          {viewMode === 'table' && columnFields.length > 0 && (
+            <div className="relative">
+              <Button variant="ghost" size="sm" onClick={() => setColMenuOpen((o) => !o)} aria-label="Edit columns">
+                <SlidersHorizontal size={15} aria-hidden /> Columns
+              </Button>
+              {colMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setColMenuOpen(false)} />
+                  <div className="absolute right-0 z-50 mt-1 w-48 rounded-lg border border-border bg-surface p-2 shadow-xl">
+                    <p className="px-1 pb-1 text-xs text-text-muted">Show columns</p>
+                    {columnFields.map((f) => (
+                      <label key={f.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-surface-light/50">
+                        <input type="checkbox" checked={!hiddenCols.has(f.key)} onChange={() => toggleCol(f.key)} />
+                        {f.label}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           {checkedCount > 0 && (
             <Button variant="ghost" size="sm" onClick={clearChecked} disabled={busy}>
               Clear {checkedCount} checked
@@ -311,6 +376,9 @@ export default function ListsPage() {
           <p className="py-8 text-center text-sm text-text-muted">
             Nothing here yet. Add an item above — or tell the assistant “add milk to the list”.
           </p>
+        ) : viewMode === 'table' ? (
+          <TableView groups={groups} columns={visibleColumns} onToggle={toggle}
+            onRemove={remove} onEdit={setEditing} />
         ) : (
           <div className="space-y-4">
             {groups.filter((g) => g.items.length > 0).map((g) => (
@@ -389,6 +457,90 @@ function ArchivedDialog({ onClose, onUnarchive }: { onClose: () => void; onUnarc
         <div className="mt-3 flex justify-end"><Button variant="ghost" size="sm" onClick={onClose}>Done</Button></div>
       </div>
     </div>
+  )
+}
+
+function renderCell(field: Field, item: Item): string {
+  const raw = field.storage === 'column'
+    ? (item as unknown as Record<string, unknown>)[field.key]
+    : item.attributes?.[field.key]
+  if (raw == null || (Array.isArray(raw) && raw.length === 0)) return '—'
+  if (field.col_type === 'checkbox') return raw ? '✓' : '—'
+  const label = (v: unknown) => field.options?.find((o) => String(o.value) === String(v))?.label ?? String(v)
+  if (field.col_type === 'single_select') return label(raw)
+  if (field.col_type === 'multi_select' && Array.isArray(raw)) return raw.map(label).join(', ')
+  if (field.col_type === 'date') return String(raw).slice(0, 10)
+  return String(raw)
+}
+
+function TableView({ groups, columns, onToggle, onRemove, onEdit }: {
+  groups: Group[]
+  columns: Field[]
+  onToggle: (i: Item) => void
+  onRemove: (i: Item) => void
+  onEdit: (i: Item) => void
+}) {
+  const visible = groups.filter((g) => g.items.length > 0)
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-text-muted">
+            <th className="w-8 px-2 py-2" />
+            <th className="px-2 py-2 font-semibold">Item</th>
+            {columns.map((c) => <th key={c.key} className="px-2 py-2 font-semibold">{c.label}</th>)}
+            <th className="w-16 px-2 py-2" />
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((g) => (
+            <FragmentGroup key={g.key ?? '__none__'} group={g} colSpan={columns.length + 3}
+              columns={columns} onToggle={onToggle} onRemove={onRemove} onEdit={onEdit} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function FragmentGroup({ group, colSpan, columns, onToggle, onRemove, onEdit }: {
+  group: Group
+  colSpan: number
+  columns: Field[]
+  onToggle: (i: Item) => void
+  onRemove: (i: Item) => void
+  onEdit: (i: Item) => void
+}) {
+  return (
+    <>
+      {group.label && (
+        <tr><td colSpan={colSpan}
+          className="px-2 pb-1 pt-4 text-xs font-semibold uppercase tracking-wider text-text-muted">{group.label}</td></tr>
+      )}
+      {group.items.map((i) => (
+        <tr key={i.id} className="group border-b border-border/50 hover:bg-surface-light/40">
+          <td className="px-2 py-2">
+            <button onClick={() => onToggle(i)} aria-label={i.checked ? `Uncheck ${i.text}` : `Check ${i.text}`}
+              className={'flex h-5 w-5 items-center justify-center rounded border ' +
+                (i.checked ? 'border-primary bg-primary text-on-primary' : 'border-border hover:border-primary')}>
+              {i.checked && <Check size={14} aria-hidden />}
+            </button>
+          </td>
+          <td className={'px-2 py-2 ' + (i.checked ? 'text-text-muted line-through' : '')}>
+            {i.text}{i.quantity && <span className="ml-1 text-xs text-text-muted">({i.quantity})</span>}
+          </td>
+          {columns.map((c) => <td key={c.key} className="px-2 py-2 text-text-muted">{renderCell(c, i)}</td>)}
+          <td className="px-2 py-2">
+            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
+              <button onClick={() => onEdit(i)} aria-label={`Edit ${i.text}`}
+                className="rounded p-1 text-text-muted hover:text-text"><Pencil size={14} /></button>
+              <button onClick={() => onRemove(i)} aria-label={`Remove ${i.text}`}
+                className="rounded p-1 text-text-muted hover:text-danger"><Trash2 size={14} /></button>
+            </div>
+          </td>
+        </tr>
+      ))}
+    </>
   )
 }
 
