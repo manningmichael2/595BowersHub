@@ -309,12 +309,14 @@ export default function ListsPage() {
           {/* View mode: List / Table */}
           <div className="flex overflow-hidden rounded-md border border-border">
             <button aria-label="List view" onClick={() => setMode('list')}
-              className={'px-2 py-1 ' + (viewMode === 'list' ? 'bg-surface-light text-text' : 'text-text-muted')}>
-              <List size={15} aria-hidden />
+              className={'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors ' +
+                (viewMode === 'list' ? 'bg-primary text-on-primary' : 'text-text-muted hover:bg-surface-light hover:text-text')}>
+              <List size={17} aria-hidden /><span className="hidden sm:inline">List</span>
             </button>
             <button aria-label="Table view" onClick={() => setMode('table')}
-              className={'px-2 py-1 ' + (viewMode === 'table' ? 'bg-surface-light text-text' : 'text-text-muted')}>
-              <Table2 size={15} aria-hidden />
+              className={'flex items-center gap-1.5 border-l border-border px-3 py-1.5 text-sm font-medium transition-colors ' +
+                (viewMode === 'table' ? 'bg-primary text-on-primary' : 'text-text-muted hover:bg-surface-light hover:text-text')}>
+              <Table2 size={17} aria-hidden /><span className="hidden sm:inline">Table</span>
             </button>
           </div>
           {/* Column visibility editor (the "edit the view" control) */}
