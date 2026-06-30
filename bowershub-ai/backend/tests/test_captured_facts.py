@@ -127,24 +127,19 @@ async def test_visibility_flip_scoped_to_auto_captured(env):
     assert ei.value.status_code == 404
 
 
-async def test_migration_backfill_rule(env):
-    """The 0057 backfill: pre-existing auto-captured facts WITH an author become
-    private; those without an author, and all manual facts, stay shared."""
+async def test_captures_are_shared_by_default(env):
+    """Shared-by-default: a freshly auto-captured fact lands 'shared' (the column
+    default; no backfill flips it to private). Private is opt-in via the toggle."""
     async with env["pool"].acquire() as conn:
         owned = await _add_entity(conn, "a", "auto owned", "context_capture", env["uid"])
         orphan = await _add_entity(conn, "b", "auto no-owner", "context_capture", None)
         manual = await _add_entity(conn, "c", "manual", "chat", env["uid"])
-        # Re-run the exact backfill statement (rows above were created post-migration
-        # with the 'shared' default, mirroring the pre-migration state).
-        await conn.execute(
-            "UPDATE public.bh_entities SET visibility='private' "
-            "WHERE source='context_capture' AND created_by IS NOT NULL AND visibility='shared'")
         vis = {r["id"]: r["visibility"] for r in await conn.fetch(
             "SELECT id, visibility FROM public.bh_entities WHERE id = ANY($1::int[])",
             [owned, orphan, manual])}
-    assert vis[owned] == "private"
-    assert vis[orphan] == "shared"   # can't scope a private fact with no owner
-    assert vis[manual] == "shared"   # manual /remember untouched
+    assert vis[owned] == "shared"
+    assert vis[orphan] == "shared"
+    assert vis[manual] == "shared"
 
 
 # ── weekly digest ─────────────────────────────────────────────────────────────

@@ -207,12 +207,13 @@ async def handle_chat_message(
     content = data.get("content", "").strip()
     model = data.get("model", "auto")
     attachments = data.get("attachments", [])
-    # Chat-bar Personal/Shared toggle: visibility the Context Harvester applies to
-    # facts captured from this message. Default 'private' (Personal) — auto-capture
-    # never silently shares. Untrusted client input, so clamp to the known values.
-    capture_visibility = data.get("capture_visibility", "private")
+    # Chat-bar Shared/Private toggle: visibility the Context Harvester applies to
+    # facts captured from this message. Default 'shared' (matches the household
+    # shared-context model); the user flips to Private per conversation. Untrusted
+    # client input, so clamp to the known values.
+    capture_visibility = data.get("capture_visibility", "shared")
     if capture_visibility not in ("private", "shared"):
-        capture_visibility = "private"
+        capture_visibility = "shared"
 
     if not content:
         await websocket.send_json({

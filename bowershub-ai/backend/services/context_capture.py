@@ -51,7 +51,7 @@ Assistant: {assistant_message}"""
     async def evaluate(
         self, user_msg: str, assistant_msg: str, workspace_name: str,
         captured_by: Optional[str] = None, user_id: Optional[int] = None,
-        visibility: str = "private",
+        visibility: str = "shared",
     ) -> List[CapturedFact]:
         """
         Evaluate a conversation exchange for capturable facts.
@@ -62,9 +62,10 @@ Assistant: {assistant_message}"""
         None for system/automated runs with no associated user.
         user_id: the capturing user's id, recorded as the entity's created_by when
         the fact is mirrored into the pgvector knowledge graph.
-        visibility: 'private' (default — scoped to created_by on recall) or 'shared'
-        (visible to the whole household). Set from the chat-bar Personal/Shared
-        toggle; auto-captured facts are private unless the user chose to share.
+        visibility: 'shared' (default — visible to the whole household, matching the
+        shared-context model) or 'private' (scoped to created_by on recall). Set
+        from the chat-bar Shared/Private toggle; captures are shared unless the
+        user chose Private for that conversation.
         """
         # Skip very short exchanges (unlikely to contain facts)
         if len(user_msg) < 20:
@@ -207,7 +208,7 @@ Assistant: {assistant_message}"""
 
     async def _persist_entity(self, fact: "CapturedFact",
                               captured_by: Optional[str], user_id: Optional[int],
-                              visibility: str = "private"):
+                              visibility: str = "shared"):
         """Mirror a captured fact into the pgvector knowledge graph as an entity so
         it's hybrid-retrievable. Each fact is its own entity (name = statement) so
         distinct facts don't collapse; remember_entity dedups exact repeats by name.

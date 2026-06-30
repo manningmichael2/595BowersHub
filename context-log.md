@@ -1506,3 +1506,16 @@ Reviewed the 2026-06-29 `design_review_report.md` (Antigravity). ~half its items
 
 - **⚠️ Behavioral change on deploy:** with 0057, newly auto-captured facts are PRIVATE by default — they stop feeding cross-user recall unless the speaker toggles Shared. Existing captured facts with an author are backfilled to private too. Owner should expect the harvester to feed shared memory less until people use the Shared toggle.
 - [Next] Push + PR `feat/captured-fact-privacy` + deploy 0057 (safety snapshot first). Then **Track 2** (frontend hardening: generic+Zod-validated `api.ts`, route the 5 stray fetches, backfill schemas) and **Track 3** (port live `n8n-workflows/` to Python, swap hardcoded `100.106.180.101` in `n8n-workflows/`+`dashboard/` for env/DNS, decommission n8n container, delete stray `frontend/vite.expose.config.ts`). Open: toggle granularity is per-conversation (could revisit per-message); new workspaces still need a capture hook seeded on creation (pre-existing 0056 gap).
+
+## [2026-06-30] Captured-fact visibility — REVERSED to shared-by-default (owner correction) — Claude Code
+
+Owner reviewed PR #55 and reversed the default: "I want logic to be shared by default then a toggle for private." The boundary I'd built defaulted to **private** (off the earlier "privacy of the prompt is personal… or they say so"); owner wants **shared by default**, with the chat-bar toggle marking a conversation **Private** when wanted. This matches the household shared-context model. Flipped on branch `feat/captured-fact-privacy` (updates PR #55).
+
+**Changed (defaults only — the scoping mechanism is unchanged):**
+- Migration 0057: **dropped the backfill** (existing + new rows stay `'shared'` via the column default); rewrote the header rationale (shared-by-default, private opt-in).
+- Backend defaults flipped to `'shared'`: `context_capture.evaluate`/`_persist_entity`, `HookEventContext.capture_visibility`, `handlers.py` `capture_visibility` parse + clamp. (`remember_entity` was already `'shared'`.)
+- Frontend: `InputArea` toggle default + `getStoredVisibility` fallback + comments now Shared; `websocket.sendMessage` `captureVisibility` default `'shared'`. Toggle still flips per-conversation to Private (sticky in sessionStorage); the button UI keys off state so labels/icons were already correct for both.
+- Tests: `test_captured_fact_defaults_to_shared` (was `_defaults_to_private`) + `_private_when_toggled`; replaced `test_migration_backfill_rule` with `test_captures_are_shared_by_default`. Recall-scoping tests unchanged (they set visibility explicitly). Backend capture/hybrid/captured-facts **20 passed**; FE tsc + **352** vitest clean.
+
+**Tradeoff owner accepted (flagged at the time):** shared-by-default reopens the leak the boundary was meant to prevent — a sensitive/surprise thing said in a 1:1 chat is auto-shared unless the user flipped to Private *before* typing. Offered (not built) follow-up: content-based auto-detection to keep obviously-sensitive captures (medical/gifts) private even when the toggle says Shared. See updated `captured-fact-privacy` memory.
+- [Next] Push (updates PR #55). Track 2 (#56) unaffected. Track 3 (n8n sunset) still pending owner go-ahead.

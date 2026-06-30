@@ -81,7 +81,7 @@ class WebSocketClient {
     this.setStatus('disconnected')
   }
 
-  sendMessage(conversationId: number, content: string, model: string = 'auto', attachments: any[] = [], captureVisibility: 'private' | 'shared' = 'private') {
+  sendMessage(conversationId: number, content: string, model: string = 'auto', attachments: any[] = [], captureVisibility: 'private' | 'shared' = 'shared') {
     const msg = {
       type: 'message',
       conversation_id: conversationId,

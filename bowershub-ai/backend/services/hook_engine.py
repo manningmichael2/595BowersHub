@@ -196,7 +196,7 @@ class HookEventContext:
         file_path: Optional[str] = None,
         skip_capture: bool = False,
         is_scheduled: bool = False,
-        capture_visibility: str = "private",
+        capture_visibility: str = "shared",
     ):
         self.workspace_id = workspace_id
         self.user_id = user_id
@@ -206,8 +206,9 @@ class HookEventContext:
         self.skill_name = skill_name
         self.file_path = file_path
         # Visibility the Context Harvester applies to facts captured from this
-        # exchange: 'private' (default — scoped to the author) or 'shared', set
-        # from the chat-bar Personal/Shared toggle (websocket capture_visibility).
+        # exchange: 'shared' (default — visible to the household) or 'private'
+        # (scoped to the author), set from the chat-bar Shared/Private toggle
+        # (websocket capture_visibility).
         self.capture_visibility = capture_visibility
         # Set to True for scheduled-prompt invocations so context_capture
         # is suppressed (R11.4) and per-user streaming notifications are

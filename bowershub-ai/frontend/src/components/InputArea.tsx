@@ -35,19 +35,19 @@ function pushHistory(msg: string) {
   sessionStorage.setItem(HISTORY_KEY, JSON.stringify(hist))
 }
 
-// Personal/Shared capture toggle — controls the visibility the Context Harvester
+// Shared/Private capture toggle — controls the visibility the Context Harvester
 // applies to facts auto-learned from what you type. Sticky per-conversation;
-// defaults to 'private' (Personal) so anything lost or unset fails safe to private
-// (auto-capture never silently shares).
+// defaults to 'shared' (the household shares context by design). The user flips
+// to Private for a conversation they don't want fed into shared memory.
 type CaptureVisibility = 'private' | 'shared'
 const CAPTURE_VIS_KEY = 'bh-capture-visibility'
 
 function getStoredVisibility(convId: number | null | undefined): CaptureVisibility {
-  if (!convId) return 'private'
+  if (!convId) return 'shared'
   try {
     const map = JSON.parse(sessionStorage.getItem(CAPTURE_VIS_KEY) || '{}')
-    return map[convId] === 'shared' ? 'shared' : 'private'
-  } catch { return 'private' }
+    return map[convId] === 'private' ? 'private' : 'shared'
+  } catch { return 'shared' }
 }
 
 function storeVisibility(convId: number | null | undefined, vis: CaptureVisibility) {
@@ -63,7 +63,7 @@ export default function InputArea() {
   const [input, setInput] = useState('')
   const [showSlash, setShowSlash] = useState(false)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
-  const [captureVisibility, setCaptureVisibility] = useState<CaptureVisibility>('private')
+  const [captureVisibility, setCaptureVisibility] = useState<CaptureVisibility>('shared')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -75,7 +75,7 @@ export default function InputArea() {
   const { activeWorkspace } = useWorkspaceStore()
   const { modelSelection } = useUIStore()
 
-  // Load this conversation's sticky Personal/Shared choice when it changes.
+  // Load this conversation's sticky Shared/Private choice when it changes.
   useEffect(() => {
     setCaptureVisibility(getStoredVisibility(activeConversation?.id))
   }, [activeConversation?.id])
@@ -248,7 +248,7 @@ export default function InputArea() {
 
     // Send via WebSocket (includes base64 attachments for vision). capture_visibility
     // tells the Context Harvester whether facts learned from this message are
-    // private to the author or shared with the household.
+    // shared with the household (default) or kept private to the author.
     wsClient.sendMessage(convId, content || 'What is this?', modelSelection, wsAttachments, captureVisibility)
 
     // Reset model if not locked
@@ -423,9 +423,9 @@ export default function InputArea() {
           />
         </div>
 
-        {/* Personal/Shared capture toggle — sets whether facts the assistant
-            auto-learns from this message stay private to you or are shared with
-            the household. Defaults to Personal. */}
+        {/* Shared/Private capture toggle — sets whether facts the assistant
+            auto-learns from this message are shared with the household or kept
+            private to you. Defaults to Shared. */}
         <button
           onClick={toggleCaptureVisibility}
           className={`p-2 rounded-lg hover:bg-surface shrink-0 mb-0.5 transition-colors ${

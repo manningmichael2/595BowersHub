@@ -85,30 +85,9 @@ async def test_captured_fact_mirrored_into_knowledge_graph(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_captured_fact_defaults_to_private(tmp_path, monkeypatch):
-    """With no visibility passed (the default), the mirrored entity is 'private' —
-    auto-capture never silently shares a fact across the household (0057)."""
-    calls = []
-
-    async def _fake_remember_entity(**kwargs):
-        calls.append(kwargs)
-        return {"id": 1}
-
-    monkeypatch.setattr("backend.services.knowledge_graph.remember_entity",
-                        _fake_remember_entity)
-
-    cap = _capture(tmp_path, [{"topic": "preferences",
-                               "statement": "Michael is allergic to walnuts"}])
-    await cap.evaluate(
-        "I'm allergic to walnuts.", "Noted.",
-        workspace_name="General", captured_by="Michael", user_id=7,
-    )
-    assert calls and calls[0]["visibility"] == "private"
-
-
-@pytest.mark.asyncio
-async def test_captured_fact_shared_when_toggled(tmp_path, monkeypatch):
-    """When the chat-bar toggle says Shared, the mirrored entity is 'shared'."""
+async def test_captured_fact_defaults_to_shared(tmp_path, monkeypatch):
+    """With no visibility passed (the default), the mirrored entity is 'shared' —
+    the household shares context by design (0057)."""
     calls = []
 
     async def _fake_remember_entity(**kwargs):
@@ -123,9 +102,31 @@ async def test_captured_fact_shared_when_toggled(tmp_path, monkeypatch):
     await cap.evaluate(
         "We're going to Italy in July.", "Sounds great.",
         workspace_name="General", captured_by="Michael", user_id=7,
-        visibility="shared",
     )
     assert calls and calls[0]["visibility"] == "shared"
+
+
+@pytest.mark.asyncio
+async def test_captured_fact_private_when_toggled(tmp_path, monkeypatch):
+    """When the chat-bar toggle says Private, the mirrored entity is 'private'
+    (scoped to its author on recall)."""
+    calls = []
+
+    async def _fake_remember_entity(**kwargs):
+        calls.append(kwargs)
+        return {"id": 1}
+
+    monkeypatch.setattr("backend.services.knowledge_graph.remember_entity",
+                        _fake_remember_entity)
+
+    cap = _capture(tmp_path, [{"topic": "preferences",
+                               "statement": "Michael is allergic to walnuts"}])
+    await cap.evaluate(
+        "I'm allergic to walnuts.", "Noted.",
+        workspace_name="General", captured_by="Michael", user_id=7,
+        visibility="private",
+    )
+    assert calls and calls[0]["visibility"] == "private"
 
 
 @pytest.mark.asyncio
