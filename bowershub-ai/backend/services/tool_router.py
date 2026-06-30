@@ -365,7 +365,7 @@ def get_l3_tools() -> list[dict]:
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": ["view", "add", "check", "remove", "clear", "all"], "description": "What to do"},
-                    "list_name": {"type": "string", "description": "Which list (default: shopping). Examples: shopping, todo, packing, groceries"},
+                    "list_name": {"type": "string", "description": "Which list, if the user named one (e.g. groceries, todo, gifts, packing). Omit it when unsure — the router picks the right existing list."},
                     "items": {"type": "array", "items": {"type": "string"}, "description": "Items to add/check/remove"},
                 },
                 "required": ["action"],
@@ -426,22 +426,26 @@ async def execute_l3_tool(tool_name: str, tool_input: dict) -> str:
         return f"✅ Remembered: {result.get('name', '')} ({result.get('entity_type', '')})"
 
     elif tool_name == "manage_list":
-        from backend.services.lists import get_list, add_items, check_items, remove_items, clear_checked, get_all_lists
+        from backend.services.lists import get_list, check_items, remove_items, clear_checked, get_all_lists
+        from backend.services import list_router
         action = tool_input.get("action", "view")
-        list_name = tool_input.get("list_name", "shopping")
+        list_name = tool_input.get("list_name")          # no hardcoded default
         items = tool_input.get("items", [])
         if action == "add":
-            result = await add_items(list_name, items)
+            # Route each item to the right existing list (or the default); never
+            # auto-creates from a guessed name.
+            from backend.services.skills.lists import _format_add
+            result = _format_add(await list_router.route_and_add(items, 1, explicit_list=list_name))
         elif action in ("check", "done", "bought"):
-            result = await check_items(list_name, items)
+            result = await check_items(list_name or "", items)
         elif action == "remove":
-            result = await remove_items(list_name, items)
+            result = await remove_items(list_name or "", items)
         elif action == "clear":
-            result = await clear_checked(list_name)
+            result = await clear_checked(list_name or "")
         elif action == "all":
             result = await get_all_lists()
         else:
-            result = await get_list(list_name)
+            result = await get_list(list_name or "")
         return result.get("_display", json.dumps(result))
 
     return f"Unknown tool: {tool_name}"

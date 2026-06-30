@@ -33,6 +33,17 @@ def compute_hash(text: str) -> str:
 # SQL fragment assembling an entity's embedded text (R2.2: name + summary). Used in
 # BOTH the SELECT (so Python embeds it) and the digest() change-check, so they agree.
 _ENTITY_CONTENT_SQL = "(e.name || ' ' || COALESCE(e.summary, ''))"
+# A list's routable identity = name · type label · [list description] · type description.
+# The TYPE description carries the routing anchor (example item terms, see migration
+# 0055) so a list routes well even with no per-list description — calibration showed
+# the old name·label·list-desc document was too thin (~71%, real mis-routes) because
+# real lists rarely have a description. Live item names are still deliberately excluded
+# (they churn on every add and would re-embed constantly); the type-level examples are
+# stable, so this adds no re-embedding churn. concat_ws drops NULL/empty segments.
+_LIST_CONTENT_SQL = (
+    "concat_ws(' · ', l.name, NULLIF(t.label, ''), NULLIF(l.description, ''), "
+    "NULLIF(t.description, ''))"
+)
 
 
 class EmbeddingWorker:
@@ -54,6 +65,7 @@ class EmbeddingWorker:
         try:
             await self._reconcile_messages()
             await self._reconcile_entities()
+            await self._reconcile_lists()
             await self._reap_orphans()
         except Exception as e:
             logger.error(f"EmbeddingWorker tick failed: {e}", exc_info=True)
@@ -98,6 +110,28 @@ class EmbeddingWorker:
         if rows:
             logger.info(f"EmbeddingWorker: reconciling {len(rows)} entities")
             await self._process_batch("entity", rows)
+
+    async def _reconcile_lists(self):
+        """Embed new/renamed/retype'd lists so the AI can route items to them
+        (lists-v2 R4). Archived lists are skipped (and reaped below)."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                SELECT l.id, {_LIST_CONTENT_SQL} AS content, COALESCE(k.attempts, 0) AS attempts
+                FROM public.bh_lists l
+                JOIN public.bh_list_types t ON t.id = l.list_type_id
+                LEFT JOIN public.kb_chunks k
+                  ON k.source_type = 'list' AND k.source_id = l.id AND k.chunk_index = 0
+                WHERE l.is_archived = false
+                  AND {self._dirty_predicate(_LIST_CONTENT_SQL)}
+                ORDER BY l.id
+                LIMIT $2
+                """,
+                self._backoff_base, self._batch_size,
+            )
+        if rows:
+            logger.info(f"EmbeddingWorker: reconciling {len(rows)} lists")
+            await self._process_batch("list", rows)
 
     def _dirty_predicate(self, content_expr: str) -> str:
         """Rows needing (re)embedding. `$1` = backoff base seconds.
@@ -223,6 +257,21 @@ class EmbeddingWorker:
             )
             if " 0" not in deleted:
                 logger.info(f"EmbeddingWorker: reaped {deleted.split()[-1]} orphaned entity chunks")
+
+            # Lists: reap chunks for a deleted OR archived list, so the router can
+            # never match a dead/archived list (lists-v2 R4).
+            deleted = await conn.execute(
+                """
+                DELETE FROM public.kb_chunks k
+                WHERE k.source_type = 'list'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM public.bh_lists l
+                      WHERE l.id = k.source_id AND l.is_archived = false
+                  )
+                """
+            )
+            if " 0" not in deleted:
+                logger.info(f"EmbeddingWorker: reaped {deleted.split()[-1]} orphaned list chunks")
 
 
 # Helper to be called by apscheduler
