@@ -13,10 +13,15 @@ DB_NAME = os.environ.get('DB_NAME', 'finance')
 DB_USER = os.environ.get('DB_USER', 'michael')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
 
-N8N = 'http://100.106.180.101:5678'
-FILEWRITER = 'http://100.106.180.101:5001'
-NETDATA = 'http://100.106.180.101:19999'
-AUDIOBOOKSHELF = 'http://100.106.180.101:13378'
+# Service base host. The dashboard runs on the host network and reaches the
+# other services over the Tailscale address, so this is a single env-overridable
+# host (default keeps the current address) instead of the IP hardcoded four times
+# — a host change is now one var, not a code edit across every service URL.
+BOWERSHUB_HOST = os.environ.get('BOWERSHUB_HOST', '100.106.180.101')
+N8N = f'http://{BOWERSHUB_HOST}:5678'
+FILEWRITER = f'http://{BOWERSHUB_HOST}:5001'
+NETDATA = f'http://{BOWERSHUB_HOST}:19999'
+AUDIOBOOKSHELF = f'http://{BOWERSHUB_HOST}:13378'
 AUDIOBOOKSHELF_TOKEN = os.environ.get('AUDIOBOOKSHELF_TOKEN', '')
 
 @app.route('/')
