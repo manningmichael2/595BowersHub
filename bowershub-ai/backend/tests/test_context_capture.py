@@ -52,3 +52,52 @@ async def test_no_author_stamp_when_user_unknown(tmp_path):
     note = (tmp_path / "general" / "people.md").read_text()
     assert "(" not in note.split("] ", 1)[1]  # nothing between the date and statement
     assert "Manon likes oat milk" in note
+
+
+@pytest.mark.asyncio
+async def test_captured_fact_mirrored_into_knowledge_graph(tmp_path, monkeypatch):
+    """A captured fact is ALSO written to the pgvector knowledge graph (bh_entities
+    via remember_entity), so it becomes hybrid-retrievable — not just a markdown file."""
+    calls = []
+
+    async def _fake_remember_entity(**kwargs):
+        calls.append(kwargs)
+        return {"id": 1}
+
+    monkeypatch.setattr("backend.services.knowledge_graph.remember_entity",
+                        _fake_remember_entity)
+
+    cap = _capture(tmp_path, [{"topic": "preferences",
+                               "statement": "Michael is allergic to walnuts"}])
+    await cap.evaluate(
+        "By the way, I'm allergic to walnuts so keep that in mind.",
+        "Noted — I'll remember you're allergic to walnuts.",
+        workspace_name="General", captured_by="Michael", user_id=7,
+    )
+
+    assert len(calls) == 1, "the captured fact should be mirrored to exactly one entity"
+    c = calls[0]
+    assert c["summary"] == "Michael is allergic to walnuts"
+    assert c["entity_type"] == "preference"          # mapped from the 'preferences' topic
+    assert c["source"] == "context_capture"          # distinguishable from manual /remember
+    assert c["user_id"] == 7                          # created_by attribution threaded through
+    assert c["attributes"]["auto_captured"] is True
+
+
+@pytest.mark.asyncio
+async def test_graph_mirror_failure_does_not_lose_markdown(tmp_path, monkeypatch):
+    """If the graph write throws, the markdown capture must still succeed (graph is
+    best-effort; the file is the source of truth)."""
+    async def _boom(**kwargs):
+        raise RuntimeError("pool down")
+
+    monkeypatch.setattr("backend.services.knowledge_graph.remember_entity", _boom)
+
+    cap = _capture(tmp_path, [{"topic": "people", "statement": "Manon likes oat milk"}])
+    persisted = await cap.evaluate(
+        "Remember Manon likes oat milk.", "Got it.",
+        workspace_name="General", captured_by="Michael", user_id=1,
+    )
+
+    assert len(persisted) == 1
+    assert "Manon likes oat milk" in (tmp_path / "general" / "people.md").read_text()
