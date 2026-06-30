@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
     from backend.services.categorizer import run_categorizer
     from backend.services.simplefin_sync import sync_simplefin
     from backend.services.embedding_worker import run_embedding_worker
-    from backend.services.alerts import check_budgets, check_inbox, check_reminders
+    from backend.services.alerts import check_budgets, check_inbox, check_reminders, check_capture_digest
     from backend.services.gameday_alerts import check_gameday_alerts
 
     scheduler = AsyncIOScheduler()
@@ -244,6 +244,15 @@ async def lifespan(app: FastAPI):
         IntervalTrigger(minutes=1),
         id="reminder_delivery",
         name="Reminder delivery",
+        replace_existing=True,
+    )
+    # Context-capture digest — weekly (Sun 9:00 AM): a passive review of what the
+    # Context Harvester auto-learned, so captures don't accumulate unseen.
+    scheduler.add_job(
+        check_capture_digest,
+        CronTrigger(day_of_week="sun", hour=9, minute=0),
+        id="capture_digest",
+        name="Weekly context-capture digest",
         replace_existing=True,
     )
     # Game-day alerts — check every 30 minutes for upcoming tracked team games

@@ -1011,3 +1011,66 @@ async def semantic_memory_status(user: dict = Depends(require_admin)):
             } for r in dead_letters
         ]
     }
+
+
+# --- Captured facts (Context Harvester review/cleanup, R: proactive-assistant) ---
+
+@router.get("/captured-facts")
+async def list_captured_facts(
+    user: dict = Depends(require_admin),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List facts the Context Harvester auto-captured (bh_entities, source=
+    'context_capture') for review, newest first. Household-shared, so all are
+    listed; the per-row `captured_by` shows from whom each was learned."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT e.id, e.name, e.entity_type, e.summary, e.created_at,
+                   e.attributes->>'captured_by' AS captured_by,
+                   e.attributes->>'topic'       AS topic
+            FROM public.bh_entities e
+            WHERE e.source = 'context_capture' AND e.is_active = true
+            ORDER BY e.created_at DESC
+            LIMIT $1 OFFSET $2
+            """,
+            limit, offset,
+        )
+        total = await conn.fetchval(
+            "SELECT count(*) FROM public.bh_entities "
+            "WHERE source = 'context_capture' AND is_active = true")
+    return {
+        "total": total,
+        "facts": [
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "entity_type": r["entity_type"],
+                "summary": r["summary"],
+                "captured_by": r["captured_by"],
+                "topic": r["topic"],
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.delete("/captured-facts/{entity_id}")
+async def delete_captured_fact(entity_id: int, user: dict = Depends(require_admin)):
+    """Soft-delete a wrongly/poorly captured fact: deactivate the entity. It drops
+    out of recall immediately (recall filters is_active=true) and the embedding
+    worker reaps its kb_chunk on the next tick (_reap_orphans). Scoped to
+    auto-captured rows so this can't nuke a manually-taught /remember entity."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE public.bh_entities SET is_active = false, updated_at = now() "
+            "WHERE id = $1 AND source = 'context_capture' AND is_active = true "
+            "RETURNING id",
+            entity_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Captured fact not found")
+    return {"deleted": entity_id}
