@@ -26,6 +26,14 @@ from backend.websocket.manager import WebSocketManager
 logger = logging.getLogger(__name__)
 
 
+def _strip_code_fences(text: str) -> str:
+    """Strip a leading ```json / ``` fence from an LLM JSON reply, if present."""
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    return t
+
+
 @dataclass
 class RoutingContext:
     """Context passed through the routing pipeline."""
@@ -151,6 +159,7 @@ Present this data in a clear, conversational way. Use markdown formatting (table
             return await self._layer3_reason(message, context, ws_manager)
 
         # Layer 2: Lightweight AI classification
+        workspace_skills = None
         try:
             # Fetch workspace skills once — used for classification and threshold logic
             workspace_skills = await self.skill_executor.get_workspace_skills(context.workspace_id)
@@ -253,8 +262,111 @@ Present this data in a clear, conversational way. Use markdown formatting (table
         except Exception as e:
             logger.debug(f"Tool router failed (non-critical): {e}")
 
+        # Layer 2.7: Skill chaining — for multi-source asks ("search my email AND
+        # calendar for flights"), let Haiku gather from several READ-ONLY skills and
+        # synthesize one answer, instead of escalating the whole prompt to the
+        # expensive L3 model (design-review: L2 multi-source confusion).
+        try:
+            chain_result = await self._try_skill_chain(message, context, workspace_skills)
+            if chain_result:
+                return chain_result
+        except Exception as e:
+            logger.debug(f"Skill chaining failed (non-critical): {e}")
+
         # Layer 3: Full reasoning with tool use
         return await self._layer3_reason(message, context, ws_manager)
+
+    # --- Layer 2.7: Skill chaining (multi-source read-only gather) ---
+
+    _CHAIN_PLAN_PROMPT = """A user asked a personal-assistant a question that may need data from SEVERAL sources. Pick the READ-ONLY skills to call to answer it, with parameters.
+
+Available read-only skills:
+{skills}
+
+User message: "{message}"
+
+Return JSON only: {{"calls": [{{"skill": "<name>", "params": {{...}}}}, ...]}}
+Rules:
+- Only include a skill if its data is genuinely needed to answer THIS message.
+- Return 2+ calls ONLY for genuinely multi-source questions; return {{"calls": []}} if one skill (or none) suffices — a single skill is handled elsewhere.
+- Use only skills from the list above. Max 3 calls."""
+
+    _CHAIN_SYNTH_PROMPT = """Answer the user's question using ONLY the gathered results below. Be concise and direct; combine the sources into one helpful answer. If the results don't contain the answer, say so briefly.
+
+User question: "{message}"
+
+Gathered results:
+{results}"""
+
+    async def _try_skill_chain(
+        self, message: str, context: RoutingContext, workspace_skills: Optional[list]
+    ) -> Optional[RoutingResult]:
+        """Gather from multiple READ-ONLY skills and synthesize, to keep multi-source
+        asks at Haiku instead of escalating to L3. Read-only only → no write side
+        effects, safe to run speculatively. Returns None (→ escalate to L3) whenever
+        it isn't clearly a multi-source ask or anything goes wrong."""
+        if workspace_skills is None:
+            workspace_skills = await self.skill_executor.get_workspace_skills(context.workspace_id)
+        read_only = [s for s in (workspace_skills or []) if s.get("is_read_only")]
+        if len(read_only) < 2:
+            return None
+
+        # 1) Haiku plans which read-only skills to gather from.
+        catalog = "\n".join(f"- {s['name']}: {(s.get('description') or '').strip()}" for s in read_only)
+        plan_raw = await self.model_provider.complete(
+            model=resolve_role("fast"),
+            messages=[{"role": "user", "content": self._CHAIN_PLAN_PROMPT.format(
+                skills=catalog, message=message)}],
+            max_tokens=300,
+        )
+        try:
+            plan = json.loads(_strip_code_fences(plan_raw.content))
+        except (json.JSONDecodeError, TypeError):
+            return None
+        valid = {s["name"] for s in read_only}
+        calls = [c for c in (plan.get("calls") or [])
+                 if isinstance(c, dict) and c.get("skill") in valid][:3]
+        # Single-source (or none) is handled by the L2 classifier/tool-router; this
+        # layer exists only for genuine multi-source synthesis.
+        if len(calls) < 2:
+            return None
+
+        # 2) Execute the gathered read-only skills.
+        gathered = []
+        for c in calls:
+            params = c.get("params") if isinstance(c.get("params"), dict) else {}
+            try:
+                res = await self.skill_executor.execute(
+                    c["skill"], params, context.user_id, context.workspace_id)
+                gathered.append((c["skill"], self.skill_executor.format_response(res)))
+            except Exception as e:  # one skill failing must not sink the whole answer
+                logger.debug(f"skill_chain: {c['skill']} failed: {e}")
+                gathered.append((c["skill"], f"(could not retrieve: {e})"))
+
+        # 3) Haiku synthesizes one answer from the gathered sources.
+        synth = await self.model_provider.complete(
+            model=resolve_role("fast"),
+            messages=[{"role": "user", "content": self._CHAIN_SYNTH_PROMPT.format(
+                message=message,
+                results="\n\n".join(f"### {name}\n{out}" for name, out in gathered))}],
+            max_tokens=900,
+        )
+        content = (synth.content or "").strip()
+        if not content:
+            return None
+
+        in_tok = (plan_raw.input_tokens or 0) + (synth.input_tokens or 0)
+        out_tok = (plan_raw.output_tokens or 0) + (synth.output_tokens or 0)
+        logger.info(f"Skill chain: {[c['skill'] for c in calls]} → synthesized at L2")
+        return RoutingResult(
+            layer="L2",
+            content=content,
+            model_used=resolve_role("fast"),
+            input_tokens=in_tok,
+            output_tokens=out_tok,
+            cost_usd=self._calculate_cost(resolve_role("fast"), in_tok, out_tok),
+            skill_name="skill_chain",
+        )
 
     # --- Layer 1: Deterministic ---
 
