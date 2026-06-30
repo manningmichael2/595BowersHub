@@ -1559,3 +1559,22 @@ Owner reviewed PR #55 and reversed the default: "I want logic to be shared by de
 
 **Tradeoff owner accepted (flagged at the time):** shared-by-default reopens the leak the boundary was meant to prevent — a sensitive/surprise thing said in a 1:1 chat is auto-shared unless the user flipped to Private *before* typing. Offered (not built) follow-up: content-based auto-detection to keep obviously-sensitive captures (medical/gifts) private even when the toggle says Shared. See updated `captured-fact-privacy` memory.
 - [Next] Push (updates PR #55). Track 2 (#56) unaffected. Track 3 (n8n sunset) still pending owner go-ahead.
+
+## [2026-06-30] n8n decommission — spec authored (Track 3 real plan) — Claude Code
+
+Owner: "chart a path to removing dependency on n8n." Authored a Kiro-compatible spec at `.kiro/specs/n8n-decommission/` ({requirements,design,tasks}.md + .config.kiro) — `/spec` skill isn't loaded this session, so hand-authored in the same format either tool can execute.
+
+**Grounding (from code inspection):** the n8n→code migration is ~90% done — native `@native_skill` handlers + an 11-job apscheduler already own categorization, simplefin, transfer-link, insights, embeddings, budgets, inbox, reminders, briefing, model-discovery; most `bh_skills` already `native://`. The genuine remaining n8n runtime deps: (1) **smart-capture** extract+commit (Quick Capture, `quick_capture.py` + `db_browser.py`), (2) any non-native `bh_skills` rows (audit-confirmed; `process-asset` + maybe finance stragglers), (3) `config.py` requires `N8N_BASE` at boot, (4) cosmetic: `healthcheck.check_n8n`, dashboard `proxy_n8n`/`anthropic-spend`.
+
+**Plan = strangler-fig, 5 phases, each a shippable PR; n8n stays up until the last:**
+- **P0 Inventory** (R1) — code touchpoints + an owner/`ask-db` prod query `bh_skills WHERE webhook_url LIKE '/webhook/%'` + n8n active-workflow list → `inventory.md`. Read-only.
+- **P1 Native smart-capture** (R2, the bulk) — `services/smart_capture.py` extract (model_provider + ported prompt, HMAC `extract_token` w/ 30-min expiry) + commit (routes intents to already-native finance/list/knowledge actions); expose as native skills; flip the 2 `bh_skills` rows `native://`; **parity gate** before cutover; raw-note fallback kept.
+- **P2 Remaining webhooks** (R3) — port/retire each non-native skill; port/confirm n8n schedules; dead-webhook guard in skill_executor.
+- **P3 n8n-free boot** (R4) — `N8N_BASE` optional; remove n8n healthcheck + `/health --n8n`; dashboard drops `proxy_n8n` (anthropic-spend already has a PG fallback); boot-without-n8n test.
+- **P4 Decommission** (R5, owner-gated) — confirm Portainer `ai-services` is the live n8n, stop+remove container, drop from `infrastructure/docker-compose.yml`, delete `n8n-workflows/`, remove `N8N_BASE` secret.
+
+**Key decision:** `bh_skills.webhook_url` is the dispatch source of truth, so cutover/rollback per skill = one row update (`native://x` ↔ `/webhook/x`) — reversible without redeploy through P3; only P4 is irreversible, gated on a prod soak of native smart-capture.
+
+Also restored the 2 Track-1 privacy journal entries that got dropped in the #55 merge conflict (code shipped fine; only the journal record was lost).
+
+- [Next] Push + PR the spec (+ journal restore). Owner decides whether to execute, starting with P0 (needs the prod `bh_skills` query — owner-run or via `ask-db`). PRs #55/#56/#57/#58 merged; main green.
