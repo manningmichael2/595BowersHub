@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useAuthStore } from '../../stores/auth'
+import { api } from '../../services/api'
 import { useIsAdmin } from '../../hooks/useIsAdmin'
 
 // ---- Types ----------------------------------------------------------------
@@ -57,8 +57,6 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const getToken = useCallback(() => useAuthStore.getState().accessToken, [])
-
   const basePath = `/api/db/${schema}/${table}/rows/${rowId}/images`
 
   // ---- Fetch images --------------------------------------------------------
@@ -66,22 +64,14 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
   const fetchImages = useCallback(async () => {
     setLoading(true)
     try {
-      const token = getToken()
-      const res = await fetch(basePath, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setImages(data)
-      } else {
-        setImages([])
-      }
+      const { data } = await api.get<LinkedImage[]>(basePath)
+      setImages(data)
     } catch {
       setImages([])
     } finally {
       setLoading(false)
     }
-  }, [basePath, getToken])
+  }, [basePath])
 
   useEffect(() => {
     fetchImages()
@@ -92,23 +82,16 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
   const uploadFile = useCallback(async (file: File) => {
     setUploading(true)
     try {
-      const token = getToken()
       const formData = new FormData()
       formData.append('file', file)
-
-      const res = await fetch(basePath, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      })
-
-      if (res.ok) {
-        await fetchImages()
-      }
+      await api.post(basePath, formData)
+      await fetchImages()
+    } catch {
+      // Upload failed — leave the gallery as-is.
     } finally {
       setUploading(false)
     }
-  }, [basePath, getToken, fetchImages])
+  }, [basePath, fetchImages])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -169,20 +152,12 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
     }))
 
     try {
-      const token = getToken()
-      await fetch(`${basePath}/reorder`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ order }),
-      })
+      await api.put(`${basePath}/reorder`, { order })
     } catch {
       // Revert on failure
       await fetchImages()
     }
-  }, [images, basePath, getToken, fetchImages])
+  }, [images, basePath, fetchImages])
 
   // ---- Set primary ---------------------------------------------------------
 
@@ -196,36 +171,23 @@ export default function ImageGallery({ schema, table, rowId }: ImageGalleryProps
     )
 
     try {
-      const token = getToken()
-      const res = await fetch(`${basePath}/${assetId}/primary`, {
-        method: 'PUT',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) {
-        await fetchImages()
-      }
+      await api.put(`${basePath}/${assetId}/primary`)
     } catch {
       await fetchImages()
     }
-  }, [basePath, getToken, fetchImages])
+  }, [basePath, fetchImages])
 
   // ---- Unlink --------------------------------------------------------------
 
   const unlinkImage = useCallback(async (assetId: string) => {
     try {
-      const token = getToken()
-      const res = await fetch(`${basePath}/${assetId}`, {
-        method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (res.ok) {
-        setImages(prev => prev.filter(img => img.asset_id !== assetId))
-      }
+      await api.delete(`${basePath}/${assetId}`)
+      setImages(prev => prev.filter(img => img.asset_id !== assetId))
     } catch {
       // Silently fail — image stays in gallery
     }
     setConfirmUnlink(null)
-  }, [basePath, getToken])
+  }, [basePath])
 
   // ---- Render: Loading state -----------------------------------------------
 

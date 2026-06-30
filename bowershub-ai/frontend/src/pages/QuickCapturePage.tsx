@@ -31,6 +31,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import QuickCaptureOverlay from '../components/QuickCaptureOverlay'
+import { api } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 
 interface AttachedImage {
@@ -127,7 +128,6 @@ function claimSharePayload(token: string, timeoutMs = 4000): Promise<SharePayloa
  */
 async function uploadSharedImage(
   file: SharePayloadFile,
-  accessToken: string | null,
 ): Promise<AttachedImage | null> {
   try {
     const blob = new Blob([file.buffer], { type: file.type || 'application/octet-stream' })
@@ -137,13 +137,10 @@ async function uploadSharedImage(
     // overlay's own attach-image flow which uses conversation_id=0.
     form.append('conversation_id', '0')
 
-    const res = await fetch('/api/files/upload', {
-      method: 'POST',
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      body: form,
-    })
-    if (!res.ok) return null
-    const data = await res.json()
+    // Routed through the api client (auth + 401 refresh handled there).
+    const { data } = await api.post<{ files?: Array<{
+      asset_id: string; path: string; filename?: string; error?: string
+    }> }>('/api/files/upload', form)
     const first = data?.files?.[0]
     if (!first || first.error) return null
     return {
@@ -202,7 +199,7 @@ export default function QuickCapturePage() {
       }
 
       setState({ kind: 'uploading' })
-      const initialImage = await uploadSharedImage(firstImage, accessToken)
+      const initialImage = await uploadSharedImage(firstImage)
       if (cancelled) return
       // Even if the image upload failed we still open the overlay —
       // the user can re-attach manually. We just drop the image part.
