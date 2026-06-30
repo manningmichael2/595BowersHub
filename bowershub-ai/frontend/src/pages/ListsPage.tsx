@@ -1,113 +1,174 @@
 /**
- * ListsPage — household-shared shopping / to-do / packing lists.
+ * ListsPage — generic typed-list handler (lists-v2).
  *
- * The same lists are driven by the chat `list` skill ("add milk to the list");
- * this is the visual surface. Lists are shared household-wide (migration 0049),
- * so what one member adds or checks off, the other sees. Item operations are
- * id-based via /api/lists (the chat path is fuzzy-text).
+ * One schema-driven surface renders every list type (grocery / chores / gifts /
+ * to-do / packing / custom). Lists are ID-addressed and household-shared; the
+ * type's effective schema (from the API) drives fields, grouping, sort, and the
+ * store filter — no per-type branches, no hardcoded options. The chat `list`
+ * skill writes the same lists ("add milk to the list").
  */
-import { useEffect, useState, useCallback } from 'react'
-import { Check, Trash2, Plus } from 'lucide-react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { Check, Trash2, Plus, Settings2, ChevronDown } from 'lucide-react'
 import { api } from '../services/api'
 import { toast } from '../stores/toast'
-import { Button, Input, Spinner, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui'
+import {
+  Button, Input, Spinner,
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '../components/ui'
+import ListSettingsDialog from '../components/lists/ListSettingsDialog'
 
-interface Item {
+export interface Field {
+  key: string
+  label: string
+  col_type: string
+  storage: string
+  scope: string
+  groupable: boolean
+  sortable: boolean
+  filterable: boolean
+  options: { value: string | number; label: string }[] | null
+  options_source: string | null
+}
+
+export interface Item {
   id: number
   text: string
   quantity: string | null
   checked: boolean
-  added_by: string | null
+  category: string | null
+  attributes: Record<string, unknown>
+}
+
+interface Group {
+  key: string | null
+  label: string | null
+  items: Item[]
 }
 
 interface ListSummary {
+  id: number
   name: string
+  type: string | null
+  icon: string | null
   pending: number
   done: number
 }
 
+export interface ListType {
+  id: number
+  name: string
+  label: string
+  icon: string | null
+}
+
+interface SortOption { key: string; label: string }
+
 export default function ListsPage() {
   const [lists, setLists] = useState<ListSummary[]>([])
-  const [active, setActive] = useState('shopping')
-  const [items, setItems] = useState<Item[]>([])
+  const [types, setTypes] = useState<ListType[]>([])
+  const [sorts, setSorts] = useState<SortOption[]>([])
+  const [stores, setStores] = useState<string[]>([])
+  const [activeId, setActiveId] = useState<number | null>(null)
+  const [groups, setGroups] = useState<Group[]>([])
+  const [schema, setSchema] = useState<Field[]>([])
+  const [sort, setSort] = useState<string>('')
+  const [store, setStore] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+
+  const storeField = useMemo(() => schema.find((f) => f.key === 'store'), [schema])
 
   const loadLists = useCallback(async () => {
     try {
       const res = await api.get('/api/lists')
-      setLists(res.data.lists ?? [])
+      const ls: ListSummary[] = res.data.lists ?? []
+      setLists(ls)
+      setActiveId((cur) => cur ?? (ls[0]?.id ?? null))
     } catch {
-      /* non-fatal — the active list still loads */
+      /* non-fatal */
     }
   }, [])
 
-  const loadItems = useCallback(async (name: string) => {
+  const loadMeta = useCallback(async () => {
+    try {
+      const [t, c, s] = await Promise.all([
+        api.get('/api/lists/types'),
+        api.get('/api/lists/config'),
+        api.get('/api/lists/stores'),
+      ])
+      setTypes(t.data.types ?? [])
+      setSorts(c.data.sorts ?? [])
+      setStores((s.data.stores ?? []).map((x: { name: string }) => x.name))
+    } catch {
+      /* non-fatal */
+    }
+  }, [])
+
+  const loadView = useCallback(async (id: number) => {
     setLoading(true)
     try {
-      const res = await api.get(`/api/lists/${encodeURIComponent(name)}`)
-      setItems(res.data.items ?? [])
+      const params = new URLSearchParams()
+      if (sort) params.set('sort', sort)
+      if (store) params.set('store', store)
+      const res = await api.get(`/api/lists/${id}/view?${params.toString()}`)
+      setGroups(res.data.groups ?? [])
+      setSchema(res.data.schema ?? [])
     } catch (err: any) {
-      toast.error(`Couldn't load the ${name} list: ${err.response?.data?.detail || 'error'}`)
+      toast.error(`Couldn't load list: ${err.response?.data?.detail || 'error'}`)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [sort, store])
 
-  useEffect(() => {
-    loadLists()
-  }, [loadLists])
-  useEffect(() => {
-    loadItems(active)
-  }, [active, loadItems])
+  useEffect(() => { loadLists(); loadMeta() }, [loadLists, loadMeta])
+  useEffect(() => { if (activeId != null) loadView(activeId) }, [activeId, loadView])
+
+  const refresh = () => { if (activeId != null) loadView(activeId); loadLists() }
 
   const addItem = async () => {
     const text = draft.trim()
-    if (!text) return
-    setBusy(true)
-    setDraft('')
+    if (!text || activeId == null) return
+    setBusy(true); setDraft('')
     try {
-      const res = await api.post(`/api/lists/${encodeURIComponent(active)}/items`, {
-        items: [text],
-      })
-      setItems(res.data.items ?? [])
-      loadLists()
+      await api.post(`/api/lists/${activeId}/items`, { items: [text] })
+      refresh()
     } catch (err: any) {
       toast.error(`Couldn't add: ${err.response?.data?.detail || 'error'}`)
-      setDraft(text) // restore so it isn't lost
+      setDraft(text)
     } finally {
       setBusy(false)
     }
   }
 
   const toggle = async (item: Item) => {
-    // Optimistic
-    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, checked: !i.checked } : i)))
+    setGroups((gs) => gs.map((g) => ({ ...g, items: g.items.map((i) => i.id === item.id ? { ...i, checked: !i.checked } : i) })))
     try {
       await api.put(`/api/lists/items/${item.id}`, { checked: !item.checked })
     } catch {
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, checked: item.checked } : i)))
       toast.error("Couldn't update that item.")
+      if (activeId != null) loadView(activeId)
     }
   }
 
   const remove = async (item: Item) => {
-    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    setGroups((gs) => gs.map((g) => ({ ...g, items: g.items.filter((i) => i.id !== item.id) })))
     try {
       await api.delete(`/api/lists/items/${item.id}`)
     } catch {
       toast.error("Couldn't remove that item.")
-      loadItems(active)
+      refresh()
     }
   }
 
   const clearChecked = async () => {
+    if (activeId == null) return
     setBusy(true)
     try {
-      const res = await api.post(`/api/lists/${encodeURIComponent(active)}/clear`)
-      setItems(res.data.items ?? [])
-      loadLists()
+      await api.post(`/api/lists/${activeId}/clear`)
+      refresh()
     } catch {
       toast.error("Couldn't clear checked items.")
     } finally {
@@ -115,106 +176,168 @@ export default function ListsPage() {
     }
   }
 
-  const unchecked = items.filter((i) => !i.checked)
-  const checked = items.filter((i) => i.checked)
-  // Ensure the active list is selectable even before it's in the summary.
-  const listNames = Array.from(new Set([active, ...lists.map((l) => l.name)]))
+  const createList = async (name: string, list_type_id: number) => {
+    try {
+      const res = await api.post('/api/lists', { name, list_type_id })
+      setCreating(false)
+      await loadLists()
+      setActiveId(res.data.id)
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Couldn't create the list.")
+    }
+  }
+
+  const checkedCount = groups.reduce((n, g) => n + g.items.filter((i) => i.checked).length, 0)
+  const activeList = lists.find((l) => l.id === activeId) ?? null
+  const attrFields = schema.filter((f) => f.storage === 'attribute' && f.key !== 'store')
 
   return (
     <div className="flex h-full flex-col bg-surface text-text">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-3">
         <h1 className="text-lg font-medium">Lists</h1>
-        <Select value={active} onValueChange={setActive}>
-          <SelectTrigger className="w-44" aria-label="Choose list">
-            <SelectValue />
+
+        <Select value={activeId != null ? String(activeId) : ''} onValueChange={(v) => setActiveId(Number(v))}>
+          <SelectTrigger className="w-48" aria-label="Choose list">
+            <SelectValue placeholder="Pick a list" />
           </SelectTrigger>
           <SelectContent>
-            {listNames.map((n) => (
-              <SelectItem key={n} value={n}>
-                {n.charAt(0).toUpperCase() + n.slice(1)}
-              </SelectItem>
+            {lists.map((l) => (
+              <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {checked.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearChecked} disabled={busy} className="ml-auto">
-            Clear {checked.length} checked
-          </Button>
+
+        <Button variant="ghost" size="sm" onClick={() => setCreating(true)}>
+          <Plus size={15} aria-hidden /> New
+        </Button>
+
+        {sorts.length > 0 && (
+          <Select value={sort} onValueChange={setSort}>
+            <SelectTrigger className="w-36" aria-label="Sort by">
+              <SelectValue placeholder="Sort" />
+            </SelectTrigger>
+            <SelectContent>
+              {sorts.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         )}
+
+        {storeField && stores.length > 0 && (
+          <Select value={store || '__all__'} onValueChange={(v) => setStore(v === '__all__' ? '' : v)}>
+            <SelectTrigger className="w-36" aria-label="Store">
+              <SelectValue placeholder="All stores" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All stores</SelectItem>
+              {stores.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          {checkedCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearChecked} disabled={busy}>
+              Clear {checkedCount} checked
+            </Button>
+          )}
+          {activeId != null && (
+            <Button variant="ghost" size="icon" aria-label="List settings" onClick={() => setSettingsOpen(true)}>
+              <Settings2 size={17} aria-hidden />
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
-        {/* Add row */}
         <div className="flex items-center gap-2">
           <Input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addItem()}
-            placeholder={`Add to ${active}…`}
+            placeholder={activeList ? `Add to ${activeList.name}…` : 'Pick or create a list'}
             aria-label="Add item"
+            disabled={activeId == null}
           />
-          <Button onClick={addItem} disabled={busy || !draft.trim()} size="icon" aria-label="Add">
+          <Button onClick={addItem} disabled={busy || !draft.trim() || activeId == null} size="icon" aria-label="Add">
             <Plus size={18} aria-hidden />
           </Button>
         </div>
 
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-text-muted">
-            <Spinner /> Loading…
-          </div>
-        ) : items.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-text-muted"><Spinner /> Loading…</div>
+        ) : groups.every((g) => g.items.length === 0) ? (
           <p className="py-8 text-center text-sm text-text-muted">
-            Nothing on the {active} list yet. Add an item above — or just tell the assistant
-            “add milk to the list”.
+            Nothing here yet. Add an item above — or tell the assistant “add milk to the list”.
           </p>
         ) : (
-          <ul className="space-y-1">
-            {unchecked.map((i) => (
-              <ItemRow key={i.id} item={i} onToggle={toggle} onRemove={remove} />
+          <div className="space-y-4">
+            {groups.filter((g) => g.items.length > 0).map((g) => (
+              <section key={g.key ?? '__none__'}>
+                {g.label && (
+                  <h2 className="mb-1 flex items-center gap-1 px-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    <ChevronDown size={12} aria-hidden /> {g.label}
+                  </h2>
+                )}
+                <ul className="space-y-1">
+                  {g.items.map((i) => (
+                    <ItemRow key={i.id} item={i} attrFields={attrFields} onToggle={toggle} onRemove={remove} />
+                  ))}
+                </ul>
+              </section>
             ))}
-            {checked.length > 0 && (
-              <>
-                <li className="px-1 pt-3 text-xs uppercase tracking-wider text-text-muted">
-                  Checked off
-                </li>
-                {checked.map((i) => (
-                  <ItemRow key={i.id} item={i} onToggle={toggle} onRemove={remove} />
-                ))}
-              </>
-            )}
-          </ul>
+          </div>
         )}
       </div>
+
+      {creating && (
+        <CreateListDialog types={types} onClose={() => setCreating(false)} onCreate={createList} />
+      )}
+      {settingsOpen && activeList && (
+        <ListSettingsDialog
+          list={activeList}
+          types={types}
+          onClose={() => setSettingsOpen(false)}
+          onChanged={refresh}
+          onDeleted={() => { setSettingsOpen(false); setActiveId(null); loadLists() }}
+          onStoresChanged={loadMeta}
+        />
+      )}
     </div>
   )
 }
 
-function ItemRow({
-  item,
-  onToggle,
-  onRemove,
-}: {
+function ItemRow({ item, attrFields, onToggle, onRemove }: {
   item: Item
+  attrFields: Field[]
   onToggle: (i: Item) => void
   onRemove: (i: Item) => void
 }) {
+  const chips: string[] = []
+  for (const f of attrFields) {
+    const v = item.attributes?.[f.key]
+    if (v == null) continue
+    chips.push(`${f.label}: ${Array.isArray(v) ? v.join(', ') : String(v)}`)
+  }
   return (
     <li className="group flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-light/50">
       <button
         onClick={() => onToggle(item)}
         aria-label={item.checked ? `Uncheck ${item.text}` : `Check ${item.text}`}
-        className={
-          'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ' +
-          (item.checked
-            ? 'border-primary bg-primary text-on-primary'
-            : 'border-border hover:border-primary')
-        }
+        className={'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ' +
+          (item.checked ? 'border-primary bg-primary text-on-primary' : 'border-border hover:border-primary')}
       >
         {item.checked && <Check size={14} aria-hidden />}
       </button>
       <span className={'flex-1 text-sm ' + (item.checked ? 'text-text-muted line-through' : 'text-text')}>
         {item.text}
         {item.quantity && <span className="ml-2 text-xs text-text-muted">({item.quantity})</span>}
+        {chips.length > 0 && (
+          <span className="ml-2 space-x-1">
+            {chips.map((c) => (
+              <span key={c} className="rounded bg-surface-light px-1.5 py-0.5 text-[10px] text-text-muted">{c}</span>
+            ))}
+          </span>
+        )}
       </span>
       <button
         onClick={() => onRemove(item)}
@@ -224,5 +347,35 @@ function ItemRow({
         <Trash2 size={15} aria-hidden />
       </button>
     </li>
+  )
+}
+
+function CreateListDialog({ types, onClose, onCreate }: {
+  types: ListType[]
+  onClose: () => void
+  onCreate: (name: string, typeId: number) => void
+}) {
+  const [name, setName] = useState('')
+  const [typeId, setTypeId] = useState<number | null>(types[0]?.id ?? null)
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="mb-3 text-base font-medium">New list</h2>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="List name" aria-label="List name" autoFocus />
+        <div className="mt-3">
+          <Select value={typeId != null ? String(typeId) : ''} onValueChange={(v) => setTypeId(Number(v))}>
+            <SelectTrigger aria-label="List type"><SelectValue placeholder="Type" /></SelectTrigger>
+            <SelectContent>
+              {types.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" disabled={!name.trim() || typeId == null}
+            onClick={() => typeId != null && onCreate(name.trim(), typeId)}>Create</Button>
+        </div>
+      </div>
+    </div>
   )
 }

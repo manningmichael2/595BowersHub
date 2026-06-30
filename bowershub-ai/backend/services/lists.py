@@ -254,13 +254,15 @@ async def get_all_lists(user_id: int = 1) -> dict:
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT l.name, l.description,
+            SELECT l.id, l.name, l.description, l.list_type_id,
+                   t.name AS type, t.icon AS icon,
                    COUNT(i.id) FILTER (WHERE i.checked = false) as pending,
                    COUNT(i.id) FILTER (WHERE i.checked = true) as done
             FROM public.bh_lists l
+            LEFT JOIN public.bh_list_types t ON t.id = l.list_type_id
             LEFT JOIN public.bh_list_items i ON i.list_id = l.id
             WHERE (l.is_shared OR l.user_id = $1) AND l.is_archived = false
-            GROUP BY l.id, l.name, l.description
+            GROUP BY l.id, l.name, l.description, l.list_type_id, t.name, t.icon
             ORDER BY l.updated_at DESC
         """, user_id)
 
