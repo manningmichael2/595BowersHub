@@ -8,18 +8,18 @@ import pytest
 from backend.services.context_capture import ContextCapture
 
 
-class _StubProvider:
-    """Returns a fixed extraction so the test is deterministic (no model call)."""
-    def __init__(self, facts):
-        self._payload = json.dumps({"facts": facts})
-
-    async def complete(self, **kwargs):
-        return SimpleNamespace(content=self._payload)
-
-
 def _capture(tmp_path, facts):
-    cfg = SimpleNamespace(KNOWLEDGE_ROOT=str(tmp_path))
-    return ContextCapture(_StubProvider(facts), cfg)
+    """A ContextCapture whose LLM extraction is stubbed to a fixed result, so the
+    test is deterministic and makes no Ollama call."""
+    cfg = SimpleNamespace(KNOWLEDGE_ROOT=str(tmp_path), OLLAMA_URL="http://x")
+    cap = ContextCapture(None, cfg)
+    payload = json.dumps({"facts": facts})
+
+    async def _stub_extraction(prompt):
+        return payload
+
+    cap._run_extraction = _stub_extraction
+    return cap
 
 
 @pytest.mark.asyncio
