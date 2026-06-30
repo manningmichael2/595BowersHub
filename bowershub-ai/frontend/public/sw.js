@@ -27,7 +27,7 @@
 // change makes the browser detect an updated worker; install() skipWaiting +
 // activate() (cache wipe + clients.claim) then dislodge any older worker still
 // pinning an installed app to a stale bundle.
-const SW_VERSION = '2026-06-29-2';
+const SW_VERSION = '2026-06-29-3';
 
 const SHARE_TARGET_URL = '/quick-capture';
 

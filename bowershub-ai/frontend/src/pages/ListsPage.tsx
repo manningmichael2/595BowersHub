@@ -247,6 +247,21 @@ export default function ListsPage() {
     catch { toast.error("Couldn't unarchive.") }
   }
 
+  // Inline cell edit (table view): patch a single field and re-fetch (re-groups/sorts).
+  const saveField = async (item: Item, field: Field, value: unknown) => {
+    let v: unknown = value === '' ? null : value
+    if (field.col_type === 'number' && v != null) v = Number(v)
+    if (field.key === 'assignee_user_id' && v != null) v = Number(v)
+    const patch: Record<string, unknown> = field.storage === 'column'
+      ? { [field.key]: v } : { attributes: { [field.key]: v } }
+    try {
+      await api.patch(`/api/lists/items/${item.id}`, patch)
+      if (activeId != null) loadView(activeId)
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Couldn't save.")
+    }
+  }
+
   const createList = async (name: string, list_type_id: number) => {
     try {
       const res = await api.post('/api/lists', { name, list_type_id })
@@ -379,8 +394,9 @@ export default function ListsPage() {
             Nothing here yet. Add an item above — or tell the assistant “add milk to the list”.
           </p>
         ) : viewMode === 'table' ? (
-          <TableView groups={groups} columns={visibleColumns} onToggle={toggle}
-            onRemove={remove} onEdit={setEditing} />
+          <TableView groups={groups} columns={visibleColumns} textField={schema.find((f) => f.key === 'text')}
+            categoryOptions={categoryOptions} onToggle={toggle} onRemove={remove}
+            onEdit={setEditing} onSaveField={saveField} />
         ) : (
           <div className="space-y-4">
             {groups.filter((g) => g.items.length > 0).map((g) => (
@@ -475,13 +491,17 @@ function renderCell(field: Field, item: Item): string {
   return String(raw)
 }
 
-function TableView({ groups, columns, onToggle, onRemove, onEdit }: {
-  groups: Group[]
+interface CellProps {
   columns: Field[]
+  textField?: Field
+  categoryOptions: string[]
   onToggle: (i: Item) => void
   onRemove: (i: Item) => void
   onEdit: (i: Item) => void
-}) {
+  onSaveField: (item: Item, field: Field, value: unknown) => void
+}
+
+function TableView({ groups, ...rest }: { groups: Group[] } & CellProps) {
   const visible = groups.filter((g) => g.items.length > 0)
   return (
     <div className="overflow-x-auto">
@@ -490,14 +510,13 @@ function TableView({ groups, columns, onToggle, onRemove, onEdit }: {
           <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-text-muted">
             <th className="w-8 px-2 py-2" />
             <th className="px-2 py-2 font-semibold">Item</th>
-            {columns.map((c) => <th key={c.key} className="px-2 py-2 font-semibold">{c.label}</th>)}
-            <th className="w-16 px-2 py-2" />
+            {rest.columns.map((c) => <th key={c.key} className="px-2 py-2 font-semibold">{c.label}</th>)}
+            <th className="w-12 px-2 py-2" />
           </tr>
         </thead>
         <tbody>
           {visible.map((g) => (
-            <FragmentGroup key={g.key ?? '__none__'} group={g} colSpan={columns.length + 3}
-              columns={columns} onToggle={onToggle} onRemove={onRemove} onEdit={onEdit} />
+            <FragmentGroup key={g.key ?? '__none__'} group={g} colSpan={rest.columns.length + 3} {...rest} />
           ))}
         </tbody>
       </table>
@@ -505,14 +524,8 @@ function TableView({ groups, columns, onToggle, onRemove, onEdit }: {
   )
 }
 
-function FragmentGroup({ group, colSpan, columns, onToggle, onRemove, onEdit }: {
-  group: Group
-  colSpan: number
-  columns: Field[]
-  onToggle: (i: Item) => void
-  onRemove: (i: Item) => void
-  onEdit: (i: Item) => void
-}) {
+function FragmentGroup({ group, colSpan, columns, textField, categoryOptions, onToggle, onRemove, onEdit, onSaveField }:
+  { group: Group; colSpan: number } & CellProps) {
   return (
     <>
       {group.label && (
@@ -528,14 +541,15 @@ function FragmentGroup({ group, colSpan, columns, onToggle, onRemove, onEdit }: 
               {i.checked && <Check size={14} aria-hidden />}
             </button>
           </td>
-          <td className={'px-2 py-2 ' + (i.checked ? 'text-text-muted line-through' : '')}>
-            {i.text}{i.quantity && <span className="ml-1 text-xs text-text-muted">({i.quantity})</span>}
-          </td>
-          {columns.map((c) => <td key={c.key} className="px-2 py-2 text-text-muted">{renderCell(c, i)}</td>)}
+          {textField
+            ? <EditableCell item={i} field={textField} categoryOptions={categoryOptions} onSave={onSaveField} onOpenEditor={onEdit} className={i.checked ? 'text-text-muted line-through' : ''} />
+            : <td className="px-2 py-2">{i.text}</td>}
+          {columns.map((c) => (
+            <EditableCell key={c.key} item={i} field={c} categoryOptions={categoryOptions}
+              onSave={onSaveField} onOpenEditor={onEdit} muted />
+          ))}
           <td className="px-2 py-2">
             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100">
-              <button onClick={() => onEdit(i)} aria-label={`Edit ${i.text}`}
-                className="rounded p-1 text-text-muted hover:text-text"><Pencil size={14} /></button>
               <button onClick={() => onRemove(i)} aria-label={`Remove ${i.text}`}
                 className="rounded p-1 text-text-muted hover:text-danger"><Trash2 size={14} /></button>
             </div>
@@ -543,6 +557,67 @@ function FragmentGroup({ group, colSpan, columns, onToggle, onRemove, onEdit }: 
         </tr>
       ))}
     </>
+  )
+}
+
+function EditableCell({ item, field, categoryOptions, onSave, onOpenEditor, muted, className }: {
+  item: Item
+  field: Field
+  categoryOptions: string[]
+  onSave: (item: Item, field: Field, value: unknown) => void
+  onOpenEditor: (i: Item) => void
+  muted?: boolean
+  className?: string
+}) {
+  const [editing, setEditing] = useState(false)
+  const raw = field.storage === 'column'
+    ? (item as unknown as Record<string, unknown>)[field.key]
+    : item.attributes?.[field.key]
+  const opts = field.key === 'category' && (!field.options || field.options.length === 0)
+    ? categoryOptions.map((c) => ({ value: c, label: c }))
+    : (field.options ?? [])
+  const base = 'px-2 py-2 ' + (muted ? 'text-text-muted ' : '') + (className ?? '')
+  const commit = (v: unknown) => { setEditing(false); onSave(item, field, v) }
+
+  // Multi-select inline is clunky → open the full editor.
+  if (field.col_type === 'multi_select') {
+    return <td className={base + ' cursor-pointer'} onClick={() => onOpenEditor(item)}>{renderCell(field, item)}</td>
+  }
+  if (!editing) {
+    return (
+      <td className={base + ' cursor-pointer hover:bg-surface-light/60'} onClick={() => setEditing(true)}
+        title="Click to edit">{renderCell(field, item)}</td>
+    )
+  }
+  if (field.col_type === 'single_select') {
+    return (
+      <td className="px-1 py-1">
+        <select autoFocus defaultValue={raw != null ? String(raw) : ''} onBlur={() => setEditing(false)}
+          onChange={(e) => commit(e.target.value)}
+          className="w-full rounded border border-border bg-surface px-1 py-0.5 text-sm">
+          <option value="">—</option>
+          {opts.map((o) => <option key={String(o.value)} value={String(o.value)}>{o.label}</option>)}
+        </select>
+      </td>
+    )
+  }
+  if (field.col_type === 'checkbox') {
+    return <td className="px-2 py-2"><input type="checkbox" autoFocus defaultChecked={Boolean(raw)}
+      onChange={(e) => commit(e.target.checked)} /></td>
+  }
+  const inputType = field.col_type === 'number' ? 'number' : field.col_type === 'date' ? 'date'
+    : field.col_type === 'url' ? 'url' : 'text'
+  const initial = raw != null ? (field.col_type === 'date' ? String(raw).slice(0, 10) : String(raw)) : ''
+  return (
+    <td className="px-1 py-1">
+      <input autoFocus type={inputType} defaultValue={initial}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit((e.target as HTMLInputElement).value)
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        className="w-full rounded border border-border bg-surface px-1 py-0.5 text-sm" />
+    </td>
   )
 }
 
