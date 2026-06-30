@@ -188,17 +188,9 @@ export default function QuickCaptureOverlay({
       // /files/chat-uploads/0/<uuid>.<ext>.
       form.append('conversation_id', '0')
 
-      const token = useAuthStore.getState().accessToken
-      const res = await fetch('/api/files/upload', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
-      })
-      if (!res.ok) {
-        const detail = await res.json().catch(() => ({}))
-        throw new Error(detail?.detail ?? `Upload failed (${res.status})`)
-      }
-      const data = await res.json()
+      const { data } = await api.post<{ files?: Array<{
+        asset_id: string; path: string; filename?: string; error?: string
+      }> }>('/api/files/upload', form)
       const first = data?.files?.[0]
       if (!first || first.error) {
         throw new Error(first?.error ?? 'Upload returned no asset')

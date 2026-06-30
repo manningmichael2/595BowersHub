@@ -27,7 +27,7 @@
  * _Requirements: R2.1, R2.2, R2.3, R2.6, R2.7
  */
 import { useEffect, useRef, useState } from 'react'
-import { useAuthStore } from '../stores/auth'
+import { api } from '../services/api'
 import { useBrandingStore } from '../stores/branding'
 
 // ---- Constants ------------------------------------------------------------
@@ -120,44 +120,33 @@ async function validateIconFile(file: File): Promise<ValidationResult> {
  * Uses fetch directly because the shared `api` client only handles JSON
  * bodies. Auth token is pulled from the same store the api client uses.
  */
+// Pull a human message out of the api client's thrown error shape
+// ({ response: { data: { detail } } }), preserving the server's specific text
+// (incl. the icon-validator's array of field errors).
+function apiErrorMessage(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (detail?.errors && Array.isArray(detail.errors)) {
+    return detail.errors.map((e: any) => e.message || String(e)).join(' ')
+  }
+  return fallback
+}
+
 async function uploadIconRequest(file: File): Promise<void> {
-  const token = useAuthStore.getState().accessToken
   const formData = new FormData()
   formData.append('file', file)
-
-  const headers: Record<string, string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
-  const res = await fetch('/api/branding/icon', {
-    method: 'POST',
-    headers,
-    body: formData,
-  })
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ detail: 'Upload failed' }))
-    const detail = data?.detail
-    let msg = 'Upload failed.'
-    if (typeof detail === 'string') {
-      msg = detail
-    } else if (detail?.errors && Array.isArray(detail.errors)) {
-      msg = detail.errors.map((e: any) => e.message || String(e)).join(' ')
-    }
-    throw new Error(msg)
+  try {
+    await api.post('/api/branding/icon', formData)
+  } catch (err) {
+    throw new Error(apiErrorMessage(err, 'Upload failed.'))
   }
 }
 
 async function postJson(path: string): Promise<void> {
-  const token = useAuthStore.getState().accessToken
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-  const res = await fetch(path, { method: 'POST', headers })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ detail: 'Request failed' }))
-    const detail = data?.detail
-    throw new Error(typeof detail === 'string' ? detail : 'Request failed.')
+  try {
+    await api.post(path)
+  } catch (err) {
+    throw new Error(apiErrorMessage(err, 'Request failed.'))
   }
 }
 
@@ -169,13 +158,8 @@ interface LibraryEntry {
 }
 
 async function getLibrary(): Promise<LibraryEntry[]> {
-  const token = useAuthStore.getState().accessToken
-  const headers: Record<string, string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
   try {
-    const res = await fetch('/api/branding/library', { headers })
-    if (!res.ok) return []
-    const data = await res.json().catch(() => ({ entries: [] }))
+    const { data } = await api.get<{ entries?: LibraryEntry[] }>('/api/branding/library')
     return data.entries ?? []
   } catch {
     // Library is a non-critical enhancement — if it can't load, just hide it.

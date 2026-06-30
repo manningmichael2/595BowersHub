@@ -758,24 +758,14 @@ export const useDbBrowserStore = create<DbBrowserState>((set, get) => ({
       return { total_rows: 0, imported_rows: 0, failed_rows: [] }
     }
 
-    // Use FormData for multipart upload
-    const token = (await import('../stores/auth')).useAuthStore.getState().accessToken
+    // Multipart upload via the api client (auth + 401 refresh; it already throws
+    // the { response: { status, data } } shape this used to hand-roll).
     const formData = new FormData()
     formData.append('file', file)
     formData.append('column_mapping', JSON.stringify(columnMapping))
 
-    const res = await fetch(`/api/db/${activeSchema}/${activeTable}/import-csv`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    })
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Import failed' }))
-      throw { response: { status: res.status, data: err } }
-    }
-
-    const result: ImportResult = await res.json()
+    const { data: result } = await api.post<ImportResult>(
+      `/api/db/${activeSchema}/${activeTable}/import-csv`, formData)
     const data = parseLoose(ImportResultSchema, result, 'POST /api/db/.../import-csv')
     await get().loadRows()
     return data
