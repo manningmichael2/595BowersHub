@@ -1454,3 +1454,19 @@ Owner picked "proactive assistant" as next. **Finding first:** the `proactive-as
 
 - **⚠️ Behavioral change on deploy:** once live, the harvester starts auto-populating shared semantic memory from real conversations (aligned with the household shared-context model, and the per-user `context_capture_disabled` opt-out still applies). Owner should consciously opt into turning this on in prod.
 - [Next] Push + PR `feat/context-harvester-pgvector`; owner decides on deploy (behavioral change above). Then optionally: **Skill Chaining** (the other design-review proactivity item — L2 dispatches multiple read-only skills, stops escalating multi-source asks to L3); mark the stale `proactive-assistant` spec done to reflect reality.
+
+## [2026-06-30] Context Harvester WIRED ON — dispatch + per-workspace hooks + qwen3:8b — Claude Code
+
+Follow-up to the pgvector-mirror entry: discovered the harvester had **never actually run in prod**. The `capture_context` hook *action* existed, but (1) nothing dispatched the `message_received` event it listens for (`websocket/handlers.py` never called `hook_engine.dispatch`), and (2) **zero `capture_context` hook rows** existed. So all the prior capture plumbing (extractor, opt-out, WS event, pgvector mirror) was dormant. Corrected my earlier "wired and live" claim.
+
+**Built (`b263c16`, branch `feat/wire-context-capture`):**
+- **`handlers.py`** — after each assistant turn, fire-and-forget `hook_engine.dispatch('message_received', ctx)`. Runs AFTER the reply is sent → zero added latency (dispatch spawns each hook as a background task).
+- **migration `0056`** — seed one enabled `capture_context` hook per workspace (idempotent, never clobbers owner edits) + a DB-configurable `context_capture.model` setting (default `qwen3:8b`).
+- **`context_capture._run_extraction`** — extraction now uses a **direct local Ollama call** (`think:false`, JSON format, 90s timeout) instead of the shared `model_provider`, whose **15s hot-path cap** is too short for an 8B model and whose path leaves qwen3 in slow thinking mode. Model is DB-driven; also added `self.config` (was missing, caused a swallowed AttributeError in the background task — the bug behind two failed live runs).
+
+**Model choice (measured):** `llama3.2:3b` (the generic `local` alias) is fast (~3s) but caught only **1/3** facts; `qwen3:8b` caught **all 3 with correct attribution** ("manon is vegetarian", not "user") in ~20s — fine for a background task. Default = qwen3:8b, editable via the `context_capture.model` DB setting. NOT a global `local`-alias change (that alias drives latency-sensitive `/local` chat + categorizer).
+
+**Verified live end-to-end** (throwaway pgvector + real qwen3:8b): `dispatch('message_received')` → seeded General hook fired → extraction → **3 facts → `bh_entities`** (correct types, source=context_capture, attributed to the user). Migration 0056 seeds 5 hooks (one per workspace). Tests: capture suite + websocket/scheduled/settings sweeps green (32 passed).
+
+- **Privacy/cost:** runs on **local Ollama only** — conversations (incl. Finance) never leave the box; free. Per-user `settings_json.context_capture_disabled` opt-out still short-circuits. ~20s of local GPU per message as a background task (fine for household volume).
+- [Next] Push + PR + DEPLOY (owner consciously opted into turning auto-learning on). After deploy, 0056 seeds the hooks live → the assistant starts auto-learning durable facts into semantic memory. Watch: capture quality on real conversations; whether qwen3:8b latency/GPU load is acceptable at real volume (qwen3:4b is the faster fallback). The OTHER design-review proactivity item — **Skill Chaining** — remains unbuilt. New workspaces created after 0056 won't auto-get a capture hook (a follow-up could seed on workspace creation).
