@@ -626,7 +626,7 @@ class HookEngine:
         workspace_name = ws["name"] if ws else "general"
         facts = await capture.evaluate(
             context.user_message, context.assistant_message, workspace_name,
-            captured_by=captured_by,
+            captured_by=captured_by, user_id=context.user_id,
         )
         return {"facts_captured": len(facts), "facts": [f.statement for f in facts]}
 

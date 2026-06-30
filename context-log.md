@@ -1430,3 +1430,27 @@ Closing out lists-v2. Two parts: backfilling the journal for 4 UI commits that s
 **State:** `25f58da` on `spec/lists-v2`. Backend list suites green (calibration 3, DB-backed list sweep 53 across the touched files); migration 0055 applies on `fresh_db`. No frontend change in this commit.
 
 - [Next] (1) **Deploy 0055 to prod** + confirm the embedding worker ticks (re-embeds the lists with the enriched doc) — then routing is live-tuned. (2) **Merge PR #49** (`spec/lists-v2` → `main`) — the spec is now fully implemented (Tasks 1–11 done). (3) Spot-check routing in prod ("add milk", "add sunscreen") once the worker has re-embedded. (4) Still-open edges (unchanged): `bh_lists.user_id` CASCADE FK decision; per-item attribute editor polish; route hook_engine push through notify_users.
+
+## [2026-06-30] Lists v2 — CLOSED OUT: 0055 deployed to prod + PR #49 merged to main — Claude Code
+
+Follow-through on the calibration entry above — both pending items done.
+- **Deployed** `bowershub-ai` from `spec/lists-v2` (safety snapshot first → `/home/michael/backups/pre-lists-v2/pre-0055-20260630-081822.dump`, 5.5M). Migration **0055 applied clean on the live DB**: `lists.routing` → `0.40/0.04`, the 5 seed type descriptions enriched (guards matched the exact old text, simple left generic). Health `ok`. The embedding worker re-embedded the one prod list (`shopping`, grocery) ~100s later with the new `concat_ws` document (now ends in the enriched grocery examples).
+- **Live prod routing probe** (read-only, real stored halfvec embeddings, calibrated 0.40 threshold): `milk`→shopping 0.459 MATCH, `greek yogurt`→0.443 MATCH, `schedule a dentist appointment`→0.331 fallback, `asdfghjkl`→0.301 fallback. Clean separation — grocery items match, tasks/noise correctly fall back. Calibration confirmed in prod.
+- **PR #49 merged to `main`** (`0f84940`, merge commit) — Lists v2 Tasks 1–11 fully implemented and on main. Prod runs the identical code.
+
+Lists v2 is done. The `spec/lists-v2` branch is merged (deleted locally).
+
+- [Next] Open edges still unchanged (none blocking): `bh_lists.user_id` CASCADE FK decision (deleting a member who created a shared list deletes it for all); per-item attribute-editor UI polish; route hook_engine scheduled-prompt push through `notify_users`. Larger directions on the table: the finance north star, or the 2026-06-29 `design_review_report.md` items (API-boundary types/Zod+TanStack, RLS multi-user isolation, db_browser.py decomposition, decommission n8n).
+
+## [2026-06-30] Context Harvester → pgvector semantic memory (the real proactive-assistant gap) — Claude Code
+
+Owner picked "proactive assistant" as next. **Finding first:** the `proactive-assistant` spec (briefing + alerts + voice) is already ~100% built and live (pushover/briefing/alerts/gameday/reminder_parser services, apscheduler jobs, `/remind` + `/briefing`, `VoiceInputButton` wired into `InputArea`) — a stale spec, 0/47 ticked but everything exists. The genuinely-unbuilt, north-star-aligned proactivity was the **design review's** Context Harvester + Skill Chaining (NOT in that spec — I had conflated them).
+
+**Then a second finding:** the Context Harvester ALSO already exists — `services/context_capture.py`, wired via `hook_engine._action_capture_context`, runs after each exchange and LLM-extracts durable facts. Its only gap: it persisted facts to **flat markdown files** (`KNOWLEDGE_ROOT/<topic>.md`), never to the **pgvector knowledge graph** that shipped later — so auto-learned facts weren't semantically searchable and never fed `hybrid_retrieval`. That is exactly the design review's "auto-insert into the pgvector knowledge base" gap. Manual `/remember` already writes BOTH (markdown + `remember_entity` → `bh_entities` → embedded).
+
+**Built (`5e94594`, branch `feat/context-harvester-pgvector`):** joined the wired harvester to the canonical `knowledge_graph.remember_entity()` path. Each captured fact is now ALSO written to `bh_entities` (`source='context_capture'`, `entity_type` mapped from topic, `summary=statement`, `created_by` attribution threaded from `hook_engine`), where the running embedding worker embeds it (`name+summary`) and `hybrid_retrieval` surfaces it. **No migration** — reuses `bh_entities` + the worker + hybrid retrieval. Graph write is best-effort (a failure never loses the markdown capture — file stays source of truth).
+- **Tests:** 2 new (fact mirrored with correct type/source/attribution; graph failure doesn't lose markdown) + existing 2 still green; touched-area suites 18 passed.
+- **Verified live** (throwaway pgvector + real bge-m3): harvested fact → `bh_entities` (type=preference, source=context_capture, created_by=uid) → embedded → retrievable: "what food allergies does Michael have" → 0.754, "can Michael eat nuts" → 0.635.
+
+- **⚠️ Behavioral change on deploy:** once live, the harvester starts auto-populating shared semantic memory from real conversations (aligned with the household shared-context model, and the per-user `context_capture_disabled` opt-out still applies). Owner should consciously opt into turning this on in prod.
+- [Next] Push + PR `feat/context-harvester-pgvector`; owner decides on deploy (behavioral change above). Then optionally: **Skill Chaining** (the other design-review proactivity item — L2 dispatches multiple read-only skills, stops escalating multi-source asks to L3); mark the stale `proactive-assistant` spec done to reflect reality.

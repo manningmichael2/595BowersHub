@@ -49,7 +49,7 @@ Assistant: {assistant_message}"""
 
     async def evaluate(
         self, user_msg: str, assistant_msg: str, workspace_name: str,
-        captured_by: Optional[str] = None,
+        captured_by: Optional[str] = None, user_id: Optional[int] = None,
     ) -> List[CapturedFact]:
         """
         Evaluate a conversation exchange for capturable facts.
@@ -58,6 +58,8 @@ Assistant: {assistant_message}"""
         captured_by: the display name of the user whose exchange this was, so the
         stored fact records *from whom* it was captured (household attribution).
         None for system/automated runs with no associated user.
+        user_id: the capturing user's id, recorded as the entity's created_by when
+        the fact is mirrored into the pgvector knowledge graph.
         """
         # Skip very short exchanges (unlikely to contain facts)
         if len(user_msg) < 20:
@@ -82,6 +84,11 @@ Assistant: {assistant_message}"""
                 topic = f"{workspace_name.lower()}/{fact.topic}"
                 if not await self._is_duplicate(topic, fact.statement):
                     await self._persist(topic, fact.statement, captured_by)
+                    # Also mirror into the pgvector knowledge graph so the fact is
+                    # semantically searchable (feeds hybrid_retrieval) — the same
+                    # entity store the manual /remember writes to. Non-critical: a
+                    # graph write failure must never lose the markdown capture.
+                    await self._persist_entity(fact, captured_by, user_id)
                     persisted.append(fact)
 
             if persisted:
@@ -147,6 +154,39 @@ Assistant: {assistant_message}"""
         else:
             with open(file_path, "a") as f:
                 f.write(line)
+
+    # Map a captured fact's topic slug → knowledge-graph entity_type. Mirrors the
+    # manual /remember mapping (skills/knowledge.py) so auto- and hand-captured
+    # facts are typed consistently. Unknown topics fall back to 'note'.
+    _ENTITY_TYPE_MAP = {
+        "preferences": "preference", "preference": "preference",
+        "people": "person", "person": "person",
+        "accounts": "account", "tools": "tool",
+        "finance": "fact", "house": "fact", "household": "fact",
+    }
+
+    async def _persist_entity(self, fact: "CapturedFact",
+                              captured_by: Optional[str], user_id: Optional[int]):
+        """Mirror a captured fact into the pgvector knowledge graph as an entity so
+        it's hybrid-retrievable. Each fact is its own entity (name = statement) so
+        distinct facts don't collapse; remember_entity dedups exact repeats by name.
+        Failure is swallowed — the markdown capture is the source of truth."""
+        try:
+            from backend.services.knowledge_graph import remember_entity
+            entity_type = self._ENTITY_TYPE_MAP.get(fact.topic, "note")
+            # Name = a concise, stable handle for the fact (its statement, capped).
+            name = fact.statement.strip()[:120]
+            await remember_entity(
+                name=name,
+                entity_type=entity_type,
+                summary=fact.statement,
+                attributes={"topic": fact.topic, "captured_by": captured_by,
+                            "auto_captured": True},
+                source="context_capture",
+                user_id=user_id,
+            )
+        except Exception as e:
+            logger.warning(f"Context capture: graph mirror failed (non-blocking): {e}")
 
     def _get_knowledge_path(self, topic: str) -> Path:
         """Get the file path for a knowledge topic."""
