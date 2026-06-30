@@ -21,6 +21,7 @@ import ModelsSection from './admin/ModelsSection'
 import CostSection from './admin/CostSection'
 import AuditSection from './admin/AuditSection'
 import SemanticMemorySection from './admin/SemanticMemorySection'
+import CapturedFactsSection from './admin/CapturedFactsSection'
 import ThemeManagementSection from './admin/ThemeManagementSection'
 import IconManagementSection from './admin/IconManagementSection'
 
@@ -43,6 +44,7 @@ const SECTIONS: SectionDef[] = [
   { slug: 'models', label: 'Models', icon: '🤖' },
   { slug: 'cost', label: 'Cost', icon: '💰' },
   { slug: 'semantic-memory', label: 'Semantic Memory', icon: '🧠' },
+  { slug: 'captured-facts', label: 'Captured Facts', icon: '💡' },
   { slug: 'audit', label: 'Audit Log', icon: '📋' },
   { slug: 'themes', label: 'Theme Management', icon: '🎨' },
   { slug: 'icon', label: 'Icon Management', icon: '🖼️' },
@@ -149,6 +151,7 @@ export default function AdminConsolePage() {
               <Route path="models" element={<ModelsSection />} />
               <Route path="cost" element={<CostSection />} />
               <Route path="semantic-memory" element={<SemanticMemorySection />} />
+              <Route path="captured-facts" element={<CapturedFactsSection />} />
               <Route path="audit" element={<AuditSection />} />
               <Route path="themes" element={<ThemeManagementSection />} />
               <Route path="icon" element={<IconManagementSection />} />

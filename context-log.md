@@ -1470,3 +1470,11 @@ Follow-up to the pgvector-mirror entry: discovered the harvester had **never act
 
 - **Privacy/cost:** runs on **local Ollama only** — conversations (incl. Finance) never leave the box; free. Per-user `settings_json.context_capture_disabled` opt-out still short-circuits. ~20s of local GPU per message as a background task (fine for household volume).
 - [Next] Push + PR + DEPLOY (owner consciously opted into turning auto-learning on). After deploy, 0056 seeds the hooks live → the assistant starts auto-learning durable facts into semantic memory. Watch: capture quality on real conversations; whether qwen3:8b latency/GPU load is acceptable at real volume (qwen3:4b is the faster fallback). The OTHER design-review proactivity item — **Skill Chaining** — remains unbuilt. New workspaces created after 0056 won't auto-get a capture hook (a follow-up could seed on workspace creation).
+
+## [2026-06-30] Context-capture monitoring — admin panel + weekly digest — Claude Code
+
+Owner asked for both ways to monitor what the Context Harvester learns (built `feat/capture-monitoring`).
+- **Admin → Captured Facts** (`💡`): `GET/DELETE /api/admin/captured-facts` (admin-gated) — list auto-captured `bh_entities` (`source='context_capture'`) newest-first with type + `captured_by`; per-row Remove = soft-delete (`is_active=false`) → drops from recall at once, worker reaps the kb_chunk. Delete is **scoped to source='context_capture'** so it can't nuke a manual `/remember` entity. New `CapturedFactsSection.tsx` registered in `AdminConsolePage`.
+- **Weekly digest**: `alerts.check_capture_digest()` — summarizes the week's captures, delivers via `notify_users` (per-user prefs/quiet hours, shared Pushover once), silent when nothing new, DB-toggleable (`context_capture.digest_enabled`, default on). Scheduled Sun 9 AM (`main.py`).
+- **Tests:** 5 (list scoping, soft+scoped delete, digest send/silent/disabled). tsc + FE build + admin-page test clean. **No migration.**
+- [Next] Push + PR + deploy (code-only). Watch the first real captures land in the panel; tune `context_capture.model` (qwen3:8b↔4b) and per-workspace hooks from observed quality. Skill Chaining still the remaining design-review proactivity item.

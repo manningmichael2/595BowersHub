@@ -205,3 +205,49 @@ async def check_reminders():
                 )
             else:
                 logger.info(f"Reminder held (quiet hours): id={r['id']}")
+
+
+async def check_capture_digest():
+    """Weekly digest of what the Context Harvester learned, so auto-captured facts
+    get passively reviewed by the household. DB-toggleable via the
+    'context_capture.digest_enabled' platform setting (default on). Silent when
+    nothing was learned this week (no empty notification)."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        # Default ON: a missing row → None → not False → proceed.
+        enabled = await conn.fetchval(
+            "SELECT (value_json->>'enabled')::boolean FROM public.bh_platform_settings "
+            "WHERE key = 'context_capture.digest_enabled'")
+        if enabled is False:
+            return
+        rows = await conn.fetch(
+            """
+            SELECT entity_type, summary, attributes->>'captured_by' AS captured_by
+            FROM public.bh_entities
+            WHERE source = 'context_capture' AND is_active = true
+              AND created_at >= now() - interval '7 days'
+            ORDER BY created_at DESC
+            """)
+        if not rows:
+            return
+        recipients = await _all_active_user_ids(conn)
+
+    shown = rows[:20]
+    lines = []
+    for r in shown:
+        who = f"<b>{r['captured_by']}</b>: " if r["captured_by"] else ""
+        lines.append(f"• {who}{r['summary']}")
+    body = "<br>".join(lines)
+    if len(rows) > len(shown):
+        body += f"<br>…and {len(rows) - len(shown)} more"
+    body += "<br><br><i>Review or remove these in Admin → Captured Facts.</i>"
+
+    n = len(rows)
+    await _get_notifier().notify_users(
+        recipients,
+        event_type="capture_digest",
+        title=f"🧠 This week I learned {n} thing{'s' if n != 1 else ''}",
+        message=body,
+        priority=-1,  # informational — low priority
+    )
+    logger.info(f"Capture digest: {n} facts → {len(recipients)} user(s)")
