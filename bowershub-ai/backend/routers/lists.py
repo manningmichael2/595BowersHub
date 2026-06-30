@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from backend.middleware.auth import get_current_user
 from backend.services import lists as svc
 from backend.services import list_config as cfg
+from backend.services import list_grouping
 from backend.services import list_schema
 from backend.services.lists import ListError
 from backend.services.list_schema import ListSchemaError
@@ -203,6 +204,28 @@ async def get_list(list_id: int, user: dict = Depends(get_current_user)) -> dict
         schema = await list_schema.resolve_schema(conn, list_id)
     data["schema"] = [list_schema.field_to_dict(f) for f in schema.fields]
     return data
+
+
+@router.get("/{list_id:int}/view")
+async def grouped_view(list_id: int,
+                       store: Optional[str] = Query(None),
+                       sort: Optional[str] = Query(None),
+                       group: bool = Query(True),
+                       category: Optional[str] = Query(None),
+                       assignee_user_id: Optional[int] = Query(None),
+                       checked: Optional[bool] = Query(None),
+                       user: dict = Depends(get_current_user)) -> dict:
+    """Grouped/sorted/filtered view of a list (R5.1–R5.6)."""
+    pool = svc.get_pool()
+    async with pool.acquire() as conn:
+        if not await svc._list_accessible(conn, list_id, user["id"]):
+            raise HTTPException(status_code=404, detail="List not found")
+        view = await list_grouping.grouped_view(
+            conn, list_id, store=store, sort=sort, group=group,
+            filters={"category": category, "assignee_user_id": assignee_user_id, "checked": checked})
+        schema = await list_schema.resolve_schema(conn, list_id)
+    view["schema"] = [list_schema.field_to_dict(f) for f in schema.fields]
+    return view
 
 
 @router.patch("/{list_id:int}")

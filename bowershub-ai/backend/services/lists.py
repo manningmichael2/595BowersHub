@@ -390,6 +390,13 @@ async def add_items_by_id(list_id: int, items: list, user_id: int = 1) -> dict:
         if not await _list_accessible(conn, list_id, user_id):
             raise ListError("List not found")
         schema = await list_schema.resolve_schema(conn, list_id)
+        # For a list that groups by category (grocery), auto-assign a department
+        # to items added without one (R5.5).
+        from backend.services import list_grouping
+        ltype = await conn.fetchrow(
+            "SELECT t.id, t.group_by FROM public.bh_lists l "
+            "JOIN public.bh_list_types t ON t.id = l.list_type_id WHERE l.id = $1", list_id)
+        autocat = ltype is not None and ltype["group_by"] == "category"
         next_so = await conn.fetchval(
             "SELECT COALESCE(MAX(sort_order), 0) FROM public.bh_list_items WHERE list_id = $1",
             list_id,
@@ -415,6 +422,13 @@ async def add_items_by_id(list_id: int, items: list, user_id: int = 1) -> dict:
             nested = spec.pop("attributes", None) or {}
             field_values = {k: v for k, v in {**spec, **nested}.items() if v is not None}
             cols, attrs = list_schema.partition_item_values(schema, field_values)
+            if autocat and not cols.get("category"):
+                try:
+                    dept = await list_grouping.categorize(conn, ltype["id"], text)
+                    if dept:
+                        cols["category"] = dept
+                except Exception:  # auto-cat is best-effort — never block an add (R4.5)
+                    logger.debug("auto-categorize failed for %r", text, exc_info=True)
             next_so += _SORT_GAP
             await conn.execute(
                 "INSERT INTO public.bh_list_items "
