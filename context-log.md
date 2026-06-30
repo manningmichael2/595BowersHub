@@ -1430,3 +1430,14 @@ Closing out lists-v2. Two parts: backfilling the journal for 4 UI commits that s
 **State:** `25f58da` on `spec/lists-v2`. Backend list suites green (calibration 3, DB-backed list sweep 53 across the touched files); migration 0055 applies on `fresh_db`. No frontend change in this commit.
 
 - [Next] (1) **Deploy 0055 to prod** + confirm the embedding worker ticks (re-embeds the lists with the enriched doc) — then routing is live-tuned. (2) **Merge PR #49** (`spec/lists-v2` → `main`) — the spec is now fully implemented (Tasks 1–11 done). (3) Spot-check routing in prod ("add milk", "add sunscreen") once the worker has re-embedded. (4) Still-open edges (unchanged): `bh_lists.user_id` CASCADE FK decision; per-item attribute editor polish; route hook_engine push through notify_users.
+
+## [2026-06-30] Lists v2 — CLOSED OUT: 0055 deployed to prod + PR #49 merged to main — Claude Code
+
+Follow-through on the calibration entry above — both pending items done.
+- **Deployed** `bowershub-ai` from `spec/lists-v2` (safety snapshot first → `/home/michael/backups/pre-lists-v2/pre-0055-20260630-081822.dump`, 5.5M). Migration **0055 applied clean on the live DB**: `lists.routing` → `0.40/0.04`, the 5 seed type descriptions enriched (guards matched the exact old text, simple left generic). Health `ok`. The embedding worker re-embedded the one prod list (`shopping`, grocery) ~100s later with the new `concat_ws` document (now ends in the enriched grocery examples).
+- **Live prod routing probe** (read-only, real stored halfvec embeddings, calibrated 0.40 threshold): `milk`→shopping 0.459 MATCH, `greek yogurt`→0.443 MATCH, `schedule a dentist appointment`→0.331 fallback, `asdfghjkl`→0.301 fallback. Clean separation — grocery items match, tasks/noise correctly fall back. Calibration confirmed in prod.
+- **PR #49 merged to `main`** (`0f84940`, merge commit) — Lists v2 Tasks 1–11 fully implemented and on main. Prod runs the identical code.
+
+Lists v2 is done. The `spec/lists-v2` branch is merged (deleted locally).
+
+- [Next] Open edges still unchanged (none blocking): `bh_lists.user_id` CASCADE FK decision (deleting a member who created a shared list deletes it for all); per-item attribute-editor UI polish; route hook_engine scheduled-prompt push through `notify_users`. Larger directions on the table: the finance north star, or the 2026-06-29 `design_review_report.md` items (API-boundary types/Zod+TanStack, RLS multi-user isolation, db_browser.py decomposition, decommission n8n).
