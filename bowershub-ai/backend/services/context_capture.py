@@ -45,6 +45,7 @@ Assistant: {assistant_message}"""
 
     def __init__(self, model_provider: ModelProvider, config: Config):
         self.model_provider = model_provider
+        self.config = config
         self.knowledge_root = config.KNOWLEDGE_ROOT
 
     async def evaluate(
@@ -66,16 +67,11 @@ Assistant: {assistant_message}"""
             return []
 
         try:
-            result = await self.model_provider.complete(
-                model=resolve_role("fast"),
-                messages=[{"role": "user", "content": self.CAPTURE_PROMPT.format(
-                    user_message=user_msg[:2000],
-                    assistant_message=assistant_msg[:2000],
-                )}],
-                max_tokens=128,
-            )
-
-            facts = self._parse_facts(result.content)
+            content = await self._run_extraction(self.CAPTURE_PROMPT.format(
+                user_message=user_msg[:2000],
+                assistant_message=assistant_msg[:2000],
+            ))
+            facts = self._parse_facts(content)
             if not facts:
                 return []
 
@@ -164,6 +160,46 @@ Assistant: {assistant_message}"""
         "accounts": "account", "tools": "tool",
         "finance": "fact", "house": "fact", "household": "fact",
     }
+
+    async def _run_extraction(self, prompt: str) -> str:
+        """Run the fact-extraction LLM call against local Ollama and return the raw
+        response text. Deliberately a DIRECT call (not the shared model_provider):
+        capture is a background task with needs the hot-path provider doesn't serve
+        — `think:false` (qwen3 reasoning wastes the budget + time), strict JSON
+        output, and a generous timeout (the provider hard-caps Ollama calls at 15s,
+        too short for an 8B model). Free + private: never leaves the box."""
+        from backend.http_client import get_http_client
+        model = await self._capture_model()
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "format": "json",
+            "think": False,
+            "options": {"num_predict": 256},
+        }
+        url = self.config.OLLAMA_URL.rstrip("/") + "/api/chat"
+        resp = await get_http_client().post(url, json=body, timeout=90.0)
+        resp.raise_for_status()
+        return resp.json().get("message", {}).get("content", "")
+
+    async def _capture_model(self) -> str:
+        """The model used for fact extraction. DB-configurable via the
+        'context_capture.model' platform setting (NO-HARDCODING); falls back to
+        the 'local' role alias so it stays on-box/private if the setting is unset
+        or the DB is unreachable (e.g. unit tests)."""
+        try:
+            from backend.database import get_pool
+            pool = get_pool()
+            async with pool.acquire() as conn:
+                m = await conn.fetchval(
+                    "SELECT value_json->>'model' FROM public.bh_platform_settings "
+                    "WHERE key = 'context_capture.model'")
+            if m:
+                return m
+        except Exception:
+            pass
+        return resolve_role("local")
 
     async def _persist_entity(self, fact: "CapturedFact",
                               captured_by: Optional[str], user_id: Optional[int]):

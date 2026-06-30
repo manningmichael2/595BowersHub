@@ -337,3 +337,22 @@ async def handle_chat_message(
         "metadata": {"skill_name": result.skill_name} if result.skill_name else {},
         "created_at": assistant_msg["created_at"].isoformat(),
     })
+
+    # Fire message_received hooks (proactive context capture, etc.). The user
+    # already has their reply above, so this runs AFTER the response and never
+    # affects latency; dispatch() itself spawns each hook as a background task.
+    hook_engine = getattr(getattr(websocket, "app", None), "state", None)
+    hook_engine = getattr(hook_engine, "hook_engine", None)
+    if hook_engine is not None:
+        from backend.services.hook_engine import HookEventContext
+        try:
+            await hook_engine.dispatch("message_received", HookEventContext(
+                workspace_id=workspace["id"],
+                user_id=user["id"],
+                conversation_id=conversation_id,
+                user_message=content,
+                assistant_message=result.content,
+                skill_name=result.skill_name,
+            ))
+        except Exception as e:
+            logger.debug(f"message_received hook dispatch failed (non-blocking): {e}")
