@@ -1530,3 +1530,56 @@ Started Track 3 (branch `chore/n8n-sunset`). **Key finding that reshapes the tra
 Verified: `app.py` parses; index.html has the IP in exactly one place (the `HOST` const); no runtime/behavior change (defaults preserve the current address).
 
 - [Next] Push + PR. **The real n8n decommission remains** and needs its own plan: (1) port `smart-capture.json` → Python (the categorizer/finance-query/inbox workflows too), (2) repoint `quick_capture.py` + drop the `N8N_BASE` requirement, (3) `docker compose down n8n` + remove from `infrastructure/docker-compose.yml`, (4) delete `n8n-workflows/`. That's owner-gated (deploy + feature-parity risk). PR #55 (privacy) still open; #56 + #57 merged, main green.
+## [2026-06-30] Captured-fact privacy boundary — auto-capture defaults private, chat-bar Personal/Shared toggle — Claude Code
+
+Reviewed the 2026-06-29 `design_review_report.md` (Antigravity). ~half its items were already done (Skill Chaining, Context Harvester) or mis-framed (backend FILEWRITER IP is already env-overridable; `any`≈319 not 463; Zod already adopted in `src/schemas/*`). Agreed 3 surviving tracks, ordered: **(1) multi-user privacy boundary**, (2) frontend hardening (finish typed-API-boundary migration), (3) deprecate/sunset n8n. This entry = Track 1 (built on `feat/captured-fact-privacy`).
+
+**Problem:** the Context Harvester (wired on 0056) silently writes extracted facts to `bh_entities`, and `hybrid_retrieval._search_entities` filtered only `is_active=true` — **entities were global to every household member**. A sensitive/surprise thing said in one person's 1:1 chat could auto-surface in another's recall. Owner's decision: auto-captured facts default **private to the speaker**; shared only when the user says so via a **Personal/Shared toggle next to the chat bar** (manual `/remember` + finance stay shared). See the `captured-fact-privacy` memory.
+
+**Built:**
+- **Migration `0057_entity_visibility.sql`** — `bh_entities.visibility text NOT NULL DEFAULT 'shared'` (manual entities untouched), backfill `source='context_capture' AND created_by IS NOT NULL → 'private'` (orphan/manual stay shared), CHECK + partial index `(visibility, created_by) WHERE is_active`.
+- **Write path:** chat-bar toggle (`InputArea.tsx`, sticky per-conversation in sessionStorage, **default Personal/private — fails safe**) → `websocket.ts sendMessage(capture_visibility)` → `handlers.py` (clamps to private|shared) → `HookEventContext.capture_visibility` → `context_capture.evaluate/_persist_entity` → `knowledge_graph.remember_entity(visibility=)` (applied on INSERT only; re-capture never flips an existing fact).
+- **Read path:** `hybrid_retrieval._search_entities`/`search_hybrid` gained `viewer_user_id`; both hybrid + FTS-degrade branches now `WHERE is_active AND (visibility='shared' OR created_by=$viewer)` (NULL viewer → shared-only). Threaded viewer through `recall_graph(user_id)` (incl. its legacy FTS fallback), `recall_entities(user_id)`, and all callers: `tool_router.execute_l3_tool(user_id)`, the `recall` native skill (`_user_id`), and `/recall --list/--recent/<query>` in `router_engine`. **Fixed a latent bug:** `/recall <query>` hardcoded `execute("recall",…,1,1)` (always ran as user 1) → now passes the real `context.user_id`/`workspace_id`.
+- **Admin:** `GET /captured-facts` surfaces `visibility`; new `PATCH /captured-facts/{id}/visibility` (admin-gated, scoped to `source='context_capture'`); `CapturedFactsSection.tsx` per-row 🔒 Private / 👥 Shared toggle.
+
+**Tests/verify (throwaway pgvector pg16, real DB):** +9 (capture defaults private / shared-when-toggled; recall scoping author-sees-own-private-vs-other-sees-shared-only on BOTH hybrid + FTS branches; admin flip scoping + bad-value 400 + 404 on manual; backfill rule). Touched-area suites **158 passed, no regressions**; new+existing capture/hybrid/captured-facts **20 passed**. Frontend: tsc clean, **352 vitest passed**, build clean. (Skipped a brittle InputArea render test — store/ws-coupled; types + backend integration cover the behavior.)
+
+- **⚠️ Behavioral change on deploy:** with 0057, newly auto-captured facts are PRIVATE by default — they stop feeding cross-user recall unless the speaker toggles Shared. Existing captured facts with an author are backfilled to private too. Owner should expect the harvester to feed shared memory less until people use the Shared toggle.
+- [Next] Push + PR `feat/captured-fact-privacy` + deploy 0057 (safety snapshot first). Then **Track 2** (frontend hardening: generic+Zod-validated `api.ts`, route the 5 stray fetches, backfill schemas) and **Track 3** (port live `n8n-workflows/` to Python, swap hardcoded `100.106.180.101` in `n8n-workflows/`+`dashboard/` for env/DNS, decommission n8n container, delete stray `frontend/vite.expose.config.ts`). Open: toggle granularity is per-conversation (could revisit per-message); new workspaces still need a capture hook seeded on creation (pre-existing 0056 gap).
+
+## [2026-06-30] Captured-fact visibility — REVERSED to shared-by-default (owner correction) — Claude Code
+
+Owner reviewed PR #55 and reversed the default: "I want logic to be shared by default then a toggle for private." The boundary I'd built defaulted to **private** (off the earlier "privacy of the prompt is personal… or they say so"); owner wants **shared by default**, with the chat-bar toggle marking a conversation **Private** when wanted. This matches the household shared-context model. Flipped on branch `feat/captured-fact-privacy` (updates PR #55).
+
+**Changed (defaults only — the scoping mechanism is unchanged):**
+- Migration 0057: **dropped the backfill** (existing + new rows stay `'shared'` via the column default); rewrote the header rationale (shared-by-default, private opt-in).
+- Backend defaults flipped to `'shared'`: `context_capture.evaluate`/`_persist_entity`, `HookEventContext.capture_visibility`, `handlers.py` `capture_visibility` parse + clamp. (`remember_entity` was already `'shared'`.)
+- Frontend: `InputArea` toggle default + `getStoredVisibility` fallback + comments now Shared; `websocket.sendMessage` `captureVisibility` default `'shared'`. Toggle still flips per-conversation to Private (sticky in sessionStorage); the button UI keys off state so labels/icons were already correct for both.
+- Tests: `test_captured_fact_defaults_to_shared` (was `_defaults_to_private`) + `_private_when_toggled`; replaced `test_migration_backfill_rule` with `test_captures_are_shared_by_default`. Recall-scoping tests unchanged (they set visibility explicitly). Backend capture/hybrid/captured-facts **20 passed**; FE tsc + **352** vitest clean.
+
+**Tradeoff owner accepted (flagged at the time):** shared-by-default reopens the leak the boundary was meant to prevent — a sensitive/surprise thing said in a 1:1 chat is auto-shared unless the user flipped to Private *before* typing. Offered (not built) follow-up: content-based auto-detection to keep obviously-sensitive captures (medical/gifts) private even when the toggle says Shared. See updated `captured-fact-privacy` memory.
+- [Next] Push (updates PR #55). Track 2 (#56) unaffected. Track 3 (n8n sunset) still pending owner go-ahead.
+
+## [2026-06-30] n8n decommission — spec authored (Track 3 real plan) — Claude Code
+
+Owner: "chart a path to removing dependency on n8n." Authored a Kiro-compatible spec at `.kiro/specs/n8n-decommission/` ({requirements,design,tasks}.md + .config.kiro) — `/spec` skill isn't loaded this session, so hand-authored in the same format either tool can execute.
+
+**Grounding (from code inspection):** the n8n→code migration is ~90% done — native `@native_skill` handlers + an 11-job apscheduler already own categorization, simplefin, transfer-link, insights, embeddings, budgets, inbox, reminders, briefing, model-discovery; most `bh_skills` already `native://`. The genuine remaining n8n runtime deps: (1) **smart-capture** extract+commit (Quick Capture, `quick_capture.py` + `db_browser.py`), (2) any non-native `bh_skills` rows (audit-confirmed; `process-asset` + maybe finance stragglers), (3) `config.py` requires `N8N_BASE` at boot, (4) cosmetic: `healthcheck.check_n8n`, dashboard `proxy_n8n`/`anthropic-spend`.
+
+**Plan = strangler-fig, 5 phases, each a shippable PR; n8n stays up until the last:**
+- **P0 Inventory** (R1) — code touchpoints + an owner/`ask-db` prod query `bh_skills WHERE webhook_url LIKE '/webhook/%'` + n8n active-workflow list → `inventory.md`. Read-only.
+- **P1 Native smart-capture** (R2, the bulk) — `services/smart_capture.py` extract (model_provider + ported prompt, HMAC `extract_token` w/ 30-min expiry) + commit (routes intents to already-native finance/list/knowledge actions); expose as native skills; flip the 2 `bh_skills` rows `native://`; **parity gate** before cutover; raw-note fallback kept.
+- **P2 Remaining webhooks** (R3) — port/retire each non-native skill; port/confirm n8n schedules; dead-webhook guard in skill_executor.
+- **P3 n8n-free boot** (R4) — `N8N_BASE` optional; remove n8n healthcheck + `/health --n8n`; dashboard drops `proxy_n8n` (anthropic-spend already has a PG fallback); boot-without-n8n test.
+- **P4 Decommission** (R5, owner-gated) — confirm Portainer `ai-services` is the live n8n, stop+remove container, drop from `infrastructure/docker-compose.yml`, delete `n8n-workflows/`, remove `N8N_BASE` secret.
+
+**Key decision:** `bh_skills.webhook_url` is the dispatch source of truth, so cutover/rollback per skill = one row update (`native://x` ↔ `/webhook/x`) — reversible without redeploy through P3; only P4 is irreversible, gated on a prod soak of native smart-capture.
+
+Also restored the 2 Track-1 privacy journal entries that got dropped in the #55 merge conflict (code shipped fine; only the journal record was lost).
+
+- [Next] Push + PR the spec (+ journal restore). Owner decides whether to execute, starting with P0 (needs the prod `bh_skills` query — owner-run or via `ask-db`). PRs #55/#56/#57/#58 merged; main green.
+
+## [2026-06-30] n8n-decommission spec — upgraded via full /spec workflow — Claude Code
+
+Re-ran the hand-authored spec (#59) through the real `/spec` deep workflow: 3 parallel `spec-researcher` agents grounded it, `spec-critic` hit every phase, design was a 3-approach tournament (minimal/ideal/risk-first) synthesized, and `spec-validate.py` is green (26/26 traceable). The rigor changed the design materially: dispatch is **name-first** so the cutover switch is a DB `smart_capture.engine` setting (not a `bh_skills` row flip — that's inert); the native port **fixes** n8n's decorative/hardcoded `extract_token` HMAC (real HMAC binding user+workspace+asset, membership + idempotency); and a hard dependency now blocks decommission until a native `api_usage_log` logger lands (else the dashboard spend fallback breaks). 16 tasks along an S0→S5 strangler-fig rollout; only the final Portainer stop is irreversible. Files: `.kiro/specs/n8n-decommission/{requirements,design,tasks}.md`.
+- [Next] Owner decides whether to execute; Task 1 (prod `bh_skills` audit + `api_usage_log` ownership) is the read-only starting point.
