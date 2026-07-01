@@ -28,8 +28,6 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Optional
 
-import httpx
-
 import asyncpg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from starlette.responses import StreamingResponse
@@ -38,7 +36,9 @@ from fastapi.responses import FileResponse
 from backend.database import get_pool
 from backend.middleware.auth import require_admin
 from backend.middleware.audit import AuditLogger
-from backend.http_client import get_http_session
+from backend.services.skill_executor import (
+    SkillExecutor, SkillExecutionError, SkillPermissionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -3936,11 +3936,47 @@ _FILES_DIR = Path("/files")
 _KNOWLEDGE_DIR = Path("/knowledge")
 
 
-def _get_smart_capture_url(request: Request) -> str:
-    """Resolve the Smart Capture extract URL from app configuration."""
-    config = request.app.state.config
-    base = config.N8N_BASE.rstrip("/")
-    return f"{base}/webhook/smart-capture/extract"
+async def _resolve_inbox_workspace(conn, user_id: int) -> int:
+    """Workspace to attribute an inbox capture to. Prefer the DB-configured
+    `smart_capture.inbox_workspace_id`; else the admin's lowest-id workspace;
+    else the General (first) workspace. Never a hardcoded id (NO-HARDCODING)."""
+    from backend.services.smart_capture.config import get_inbox_workspace_id
+
+    wid = await get_inbox_workspace_id(conn)
+    if wid is not None:
+        return wid
+    wid = await conn.fetchval(
+        "SELECT workspace_id FROM public.bh_workspace_users WHERE user_id=$1 "
+        "ORDER BY workspace_id LIMIT 1",
+        user_id,
+    )
+    if wid is not None:
+        return wid
+    return await conn.fetchval("SELECT id FROM public.bh_workspaces ORDER BY id LIMIT 1")
+
+
+async def _run_inbox_extract(request: Request, user: dict, params: dict[str, Any]) -> dict[str, Any]:
+    """Route an inbox extract through the native/n8n dispatch (name-first), so it
+    honors the `smart_capture.engine` switch like every other caller. Preserves
+    the raw extract response shape the inbox UI expects."""
+    executor = SkillExecutor(request.app.state.config)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        workspace_id = await _resolve_inbox_workspace(conn, user["id"])
+    try:
+        result = await executor.execute(
+            "smart-capture-extract", params,
+            user_id=user["id"], workspace_id=workspace_id,
+            bypass_workspace_check=True,  # admin-only route, no workspace context
+        )
+    except SkillPermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except SkillExecutionError as e:
+        raise HTTPException(
+            status_code=502, detail=f"Smart Capture extract failed: {e.detail or e}"
+        )
+    raw = result.raw_data
+    return raw if isinstance(raw, dict) else {"ok": False, "raw": raw}
 
 
 @router.get("/inbox/files")
@@ -4251,25 +4287,8 @@ async def inbox_ai_extract(
             detail="At least one of 'image_path' or 'text' must be provided.",
         )
 
-    # Proxy to Smart Capture extract webhook
-    async with get_http_session() as client:
-        try:
-            url = _get_smart_capture_url(request)
-            resp = await client.post(url, json=body, timeout=60.0)
-            resp.raise_for_status()
-            return resp.json()
-        except httpx.TimeoutException:
-            raise HTTPException(status_code=504, detail="Smart Capture extract timed out.")
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"Smart Capture extract failed: {e.response.text[:500]}",
-            )
-        except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Failed to reach Smart Capture service: {e}",
-            )
+    params = {k: body[k] for k in ("text", "image_path", "domain_hint") if body.get(k) is not None}
+    return await _run_inbox_extract(request, user, params)
 
 
 @router.post("/inbox/url-extract")
@@ -4295,35 +4314,20 @@ async def inbox_url_extract(
     if not url:
         raise HTTPException(status_code=400, detail="'url' is required.")
 
-    # Build the extraction request — send URL as text with domain_hint
-    extract_payload = {
-        "text": f"Extract product information from this URL: {url}",
-        "domain_hint": body.get("domain_hint"),
-    }
+    # Build the extraction request — send URL as text with domain_hint. This does
+    # NOT scrape the URL; it passes the URL as text for the classifier (preserving
+    # the original n8n behavior exactly).
+    extract_text = f"Extract product information from this URL: {url}"
 
     # If columns are provided, include them as context
     columns = body.get("columns")
     if columns:
-        extract_payload["text"] += f"\nTarget columns: {', '.join(columns)}"
+        extract_text += f"\nTarget columns: {', '.join(columns)}"
 
-    async with get_http_session() as client:
-        try:
-            url_target = _get_smart_capture_url(request)
-            resp = await client.post(url_target, json=extract_payload, timeout=60.0)
-            resp.raise_for_status()
-            return resp.json()
-        except httpx.TimeoutException:
-            raise HTTPException(status_code=504, detail="URL extraction timed out.")
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"URL extraction failed: {e.response.text[:500]}",
-            )
-        except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Failed to reach extraction service: {e}",
-            )
+    params: dict[str, Any] = {"text": extract_text}
+    if body.get("domain_hint") is not None:
+        params["domain_hint"] = body.get("domain_hint")
+    return await _run_inbox_extract(request, user, params)
 
 
 @router.post("/inbox/knowledge")

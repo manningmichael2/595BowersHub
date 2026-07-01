@@ -50,6 +50,16 @@ class SkillExecutor:
     def __init__(self, config: Config):
         self.config = config
         self.n8n_base = config.N8N_BASE.rstrip("/")
+        # Lazily-built, cached ModelProvider — injected into native handlers that
+        # need a governed LLM call (e.g. smart-capture extract). Building it eagerly
+        # would init provider SDK clients for every executor instance.
+        self._model_provider = None
+
+    def _get_model_provider(self):
+        if self._model_provider is None:
+            from backend.services.model_provider import ModelProvider
+            self._model_provider = ModelProvider(self.config)
+        return self._model_provider
 
     async def get_skill(self, skill_name: str) -> Optional[dict]:
         """Load a skill from the database by name."""
@@ -143,7 +153,7 @@ class SkillExecutor:
         params = normalize_skill_params(skill_name, params)
 
         # Check for native (in-process Python) skill handler first
-        native_result = await self._try_native_skill(skill_name, params, user_id)
+        native_result = await self._try_native_skill(skill_name, params, user_id, workspace_id)
         if native_result is not None:
             return native_result
 
@@ -199,7 +209,8 @@ class SkillExecutor:
             raise SkillExecutionError(skill_name, detail="Connection refused")
 
     async def _try_native_skill(
-        self, skill_name: str, params: Dict[str, Any], user_id: Optional[int] = None
+        self, skill_name: str, params: Dict[str, Any],
+        user_id: Optional[int] = None, workspace_id: Optional[int] = None,
     ) -> Optional[SkillResult]:
         """
         Check if a skill has a registered native (in-process Python) handler.
@@ -217,9 +228,17 @@ class SkillExecutor:
         if handler is None:
             return None  # Not a native skill — fall through to webhook
 
-        # Pass the acting user id under a reserved key so handlers that need it
-        # (e.g. weather → per-user default location) can read it; others ignore it.
-        result = await handler({**params, "_user_id": user_id})
+        # Pass the acting user id + workspace + shared config/model-provider under
+        # reserved keys so handlers that need them (e.g. weather → per-user default
+        # location; smart-capture → workspace-bound token + governed LLM call) can
+        # read them; handlers that don't just ignore the extra keys.
+        result = await handler({
+            **params,
+            "_user_id": user_id,
+            "_workspace_id": workspace_id,
+            "_config": self.config,
+            "_model_provider": self._get_model_provider(),
+        })
         return SkillResult(skill_name=skill_name, raw_data=result)
 
     def format_response(self, result: SkillResult) -> str:
