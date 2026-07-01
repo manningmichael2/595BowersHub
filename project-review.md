@@ -293,6 +293,16 @@ The end goal for the money side is a dedicated personal-finance app in the mold 
 4. **Then the compounding/non-obvious bets** (§8.5): eval harness, Home Assistant bridge, life-logging.
 5. **The personal-finance product track (§8.4):** the Monarch/Origin-style finance frontend + categorization/accounting overhaul — owner's stated north star, sequenced **explicitly after foundations are stable**. Likely starts with merchant enrichment (the biggest categorization lever) before the UI buildout.
 
+### 8.7 Carried-over items from the 2026-06-29 external design review
+
+A standalone `design_review_report.md` (2026-06-29 line-by-line source audit) was folded into this plan and archived at `archive/reviews/2026-06-29-design-review.md`. Most of its findings were already done or tracked (Context Harvester built; `ask_db` RCE + SimpleFin secret fixed; hardcoded IPs + n8n removal = the n8n-decommission spec/execution). The genuinely **net-new, still-open** items it surfaced, with status verified against the code:
+
+- **`db_browser.py` decomposition** — still one **4,451-line** god-file (verified 2026-07-01). Decompose into a `crud`/`ddl`/`views`/`undo` package. Tech-debt, not blocking; do opportunistically.
+- **Postgres Row-Level Security for workspace/semantic isolation** — we shipped an **app-level** visibility filter (0057 `bh_entities.visibility` + `hybrid_retrieval` scoping) instead of DB-enforced RLS. A conscious pragmatic choice; RLS is the deeper belt-and-suspenders if multi-user isolation ever needs a hard guarantee.
+- **Frontend `any` purge + runtime validation** — `zod` is installed; the typed/Zod `api.ts` (PR #56) started it, but ~330 `any`s remain. Incremental cleanup at the API boundary.
+- **TanStack Query / SWR** — not adopted; hand-rolled `useEffect`+`fetch` chains persist. Would remove stale-data/race bugs. Reviewer preference — do only if the fetch-boilerplate pain justifies the dependency.
+- **L2 skill-chaining** — let the L2 classifier dispatch an array of read-only skills and synthesize, instead of escalating multi-source asks straight to L3 Opus. A real cost/latency lever for "search email + calendar" style requests.
+
 ---
 
 ## 9. Cost & Model Economics — API vs. Frontier Subscriptions
