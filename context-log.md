@@ -1584,6 +1584,29 @@ Also restored the 2 Track-1 privacy journal entries that got dropped in the #55 
 Re-ran the hand-authored spec (#59) through the real `/spec` deep workflow: 3 parallel `spec-researcher` agents grounded it, `spec-critic` hit every phase, design was a 3-approach tournament (minimal/ideal/risk-first) synthesized, and `spec-validate.py` is green (26/26 traceable). The rigor changed the design materially: dispatch is **name-first** so the cutover switch is a DB `smart_capture.engine` setting (not a `bh_skills` row flip — that's inert); the native port **fixes** n8n's decorative/hardcoded `extract_token` HMAC (real HMAC binding user+workspace+asset, membership + idempotency); and a hard dependency now blocks decommission until a native `api_usage_log` logger lands (else the dashboard spend fallback breaks). 16 tasks along an S0→S5 strangler-fig rollout; only the final Portainer stop is irreversible. Files: `.kiro/specs/n8n-decommission/{requirements,design,tasks}.md`.
 - [Next] Owner decides whether to execute; Task 1 (prod `bh_skills` audit + `api_usage_log` ownership) is the read-only starting point.
 
+## [2026-06-30] DEPLOYED clean slate to prod (privacy + frontend hardening + dashboard) — Claude Code
+
+Owner asked to deploy everything built this session before executing the n8n tasks. Deployed from `main` (`69b6e06`) on the prod host (this box — `bowershub-ai`/`postgres`/`n8n`/`ollama`/`caddy` all run here via `scripts/deploy.sh` → local `docker compose up -d --build`).
+
+- **Safety snapshot first:** `pg_dump finance` → `/home/michael/backups/pre-clean-slate-deploy/finance-pre-0057-20260630-232209.dump` (5.5M).
+- **`bowershub-ai` rebuilt + recreated** (backend + frontend in one image; frontend build clean). **Migration 0057 auto-applied** on startup — `bh_entities.visibility` now present (default `'shared'`); 10 entities, all shared, 0 private (shared-default, no backfill — correct). Health `{status:ok, database:true}`. The **privacy toggle + WS `capture_visibility`** (PR #55) and the **typed/FormData api client** (PR #56) are now live in the served bundle.
+- **`dashboard` rebuilt + recreated** (PR #58: `BOWERSHUB_HOST`-driven IPs; default unchanged so no behavior change). Up.
+- #57 (CI) and #59 (spec) are non-runtime — nothing to deploy.
+
+⚠️ **PWA cache:** the frontend service worker may serve the old cached bundle until it updates — a hard-refresh (or reopening the PWA) picks up the toggle. SW_VERSION was not bumped for this change.
+- [Next] Clean slate is live. n8n-decommission spec (PR #59, merged) ready to execute starting at Task 1 (prod `bh_skills` audit + `api_usage_log` ownership) next session.
+
+## [2026-07-01] Capture Shared/Private toggle moved to ChatHeader (UX refactor) — Claude Code
+
+Finished an in-flight refactor that relocates the Shared/Private capture control from an unlabeled icon in the input row to a **labeled pill in the conversation header** — it's a per-conversation *mode*, so it belongs with the conversation, and the text makes it self-evident (the input-row icon was easy to miss/misread). No behavior change to the capture pipeline: same sessionStorage source of truth, same shared-by-default, same `capture_visibility` sent at message time.
+
+- **New `stores/captureVisibility.ts`** (zustand): `useCaptureVisibility` ({visibility, convId, syncTo, toggle}) drives the pill; `readVisibility(convId)` is the authoritative send-time read straight from sessionStorage (key `bh-capture-visibility`, unchanged). Toggle writes through to sessionStorage so both readers stay consistent.
+- **`ChatHeader.tsx`**: renders the pill (👥 Shared / 🔒 Private, `aria-pressed`, descriptive title), `syncTo(activeConversation?.id)` on conversation change.
+- **`InputArea.tsx`**: deleted the old inline toggle state/handler/button; now reads `readVisibility(convId)` at send. Removed the now-dead `getStoredVisibility`/`storeVisibility`/`CAPTURE_VIS_KEY` helpers.
+- **Verify:** `tsc --noEmit` clean, **355 vitest passed**, `npm run build` clean. Not yet committed or deployed.
+- ⚠️ **Tradeoff flagged:** the pill is top-right now, further from the compose box — with shared-by-default, a user about to type something sensitive is slightly less likely to notice it *before* typing than when it sat next to the textarea. Gain (clear label) vs. small loss (proximity at the moment of typing). Revisit if owner prefers it back by the input.
+- [Next] Owner to review; if approved, commit (branch off `main`) + rebuild `bowershub-ai` to ship. Untracked `design_review_report.md` (2026-06-29 external audit) is also sitting in the tree — decide whether to keep/relocate it.
+
 ## [2026-07-01] n8n-decommission — EXECUTED Tasks 1–9 (native smart-capture, landed dark) — Claude Code
 
 Owner: "proceed" — executed the n8n-decommission spec. Branch `feat/n8n-decommission` (off `main`). All code for S0/S1 is done; the operational rollout (S2–S5) remains owner-gated. Journal note: this branch's context-log predates the capture-toggle + DEPLOYED clean-slate entries on `feat/capture-toggle-in-header`/`main` — expect a context-log merge reconcile.

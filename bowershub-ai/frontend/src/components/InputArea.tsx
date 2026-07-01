@@ -2,6 +2,7 @@ import { useCallback, useState, useRef, useEffect, KeyboardEvent, ChangeEvent } 
 import { useConversationStore } from '../stores/conversation'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useUIStore } from '../stores/ui'
+import { readVisibility } from '../stores/captureVisibility'
 import { wsClient } from '../services/websocket'
 import { api } from '../services/api'
 import SlashAutocomplete from './SlashAutocomplete'
@@ -35,35 +36,10 @@ function pushHistory(msg: string) {
   sessionStorage.setItem(HISTORY_KEY, JSON.stringify(hist))
 }
 
-// Shared/Private capture toggle — controls the visibility the Context Harvester
-// applies to facts auto-learned from what you type. Sticky per-conversation;
-// defaults to 'shared' (the household shares context by design). The user flips
-// to Private for a conversation they don't want fed into shared memory.
-type CaptureVisibility = 'private' | 'shared'
-const CAPTURE_VIS_KEY = 'bh-capture-visibility'
-
-function getStoredVisibility(convId: number | null | undefined): CaptureVisibility {
-  if (!convId) return 'shared'
-  try {
-    const map = JSON.parse(sessionStorage.getItem(CAPTURE_VIS_KEY) || '{}')
-    return map[convId] === 'private' ? 'private' : 'shared'
-  } catch { return 'shared' }
-}
-
-function storeVisibility(convId: number | null | undefined, vis: CaptureVisibility) {
-  if (!convId) return
-  try {
-    const map = JSON.parse(sessionStorage.getItem(CAPTURE_VIS_KEY) || '{}')
-    map[convId] = vis
-    sessionStorage.setItem(CAPTURE_VIS_KEY, JSON.stringify(map))
-  } catch { /* sessionStorage unavailable — in-memory state still applies */ }
-}
-
 export default function InputArea() {
   const [input, setInput] = useState('')
   const [showSlash, setShowSlash] = useState(false)
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
-  const [captureVisibility, setCaptureVisibility] = useState<CaptureVisibility>('shared')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -75,16 +51,6 @@ export default function InputArea() {
   const { activeWorkspace } = useWorkspaceStore()
   const { modelSelection } = useUIStore()
 
-  // Load this conversation's sticky Shared/Private choice when it changes.
-  useEffect(() => {
-    setCaptureVisibility(getStoredVisibility(activeConversation?.id))
-  }, [activeConversation?.id])
-
-  const toggleCaptureVisibility = () => {
-    const next: CaptureVisibility = captureVisibility === 'shared' ? 'private' : 'shared'
-    setCaptureVisibility(next)
-    storeVisibility(activeConversation?.id, next)
-  }
   const composerPrefill = useUIStore(s => s.composerPrefill)
   const setComposerPrefill = useUIStore(s => s.setComposerPrefill)
 
@@ -247,9 +213,10 @@ export default function InputArea() {
     useConversationStore.getState().setStreaming(true)
 
     // Send via WebSocket (includes base64 attachments for vision). capture_visibility
-    // tells the Context Harvester whether facts learned from this message are
-    // shared with the household (default) or kept private to the author.
-    wsClient.sendMessage(convId, content || 'What is this?', modelSelection, wsAttachments, captureVisibility)
+    // tells the Context Harvester whether facts learned from this message are shared
+    // with the household (default) or private to the author — the per-conversation
+    // mode is set via the Shared/Private pill in ChatHeader and read here at send.
+    wsClient.sendMessage(convId, content || 'What is this?', modelSelection, wsAttachments, readVisibility(convId))
 
     // Reset model if not locked
     if (!useUIStore.getState().modelLocked) {
@@ -422,30 +389,6 @@ export default function InputArea() {
             disabled={isStreaming}
           />
         </div>
-
-        {/* Shared/Private capture toggle — sets whether facts the assistant
-            auto-learns from this message are shared with the household or kept
-            private to you. Defaults to Shared. */}
-        <button
-          onClick={toggleCaptureVisibility}
-          className={`p-2 rounded-lg hover:bg-surface shrink-0 mb-0.5 transition-colors ${
-            captureVisibility === 'shared' ? 'text-success' : 'text-text-muted hover:text-text'}`}
-          title={captureVisibility === 'shared'
-            ? 'Shared: facts learned here are visible to the whole household. Click for Personal.'
-            : 'Personal: facts learned here stay private to you. Click to Share with the household.'}
-          aria-label={captureVisibility === 'shared' ? 'Capture mode: Shared' : 'Capture mode: Personal'}
-          aria-pressed={captureVisibility === 'shared'}
-        >
-          {captureVisibility === 'shared' ? (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-3-6.7" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          )}
-        </button>
 
         {/* Voice-mode button (mic + stop-speaking). Hidden when STT is
             unavailable in this browser; shows a stop-speaking control when
