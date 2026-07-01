@@ -53,7 +53,7 @@ rsync -a \
   --exclude 'SYSTEM_REVIEW_2026-06-07.md' \
   --exclude 'docs/' \
   --exclude 'deploy.sh' \
-  --exclude 'scripts/' \
+  --exclude '/scripts/' \
   "$SRC/bowershub-ai/" "$STAGE/bowershub-ai/"
 
 # scripts/ is one-off ops tooling with real merchant/person names and the server
@@ -231,6 +231,15 @@ PY
 # Rebrand the app directory itself (its name carried the street token). Done
 # after verification so the scan sees the pre-rename tree.
 mv "$STAGE/bowershub-ai" "$STAGE/homehub-ai"
+
+# Public overlay: files that must differ from the private tree and can't be
+# produced by text-scrubbing — chiefly the HomeHub-branded screenshots (the
+# private ones show the old brand as pixels). Overlaid last so they win. These
+# are pre-vetted binaries, intentionally not re-scanned.
+if [ -d "$SRC/scripts/public-overlay" ]; then
+  rsync -a "$SRC/scripts/public-overlay/" "$STAGE/"
+  echo "  applied public overlay (HomeHub screenshots, etc.)"
+fi
 
 # ── 4. Mirror into the public repo and snapshot-commit ─────────────────────────
 mkdir -p "$PUB"
