@@ -3,15 +3,15 @@
 > Each task traces to requirements (`Requirements:` line). Work top-to-bottom; respect dependencies. Backend: `bowershub-ai/backend`. DB-backed tests use `fresh_db` (+ throwaway `pgvector/pgvector:pg16` locally). Ordered by the S0→S5 rollout in `design.md`.
 > **Owner-gated:** Task 1 (prod query), Task 13 (cutover flip), Task 16 (Portainer removal). n8n stays running until Task 16.
 
-## Task 1: Authoritative inventory → `inventory.md`
+## Task 1: Authoritative inventory → `inventory.md` ✅ DONE (2026-07-01)
 - **Effort:** S
 - **Dependencies:** none
 - **Requirements:** R1.1, R1.2, R1.3, R1.4
-- [ ] Finalize the code-touchpoint list (skill_executor, quick_capture, db_browser inbox×2, config, healthcheck, dashboard) from grep.
-- [ ] **Owner/`ask-db`:** `SELECT name, webhook_url FROM bh_skills WHERE webhook_url LIKE '/webhook/%' ORDER BY name;` → mark each `already-native` (has a registered handler by name) / `port-required` / `cosmetic`.
-- [ ] **Owner/n8n UI:** active-workflow list + execution history → classify `email-receipts-importer`, `api-usage-logger`; **resolve who writes `api_usage_log`** (native vs n8n) — this gates decommission (design "supporting changes").
-- [ ] Write `.kiro/specs/n8n-decommission/inventory.md` with every touchpoint + skill row + its disposition. **No production change.**
-- [ ] **Tests:** none (documentation artifact); the disposition table is the deliverable.
+- [x] Finalize the code-touchpoint list (skill_executor, quick_capture, db_browser inbox×2, config, healthcheck, dashboard) from grep.
+- [x] **Owner/`ask-db`:** `SELECT name, webhook_url FROM bh_skills WHERE webhook_url LIKE '/webhook/%' ORDER BY name;` → mark each `already-native` / `port-required` / `cosmetic`. **Result: 11 webhook rows; 8 already-native (inert URL, name-first dispatch), 3 port-required (smart-capture-extract, smart-capture-commit, process-asset).**
+- [x] **`api_usage_log` writer resolved via prod query:** native `cost_tracker.py` is the current writer (n8n stopped 2026-06-07); **decommission gate already satisfied**, no new logger required. `email-receipts-importer` still needs owner classification (active?). `api-usage-logger.json` superseded → retire.
+- [x] Write `.kiro/specs/n8n-decommission/inventory.md` with every touchpoint + skill row + its disposition. **No production change.**
+- [x] **Tests:** none (documentation artifact); the disposition table is the deliverable.
 
 ## Task 2: `smart_capture` package spine — config, intents, tokens
 - **Effort:** M
