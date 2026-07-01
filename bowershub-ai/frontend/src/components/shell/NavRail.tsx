@@ -4,6 +4,7 @@ import { useFeatures } from '../../hooks/useFeatures'
 import { isNavItemVisible } from '../../lib/featureNav'
 import { NAV_ITEMS, TOOL_ITEMS } from '../../lib/navItems'
 import { cn } from '../ui/cn'
+import { Logo } from '../ui/Logo'
 
 interface NavRailProps {
   collapsed: boolean
@@ -66,7 +67,8 @@ export default function NavRail({ collapsed, onToggle }: NavRailProps) {
         paddingLeft: 'env(safe-area-inset-left, 0px)',
       }}
     >
-      <div className="flex h-11 items-center px-4">
+      <div className={cn('flex h-11 items-center gap-2', collapsed ? 'justify-center px-2' : 'px-4')}>
+        <Logo size={24} className="shrink-0" />
         {!collapsed && <span className="text-sm font-semibold text-text">BowersHub</span>}
       </div>
 

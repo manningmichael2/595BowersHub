@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { useAuthStore } from '../stores/auth'
+import { Logo } from '../components/ui/Logo'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -18,6 +19,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
+          <Logo size={56} className="mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-text mb-2">BowersHub AI</h1>
           <p className="text-text-muted text-sm">Personal AI Assistant</p>
         </div>
