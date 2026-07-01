@@ -1578,3 +1578,8 @@ Owner: "chart a path to removing dependency on n8n." Authored a Kiro-compatible 
 Also restored the 2 Track-1 privacy journal entries that got dropped in the #55 merge conflict (code shipped fine; only the journal record was lost).
 
 - [Next] Push + PR the spec (+ journal restore). Owner decides whether to execute, starting with P0 (needs the prod `bh_skills` query — owner-run or via `ask-db`). PRs #55/#56/#57/#58 merged; main green.
+
+## [2026-06-30] n8n-decommission spec — upgraded via full /spec workflow — Claude Code
+
+Re-ran the hand-authored spec (#59) through the real `/spec` deep workflow: 3 parallel `spec-researcher` agents grounded it, `spec-critic` hit every phase, design was a 3-approach tournament (minimal/ideal/risk-first) synthesized, and `spec-validate.py` is green (26/26 traceable). The rigor changed the design materially: dispatch is **name-first** so the cutover switch is a DB `smart_capture.engine` setting (not a `bh_skills` row flip — that's inert); the native port **fixes** n8n's decorative/hardcoded `extract_token` HMAC (real HMAC binding user+workspace+asset, membership + idempotency); and a hard dependency now blocks decommission until a native `api_usage_log` logger lands (else the dashboard spend fallback breaks). 16 tasks along an S0→S5 strangler-fig rollout; only the final Portainer stop is irreversible. Files: `.kiro/specs/n8n-decommission/{requirements,design,tasks}.md`.
+- [Next] Owner decides whether to execute; Task 1 (prod `bh_skills` audit + `api_usage_log` ownership) is the read-only starting point.
