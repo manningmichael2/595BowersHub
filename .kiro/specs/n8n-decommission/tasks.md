@@ -3,6 +3,8 @@
 > Each task traces to requirements (`Requirements:` line). Work top-to-bottom; respect dependencies. Backend: `bowershub-ai/backend`. DB-backed tests use `fresh_db` (+ throwaway `pgvector/pgvector:pg16` locally). Ordered by the S0→S5 rollout in `design.md`.
 > **Owner-gated:** Task 1 (prod query), Task 13 (cutover flip), Task 16 (Portainer removal). n8n stays running until Task 16.
 
+> **STATUS (2026-07-01): Code complete through S0/S1 — Tasks 1–9 ✅ DONE.** The full native smart-capture pipeline (extract + commit + process-asset) is landed **dark** (`smart_capture.engine='n8n'` by default → everything still proxies to n8n; behavior unchanged). 60 new deterministic tests green; migration `0058` green under the scoped migrator role + fresh build-from-empty. **Remaining = operational rollout (owner-gated, over time):** Task 10 shadow soak (S2), Task 11 override-category live-caller check (`api_usage_log` writer already resolved native — see `inventory.md`), Tasks 12–16 cutover → decommission (S3–S5). email-receipts-importer: dormant → deferred (see `inventory.md`).
+
 ## Task 1: Authoritative inventory → `inventory.md` ✅ DONE (2026-07-01)
 - **Effort:** S
 - **Dependencies:** none
@@ -13,7 +15,7 @@
 - [x] Write `.kiro/specs/n8n-decommission/inventory.md` with every touchpoint + skill row + its disposition. **No production change.**
 - [x] **Tests:** none (documentation artifact); the disposition table is the deliverable.
 
-## Task 2: `smart_capture` package spine — config, intents, tokens
+## Task 2: `smart_capture` package spine — config, intents, tokens ✅ DONE (2026-07-01)
 - **Effort:** M
 - **Dependencies:** Task 1
 - **Requirements:** R2.2, R2.2a, R2.6, R6.3
@@ -22,7 +24,7 @@
 - [ ] `tokens.py` — `mint`/`verify` real HMAC-SHA256 (`hmac.compare_digest`) over `{v,ts,uid,wid,ih:[…]}`; verify recomputes HMAC, 30-min expiry, uid/wid match, **membership incl. asset**.
 - [ ] **Tests:** tamper/expired/wrong-workspace/fabricated rejected; membership passes for a signed intent + fails for a foreign one; asset-swap rejected; `canonical()` stable under reordered keys/whitespace/unicode.
 
-## Task 3: Native extract (text) + prompt + input bounds
+## Task 3: Native extract (text) + prompt + input bounds ✅ DONE (2026-07-01)
 - **Effort:** M
 - **Dependencies:** Task 2, Task 6
 - **Requirements:** R2.1, R2.7, R2.8
@@ -30,7 +32,7 @@
 - [ ] `extract.py::extract_native` — one `model_provider.complete(resolve_role("fast"), max_tokens≈2048)`; reproduce `Parse Classification` fence-strip + `other`-fallback; return `{ok,intents,asset?,raw_text?,extract_token}`; enforce **max input size** (reject/mark oversized); model error → `{ok:false,error}`.
 - [ ] **Tests:** text capture → expected intent shape; oversized rejected; malformed/truncated model output → clear error (never partial); domain allow-list enforced.
 
-## Task 4: Native commit + committers + idempotency
+## Task 4: Native commit + committers + idempotency ✅ DONE (2026-07-01)
 - **Effort:** L
 - **Dependencies:** Task 2, Task 6
 - **Requirements:** R2.3, R2.2a, R2.7
@@ -39,7 +41,7 @@
 - [ ] Per-intent atomic; a failed intent → `{ok:false,error}` for that intent only (no partial-success-as-success); orphaned asset logged (structured line w/ asset_id+dedup_key).
 - [ ] **Tests:** each committer writes the right row (parameterized); replay = one row; partial-failure reported per-intent; a test asserting **no string-interpolated SQL** in the commit path; `_extra_fields`→notes preserved; house_room re-capture upserts (no dup).
 
-## Task 5: Register native skills + engine wrappers + thread dispatch context
+## Task 5: Register native skills + engine wrappers + thread dispatch context ✅ DONE (2026-07-01)
 - **Effort:** M
 - **Dependencies:** Task 3, Task 4
 - **Requirements:** R2.5, R2.6
@@ -48,14 +50,14 @@
 - [ ] `skill_executor._try_native_skill` — add `workspace_id` param (pass at `:146`) + inject `_workspace_id`/`_config`/`_model_provider` (cached) into params (non-breaking; extra keys ignored).
 - [ ] **Tests:** extract/commit dispatch native under `engine=native`; proxy under `engine=n8n`; shadow returns n8n body + native token + a diff log; other native skills unaffected by the injected keys.
 
-## Task 6: Migration `0058` — engine setting, token secret, dedup table
+## Task 6: Migration `0058` — engine setting, token secret, dedup table ✅ DONE (2026-07-01)
 - **Effort:** S
 - **Dependencies:** Task 2
 - **Requirements:** R2.6, R6.3
 - [ ] **Migration:** `backend/migrations/0058_smart_capture_native.sql` (confirm next free number) — seed `smart_capture.engine='"n8n"'`, `smart_capture.token_secret=to_jsonb(encode(gen_random_bytes(32),'hex'))`, `smart_capture.process_asset_native=false`, and `smart_capture.inbox_workspace_id=null` (**not a hardcoded id** — resolved at runtime, Task 7); `CREATE TABLE bh_smart_capture_commits(dedup_key text PK, result_json jsonb, created_at timestamptz default now())`; `ON CONFLICT DO NOTHING` throughout; optional cosmetic `UPDATE bh_skills … native://…`.
 - [ ] **Tests:** applies on `fresh_db` + idempotent re-run; green under `test_migrate_as_app_role.py` (scoped migrator role); settings + table present; secret hex-decodes to 32 bytes.
 
-## Task 7: Repoint all consumers
+## Task 7: Repoint all consumers ✅ DONE (2026-07-01)
 - **Effort:** M
 - **Dependencies:** Task 5
 - **Requirements:** R2.5
@@ -63,7 +65,7 @@
 - [ ] `db_browser.py` `/inbox/ai-extract` + `/inbox/url-extract` — route through `executor.execute("smart-capture-extract", …)` with the inbox workspace = `smart_capture.inbox_workspace_id` if set, **else resolved at runtime** to the admin's default workspace (query, not a hardcoded id); **preserve each response shape**; replicate `url-extract` **text pass-through (no scrape)** exactly; delete `_get_smart_capture_url`.
 - [ ] **Tests:** overlay + both inbox consumers run native end-to-end; each returns its original response shape; url-extract passes URL as text (asserted); **inbox consumers surface a clear error (not silent-empty) on a model_provider failure** (R2.7); raw-note still works.
 
-## Task 8: Native Process Asset (vision) + image fallback
+## Task 8: Native Process Asset (vision) + image fallback ✅ DONE (2026-07-01)
 - **Effort:** L
 - **Dependencies:** Task 3
 - **Requirements:** R3.1, R2.4, R6.1
@@ -71,7 +73,7 @@
 - [ ] `extract_native` image branch: under `engine=native|shadow`, call native process-asset **iff** `smart_capture.process_asset_native=true`, else proxy the image request to n8n (per-request fallback so text can cut over first).
 - [ ] **Tests:** vision extract → asset row + structured fields (parameterized); dedup on re-upload; image fallback proxies while flag off, goes native when on; **image-receipt parity** (native vs recorded n8n fixture, ≥95% field agreement) — the image half of the R6.1 gate, blocking the image cutover.
 
-## Task 9: Parity corpus + deterministic unit-test gate (S1)
+## Task 9: Parity corpus + deterministic unit-test gate (S1) ✅ DONE (2026-07-01)
 - **Effort:** M
 - **Dependencies:** Task 4, Task 7
 - **Requirements:** R6.1

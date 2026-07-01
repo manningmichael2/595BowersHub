@@ -54,7 +54,7 @@ The spec flagged this as a hard dependency (dashboard spend must survive n8n's d
 | workflow (`n8n-workflows/`) | disposition |
 |---|---|
 | `api-usage-logger.json` | **superseded** by native `cost_tracker.py` (see gate above) — retire |
-| `email-receipts-importer.json` | **needs owner classification** — email→receipt ingestion; confirm whether it's still active/used before porting or dropping |
+| `email-receipts-importer.json` | **DORMANT → defer (port-or-drop at S5).** Evidence: 0 email/receipt-sourced `finance.transactions` in 60 days; no recent `api_usage_log`; n8n on SQLite. It hinges on n8n's **IMAP Trigger** + the Gmail 'Receipts' label and chains to `receipt-to-transaction` (**not ported**). A native port is buildable — the pieces exist (`services/email_reader.py` IMAP, now-native `process-asset`, `model_provider`) — but needs: (1) native `receipt-to-transaction`, (2) an apscheduler poll job, (3) live Gmail creds + real receipt emails to verify end-to-end. Not built here: it's unused, owner can live without it, and it can't be honestly verified without live email. Decide at decommission. |
 | `smart-capture.json`, `process-asset.json` | the 3 port-required skills above |
 | `build-*.py`, others | build artifacts for the above; die with them |
 
