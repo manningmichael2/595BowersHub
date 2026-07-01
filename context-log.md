@@ -1621,3 +1621,14 @@ Owner: "proceed" — executed the n8n-decommission spec. Branch `feat/n8n-decomm
 
 Commit `b73125d` on `feat/n8n-decommission`. `design_review_report.md` still untracked/undecided.
 - [Next] Push + PR. Then owner-gated rollout: deploy 0058 (dark, safe) → `engine='shadow'` S2 soak (≥7d/≥50 captures, diff=0) → `'native'` cutover (S3) → soak (S4) → Portainer stop + guard/health/dashboard/`N8N_BASE` removal (S5, irreversible). All pre-S5 steps reversible via the one engine-setting row.
+
+## [2026-07-01] README screenshots — authenticated views captured (docs) — Claude Code
+
+Owner: "continue updating the GitHub documentation ... screenshots will need to be added/updated." The prior docs pass (`bdf9ed0`) only shipped login shots; the README's promised authenticated views were never captured. Finished that.
+
+- **Captured 8 authenticated screenshots** (chat, lists, finance, settings × desktop 1440×900 + mobile 390×844@2×) against an **isolated seeded stack**, not the live app: throwaway `bh_shots` DB in the `bh-pgvec-test` container (needed `CREATE EXTENSION vector` — migration `0010` hard-requires it), backend via venv on `:5099` serving a fresh `npm run build`, demo user + workspace + grocery/to-do lists + a `finance.accounts` row and 12 `finance.transactions` seeded, real refresh tokens minted into `bh_refresh_tokens`.
+- **Fixed the capture script's auth model** (`frontend/scripts/screenshots.mjs`): the PWA bootstraps from `localStorage` `refreshToken`+`user` and exchanges at `/api/auth/refresh` — it never reads an access token from storage, so the old `accessToken` seeding could never have logged in. Refresh tokens **rotate on use** (reuse trips theft-detection → revoke-all), so `SHOT_TOKEN` is now a comma-separated list, **one refresh token per browser context** (desktop, mobile).
+- **README**: Screenshots section is now a desktop+mobile grid (finance, chat, lists, settings, sign-in). `docs/screenshots/README.md` rewritten with the accurate, reproducible steps.
+- **Dashboard + admin deliberately omitted** — owner: "we need to redo that anyway ... dashboards and admin settings both need to be redone." The dashboard also pulls live host data (docker container list, news) unfit for a public README.
+- Cleanup: isolated backend stopped, `bh_shots` dropped, staged `bowershub-ai/static/` build artifact removed.
+- [Next] Redo dashboard + admin views (redesign pending), then recapture those two.
