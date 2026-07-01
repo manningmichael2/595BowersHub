@@ -22,11 +22,15 @@
 
 ## 📸 Screenshots
 
-| Desktop | Mobile |
-|---|---|
-| ![Sign-in — desktop](docs/screenshots/login-desktop.png) | ![Sign-in — mobile](docs/screenshots/login-mobile.png) |
+| View | Desktop | Mobile |
+|---|---|---|
+| **Finance** — transactions, categories, spend breakdown | ![Finance — desktop](docs/screenshots/finance-desktop.png) | ![Finance — mobile](docs/screenshots/finance-mobile.png) |
+| **Chat** — per-workspace AI assistant, shared/private, voice | ![Chat — desktop](docs/screenshots/chat-desktop.png) | ![Chat — mobile](docs/screenshots/chat-mobile.png) |
+| **Lists** — household-shared shopping / to-do lists | ![Lists — desktop](docs/screenshots/lists-desktop.png) | ![Lists — mobile](docs/screenshots/lists-mobile.png) |
+| **Settings** — profile, appearance, notifications, labs | ![Settings — desktop](docs/screenshots/settings-desktop.png) | ![Settings — mobile](docs/screenshots/settings-mobile.png) |
+| **Sign-in** | ![Sign-in — desktop](docs/screenshots/login-desktop.png) | ![Sign-in — mobile](docs/screenshots/login-mobile.png) |
 
-> Authenticated views (dashboard, chat, lists, finance, settings) are captured against a **seeded local test stack** rather than the live app (which holds real finances). Regenerate any view at both viewports with the Playwright capture script — see [`docs/screenshots/`](docs/screenshots/README.md).
+> Authenticated views are captured against a **seeded local test stack** with demo data — never the live app (which holds real finances). Sign-in is the live app (no personal data). Regenerate any view at both viewports with the Playwright capture script — see [`docs/screenshots/`](docs/screenshots/README.md).
 
 ---
 
