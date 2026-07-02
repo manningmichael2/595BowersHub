@@ -65,15 +65,62 @@ class DashboardStateCache:
 # generator (which has the real authenticated `user`), not cached globally here.
 _SYSTEM_CTX = {"id": 0, "email": "system@dashboard", "role": "system"}
 
+# Action Center thresholds (R2.1): surface sustained system pressure as
+# dismissible cards. Disk/memory are sustained-state (good alerts); transient
+# CPU spikes are the Hardware HUD's job (Task 7), not the Action Center.
+DISK_WARN_PCT = 90.0
+DISK_CRIT_PCT = 95.0
+MEM_WARN_PCT = 90.0
+
+
+def evaluate_actions(state: Dict[str, Any]) -> list:
+    """Derive the Action Center card list from the current cache. Pure +
+    deterministic (unit-tested). Empty list → the UI hides the whole strip."""
+    actions: list = []
+    sh = state.get("system_health") or {}
+
+    for d in sh.get("disk") or []:
+        pct = d.get("percent")
+        if not isinstance(pct, (int, float)) or pct < DISK_WARN_PCT:
+            continue
+        mount = d.get("mount", "disk")
+        actions.append({
+            "id": f"disk:{mount}",
+            "level": "error" if pct >= DISK_CRIT_PCT else "warning",
+            "title": f"Disk {mount} at {pct:.0f}%",
+            "detail": "Free up space — the host is running low.",
+        })
+
+    mem = sh.get("memory") or {}
+    mpct = mem.get("percent")
+    if isinstance(mpct, (int, float)) and mpct >= MEM_WARN_PCT:
+        actions.append({
+            "id": "memory",
+            "level": "warning",
+            "title": f"Memory at {mpct:.0f}%",
+            "detail": "The host is under memory pressure.",
+        })
+
+    return actions
+
+
 async def _poll_endpoint(cache: DashboardStateCache, key: str, func, interval: float):
     """Generic polling wrapper for dashboard endpoints."""
     # Add a slight staggered start based on key to avoid thundering herd on startup
-    await asyncio.sleep(hash(key) % 50 / 10.0) 
-    
+    await asyncio.sleep(hash(key) % 50 / 10.0)
+
     while True:
         try:
             data = await func(user=_SYSTEM_CTX)
             await cache.update(key, data)
+            # System health drives the Action Center; recompute only when it
+            # changes and only push when the card set actually differs (avoids a
+            # redundant notify every poll tick).
+            if key == "system_health":
+                snapshot = await cache.get_all()
+                new_actions = evaluate_actions(snapshot)
+                if new_actions != snapshot.get("actions"):
+                    await cache.update("actions", new_actions)
         except Exception as e:
             logger.error(f"Error polling {key} for dashboard stream: {e}")
         await asyncio.sleep(interval)

@@ -49,12 +49,14 @@
 - [x] The button dispatches via the api client (POST/PATCH/PUT/DELETE), toasts success/failure, shows a "✓ Done" terminal state. **Verified end-to-end** on a seeded stack (reel shows live categorizer/simplefin/embedding events + a working Recategorize button).
 - [x] **Tests:** `TaskReelWidget.test.tsx` (4) — empty state, event row, no-button-without-action, and the inline mutation fires the right endpoint + toasts + disables. tsc clean; 383 frontend tests.
 
-### Task 6: Action Center UI
+### Task 6: Action Center UI — DONE (2026-07-01)
 - **Effort:** S
 - **Requirements:** R2.1
-- [ ] Build `<ActionCenter />` in the frontend, positioned above the main grid.
-- [ ] Define trigger logic in `dashboard_stream.py` to evaluate the cache (e.g., `if disk_usage > 95`) and emit a specific `actions` array to the stream.
-- [ ] Render the array as dismissible/actionable cards; hide the component entirely if the array is empty.
+- [x] `ActionCenter.tsx` mounted above the grid in `DashboardV2`; level-styled cards, per-session client-side dismiss.
+- [x] Trigger logic in `dashboard_stream.evaluate_actions()` (pure, unit-tested): derives cards from `system_health` — disk ≥90% (warning) / ≥95% (error), memory ≥90% (warning). Recomputed on each `system_health` poll and pushed to the cache's `actions` key **only when the card set changes** (no redundant notify). Transient CPU spikes are intentionally left to the Hardware HUD (Task 7), not the Action Center.
+- [x] Renders dismissible cards; the whole strip renders `null` when there are no live/undismissed actions.
+- [x] **Tests:** `test_dashboard_actions.py` (6 — thresholds, levels, stable ids, non-numeric guard, empty) + `ActionCenter.test.tsx` (4 — empty→null, render, dismiss-hides, dismiss-keeps-others). 387 frontend tests; tsc clean.
+- **Follow-up:** actionable finance triggers (e.g. "N uncategorized → [Categorize]") need an uncategorized-count in the cache + an on-demand categorizer endpoint — deferred (not in the stream today).
 
 ---
 
