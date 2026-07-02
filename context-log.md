@@ -1633,6 +1633,20 @@ Owner: "continue updating the GitHub documentation ... screenshots will need to 
 - Cleanup: isolated backend stopped, `bh_shots` dropped, staged `bowershub-ai/static/` build artifact removed.
 - [Next] Redo dashboard + admin views (redesign pending), then recapture those two.
 
+## [2026-07-01] Public mirror (`private-ai-hub`) — scrubbed app-only snapshot tooling + app logo — Claude Code
+
+Owner wants to keep this repo private (source of truth) **and** publish a curated, scrubbed public showcase, syncing after each epic. Audit first: **no credential leaks** (no `.env` tracked; gitleaks over 267 commits = 1 finding, a `bounds/priority` code-comment false-positive; `live_schema.sql` schema-only; no data files; `node_modules` untracked). The real exposure is **identity/PII**, not secrets: repo name `595BowersHub` = a street address; personal gmail in ~14 files + all commit metadata; real name; Tailscale FQDN `595bowershub.tailc4d58a.ts.net`; household first/last names (**Michael/Manon**, **Manning/Nitta** — the latter a real Zelle payer name in `scripts/fix_cascade_residuals.py`); internal IP `100.106.180.101`.
+
+**Decisions (owner):** public repo name `private-ai-hub`; **app-only** scope; **rebrand BowersHub→HomeHub**; generate a real logo + recapture screenshots as HomeHub; **hold publishing** (owner reviews first).
+
+**Built (two branches off `main`, PRs open, NOT merged, NOTHING published):**
+- **PR #64 `feat/app-logo`** — new `frontend/src/components/ui/Logo.tsx` (self-contained SVG: indigo→violet tile + house/hub glyph, `aria-hidden`) wired into NavRail / MobileTopBar / NavDrawer / LoginPage (previously text-only). `tsc` clean. Brand-neutral glyph works for both the private "BowersHub" wordmark and the public "HomeHub" rebrand.
+- **PR #65 `tooling/public-mirror-sync`** — `scripts/sync-public.sh`: private→public **snapshot mirror with its own history** (a fork would drag email/name/address through git history, unscrubbable retroactively). Stages app-only include set (app + README + screenshots + LICENSE; excludes journals, steering, home-lab services, `live_schema.sql`, ops `scripts/` except `generate_icons.py`, `deploy.sh`, `SYSTEM_REVIEW`); deterministic identifier scrub + BowersHub→HomeHub rebrand + app-dir rename `bowershub-ai/`→`homehub-ai/`; **hard-fails if any identifier survives** (independent case-insensitive re-scan = 0). A **public-overlay** (`scripts/public-overlay/`) layers in artifacts text-scrubbing can't fix — the HomeHub-branded screenshots (old brand is baked into pixels) — so they survive every sync. Does **not** touch GitHub; publishing is manual.
+
+**Recaptured 10 HomeHub screenshots** (chat/lists/finance/settings + login, desktop+mobile) against the scrubbed HomeHub build on a seeded throwaway stack (demo email fixed to `demo@homehub.local`); committed under `scripts/public-overlay/`. Local mirror at `/home/michael/private-ai-hub` (670 files) verified: gitleaks 0 real, identifier scan 0, app-only scope, screenshots byte-match the HomeHub captures.
+
+- [Next] Owner merges **#64 first** (so the mirror's frontend source carries the logo the overlay screenshots show), then **#65**. Publish when ready: `scripts/sync-public.sh "<label>"` → review `/home/michael/private-ai-hub` → `gh repo create private-ai-hub --public --source=. --remote=origin --push`. Then sync after each epic. Dashboard + admin still omitted from screenshots (redesign pending, per prior entry).
+
 ## [2026-07-01] Dashboard V2 Phase 1 — real SSE-fed dashboard UI (was a stub) — Claude Code
 
 Owner green-lit executing the `dashboard-v2` spec (SSE Command Center). Discovered Phase 1 (Tasks 1–3) was **already built but unlogged on `main`** — the SSE plumbing all existed (`services/dashboard_stream.py` cache+publisher wired into lifespan, `GET /api/dashboard/stream`, `hooks/useDashboardStream.ts`, the `use_experimental_dashboard` opt-in flag + Settings toggle) — but `DashboardV2.tsx` was a **23-line status stub** ("🟢 Connected / N keys in cache"), not a dashboard. (This is the 4th time this session a spec's checkboxes were stale vs. reality — verify code, not boxes.)
