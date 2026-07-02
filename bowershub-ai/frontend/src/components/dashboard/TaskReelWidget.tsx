@@ -46,13 +46,16 @@ export function TaskReelWidget({ events }: { events: AgentEvent[] }) {
       >
         Activity
       </header>
-      <div className="max-h-72 overflow-y-auto">
+      {/* No nested scroll: an inner overflow container traps touch-scroll on
+          mobile (the page can't scroll past the card). Cap to the most-recent
+          few and let the page scroll as one surface. */}
+      <div>
         {events.length === 0 ? (
           <div className="p-4 text-sm" style={{ color: 'var(--color-text-muted)' }}>
             No recent activity.
           </div>
         ) : (
-          events.map((e) => <EventRow key={e.id} event={e} />)
+          events.slice(0, 8).map((e) => <EventRow key={e.id} event={e} />)
         )}
       </div>
     </section>

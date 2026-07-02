@@ -260,6 +260,10 @@ async def get_layouts(user: dict = Depends(get_current_user)) -> dict[str, Any]:
             SELECT page_key, widgets, updated_at
               FROM public.bh_dashboard_layouts
              WHERE user_id = $1
+               -- Underscore-prefixed pages are reserved internal stores (e.g.
+               -- `_generated` holds LLM-generated widgets, whose {id,spec} shape
+               -- is NOT a display layout). Never surface them as dashboard pages.
+               AND left(page_key, 1) <> '_'
              ORDER BY page_key
             """,
             user_id,
