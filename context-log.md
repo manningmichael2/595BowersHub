@@ -1681,3 +1681,15 @@ Owner: "merge commit and deploy then continue" — merged PRs #64/#65/#66/#67 (l
 
 **Branch `feat/dashboard-v2-phase2`** (off `main`); PR opened.
 - [Next] **Task 6 — Action Center** (R2.1): cache-driven trigger logic in `dashboard_stream.py` (e.g. disk > 95%, uncategorized txns) → `actions` array → dismissible cards above the grid, hidden when empty. Then Phase 3 (Hardware HUD, Generative UI).
+
+## [2026-07-01] Dashboard V2 Phase 2 (Task 6) — Action Center — Claude Code
+
+Continued dashboard-v2 (owner re-greenlit the SSE direction). Task 6 completes Phase 2. **Stacked on `feat/dashboard-v2-phase2` (PR #68, still unmerged awaiting review) — branch `feat/dashboard-v2-action-center`.**
+
+- `dashboard_stream.evaluate_actions(state)` — pure/deterministic: derives Action Center cards from `system_health` (disk ≥90% warning / ≥95% error; memory ≥90% warning). Recomputed on each `system_health` poll, pushed to the cache `actions` key **only when the set changes** (avoids a redundant notify every 2s). CPU spikes intentionally left to the Hardware HUD (Task 7).
+- `ActionCenter.tsx` (mounted above the grid in `DashboardV2`): level-styled cards, per-session client-side dismiss, renders `null` when empty (R2.1).
+- **Tests:** `test_dashboard_actions.py` (6) + `ActionCenter.test.tsx` (4). 387 frontend tests; tsc clean. Not runtime-captured — the strip correctly stays hidden on a healthy host (real disk <90%); the alert math + card render/dismiss are unit-tested.
+- **Follow-up:** actionable finance triggers ("N uncategorized → [Categorize]") need an uncategorized-count in the cache + an on-demand categorizer endpoint — deferred.
+
+Phase 2 (Tasks 4–6) is now feature-complete across PR #68 + this branch.
+- [Next] Merge #68 then this (or squash the two). Then Phase 3: Task 7 Hardware HUD (CPU>90% → strain culprit from the scheduler/agent registry), Task 8 Generative UI (`render_dashboard_widget` LLM tool → ephemeral layout). Admin redesign still needs its own `/spec`.

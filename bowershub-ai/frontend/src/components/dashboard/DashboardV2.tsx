@@ -3,6 +3,7 @@ import { useDashboardStore } from '../../stores/dashboard'
 import { WidgetGrid } from './WidgetGrid'
 import DashboardNav from './DashboardNav'
 import { TaskReelWidget, type AgentEvent } from './TaskReelWidget'
+import { ActionCenter, type DashboardAction } from './ActionCenter'
 
 /**
  * Dashboard V2 — the same per-user widget layout as V1, but every widget is fed
@@ -19,6 +20,7 @@ export default function DashboardV2() {
 
   const widgets = layouts[activePage]?.widgets || []
   const events = (widgetData.agent_events as AgentEvent[] | undefined) ?? []
+  const actions = (widgetData.actions as DashboardAction[] | undefined) ?? []
 
   return (
     <div
@@ -34,6 +36,8 @@ export default function DashboardV2() {
         </div>
         <LiveIndicator connected={isConnected} />
       </div>
+
+      <ActionCenter actions={actions} />
 
       <WidgetGrid widgets={widgets} availableWidgets={availableWidgets} streamData={widgetData} />
 
