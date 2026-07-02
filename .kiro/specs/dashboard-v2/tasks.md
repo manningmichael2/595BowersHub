@@ -62,11 +62,13 @@
 
 ## Phase 3: Hardware HUD & Generative UI
 
-### Task 7: Hardware HUD (Agent Strain)
+### Task 7: Hardware HUD (Agent Strain) — DONE (2026-07-01)
 - **Effort:** M
 - **Requirements:** R2.4
-- [ ] Update `backend/services/system_health.py` to read the active background task registry (from APScheduler or the Agent Logger) when CPU > 90%.
-- [ ] Upgrade the frontend `SystemHealthWidget.tsx` to conditionally render the "Strain Culprit" banner based on the new payload data.
+- [x] New `services/task_registry.py`: an in-process registry of active heavy jobs (`track_task` ctx-mgr + `@tracked` decorator + `active_tasks`/`strain_culprit`). The 3 heavy entry points are decorated: `run_categorizer`, `run_embedding_worker`, `sync_simplefin`. (In-process is sufficient — single worker; the publisher shares the process with the scheduler jobs. APScheduler exposes *scheduled* jobs, not *running* ones, so a purpose-built registry is the right source.)
+- [x] `system_health.get_system_health()` adds a `strain: {cpu_percent, culprit, active_tasks}` field when `cpu_percent ≥ STRAIN_CPU_PCT` (90). No field when idle.
+- [x] `SystemHealthWidget.tsx` renders a "⚡ High load — <culprit>" banner when `strain` is present (generic when no culprit is tracked).
+- [x] **Tests:** `test_task_registry.py` (5 — add/remove, decorator, exception-safety, strain-when-pegged via CPU monkeypatch, no-strain-when-idle) + `SystemHealthWidget.test.tsx` (3 — culprit banner, generic banner, none when idle). 390 frontend tests; tsc clean.
 
 ### Task 8: Generative UI Rendering Pipeline
 - **Effort:** H

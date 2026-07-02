@@ -15,6 +15,7 @@ import httpx
 from backend.http_client import get_http_client
 
 from backend.database import get_pool
+from backend.services.task_registry import tracked
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ IGNORED_ACCOUNT_IDS = {
 }
 
 
+@tracked("SimpleFin sync")
 async def sync_simplefin(window_days: int = 14) -> dict:
     """
     Pull last N days of transactions and account balances from SimpleFin,
