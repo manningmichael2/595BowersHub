@@ -34,18 +34,20 @@
 
 ## Phase 2: Action Center & Task Reel
 
-### Task 4: Agent Event Data Model
+### Task 4: Agent Event Data Model — DONE (2026-07-01)
 - **Effort:** S
 - **Requirements:** R2.2
-- [ ] Create a migration `0012_agent_events.sql` to add a `bh_agent_events` table (id, timestamp, source, message, level, action_payload (JSONB)).
-- [ ] Implement a `backend/services/agent_logger.py` to write to this table and emit the new row directly into the `dashboard_stream.py` publisher.
+- [x] Migration **`0059_agent_events.sql`** (not `0012` — chain is at 0058) adds `bh_agent_events` (id, created_at, source, message, level CHECK'd, `action_payload` jsonb) + a `created_at DESC, id DESC` index. Forward-only + idempotent.
+- [x] `backend/services/agent_logger.py`: `log_event()` persists + pushes onto the SSE cache via `DashboardStateCache.append_event` (newest-first, bounded to 50); `hydrate_recent()` seeds the cache from history on boot (wired into `main.py` lifespan after a startup heartbeat). Fire-and-forget (never raises into callers). `created_at` stringified so the whole cache stays `json.dumps`-able (SSE contract). Emitters wired into the categorizer + SimpleFin sync completions.
+- [x] **Tests:** `test_agent_logger.py` (3, DB-backed) — persist + jsonb round-trip + newest-first bounded push + cache JSON-serializable; invalid level → `info`; hydrate refills a cold cache; `append_event` cap/order.
 
-### Task 5: Interactive Task Reel UI
+### Task 5: Interactive Task Reel UI — DONE (2026-07-01)
 - **Effort:** M
 - **Requirements:** R2.2, R2.3
-- [ ] Build `<TaskReelWidget />` in the frontend that subscribes to the `agent_events` array from the SSE stream.
-- [ ] Implement parsing logic: if an event's `action_payload` contains an action definition (e.g., `{type: "mutation", endpoint: "/api/...", body: {...}}`), render an inline button next to the text.
-- [ ] Wire the button to execute the defined `fetch/api` call and show a success/failure toast.
+- [x] `TaskReelWidget.tsx` subscribes to `widgetData.agent_events` from the stream (mounted in `DashboardV2` below the grid). Level-colored dots (info/success/warning/error), source, relative time, scrollable.
+- [x] When an event carries `action_payload {label,type:'mutation',endpoint,method,body}`, renders an inline button.
+- [x] The button dispatches via the api client (POST/PATCH/PUT/DELETE), toasts success/failure, shows a "✓ Done" terminal state. **Verified end-to-end** on a seeded stack (reel shows live categorizer/simplefin/embedding events + a working Recategorize button).
+- [x] **Tests:** `TaskReelWidget.test.tsx` (4) — empty state, event row, no-button-without-action, and the inline mutation fires the right endpoint + toasts + disables. tsc clean; 383 frontend tests.
 
 ### Task 6: Action Center UI
 - **Effort:** S

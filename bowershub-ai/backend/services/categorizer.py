@@ -56,6 +56,14 @@ async def run_categorizer() -> dict:
     # completion is the "data is categorized for this window" signal the insight
     # runner gates on. Only reached when the run did NOT raise (failure → no row).
     await _write_categorizer_watermark(pool)
+    # Surface the run on the dashboard Task Reel (fire-and-forget).
+    from backend.services.agent_logger import log_event
+    _n = result.get("count") or result.get("categorized") or result.get("written") or 0
+    await log_event(
+        "categorizer",
+        f"Categorized {_n} transaction(s)" if _n else "Categorizer run complete",
+        level="success",
+    )
     return result
 
 
