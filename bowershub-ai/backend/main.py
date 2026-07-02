@@ -315,9 +315,18 @@ async def lifespan(app: FastAPI):
     from backend.services.skill_registry import discover_skills
     discover_skills()
 
-    # Start dashboard SSE publisher loop
+    # Start dashboard SSE publisher loop, then seed the Task Reel from history
+    # so a fresh dashboard connection's first frame isn't an empty reel.
     from backend.services.dashboard_stream import start_dashboard_stream_loop, stop_dashboard_stream_loop
     start_dashboard_stream_loop()
+    import asyncio as _asyncio
+    async def _boot_task_reel():
+        # Hydrate history first, then append a startup heartbeat (append after
+        # the full-replace hydrate avoids a race that could drop the heartbeat).
+        from backend.services.agent_logger import hydrate_recent, log_event
+        await hydrate_recent()
+        await log_event("system", "Dashboard stream online", level="info")
+    _asyncio.create_task(_boot_task_reel())
 
     logger.info("BowersHub AI started successfully")
 

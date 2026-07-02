@@ -174,6 +174,17 @@ async def sync_simplefin(window_days: int = 14) -> dict:
             lines.append(f"  - {short}")
         lines.append("\n_Re-link these at https://beta-bridge.simplefin.org_")
 
+    # Surface the sync on the dashboard Task Reel (fire-and-forget). Re-auth
+    # needs land as a warning so the Action Center can pick them up later.
+    from backend.services.agent_logger import log_event
+    if conn_errors:
+        await log_event("simplefin", f"{len(conn_errors)} bank connection(s) need re-auth", level="warning")
+    await log_event(
+        "simplefin",
+        f"Synced {inserted} new transaction(s) across {len(account_updates)} account(s)",
+        level="success" if inserted else "info",
+    )
+
     return {
         "ok": True,
         "inserted": inserted,

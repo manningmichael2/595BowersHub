@@ -2,6 +2,7 @@ import { useDashboardStream } from '../../hooks/useDashboardStream'
 import { useDashboardStore } from '../../stores/dashboard'
 import { WidgetGrid } from './WidgetGrid'
 import DashboardNav from './DashboardNav'
+import { TaskReelWidget, type AgentEvent } from './TaskReelWidget'
 
 /**
  * Dashboard V2 — the same per-user widget layout as V1, but every widget is fed
@@ -17,6 +18,7 @@ export default function DashboardV2() {
   const availableWidgets = useDashboardStore((s) => s.availableWidgets)
 
   const widgets = layouts[activePage]?.widgets || []
+  const events = (widgetData.agent_events as AgentEvent[] | undefined) ?? []
 
   return (
     <div
@@ -34,6 +36,10 @@ export default function DashboardV2() {
       </div>
 
       <WidgetGrid widgets={widgets} availableWidgets={availableWidgets} streamData={widgetData} />
+
+      <div className="px-4 pb-4">
+        <TaskReelWidget events={events} />
+      </div>
     </div>
   )
 }

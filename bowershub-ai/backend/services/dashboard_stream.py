@@ -39,6 +39,16 @@ class DashboardStateCache:
             self.state[key] = value
             self.condition.notify_all()
 
+    async def append_event(self, event: Any, key: str = "agent_events", cap: int = 50):
+        """Prepend a newest-first event onto a bounded list in the cache and wake
+        subscribers. Used by the agent logger for the Task Reel."""
+        async with self.condition:
+            events = list(self.state.get(key, []))
+            events.insert(0, event)
+            del events[cap:]
+            self.state[key] = events
+            self.condition.notify_all()
+
     async def get_all(self) -> Dict[str, Any]:
         async with self.condition:
             return self.state.copy()

@@ -1663,3 +1663,21 @@ Owner green-lit executing the `dashboard-v2` spec (SSE Command Center). Discover
 
 **Branch `feat/dashboard-v2-phase1`** (off `main`); PR opened. NOT deployed.
 - [Next] Phase 2 (Tasks 4–6): `bh_agent_events` + `agent_logger`, interactive Task Reel, Action Center. Then Phase 3 (Hardware HUD, Generative UI). Admin redesign still needs its own `/spec` (owner to run). Dashboard/admin public-mirror screenshots still deferred until these land.
+
+## [2026-07-01] Dashboard V2 Phase 2 (Tasks 4–5) — agent events + interactive Task Reel — Claude Code
+
+Owner: "merge commit and deploy then continue" — merged PRs #64/#65/#66/#67 (logo, public-mirror tooling, design-system guards, dashboard-v2 Phase 1), deployed `bowershub-ai` to prod (this box IS the server, `100.106.180.101`; `scripts/deploy.sh bowershub-ai` = local `docker compose up -d --build`; code-only, no migration; container healthy, SSE publisher up), then continued into Phase 2.
+
+**Task 4 — agent-events model + logger:**
+- Migration **`0059_agent_events.sql`**: `bh_agent_events` (id, created_at, source, message, level CHECK, `action_payload` jsonb) + `created_at DESC` index. Additive/idempotent.
+- `services/agent_logger.py`: `log_event()` INSERTs + pushes onto the SSE cache (`DashboardStateCache.append_event`, newest-first, cap 50); `hydrate_recent()` seeds the cache on boot (lifespan, after a startup heartbeat). Fire-and-forget. **`created_at` stringified** — the SSE route `json.dumps`es the whole cache, which can't encode a datetime. Emitters wired into `categorizer.run_categorizer` + `simplefin_sync` completions (+ a re-auth-needed warning event).
+
+**Task 5 — interactive Task Reel:**
+- `TaskReelWidget.tsx` reads `widgetData.agent_events` (mounted in `DashboardV2` under the grid): level-colored dots, source, relative time, scrollable. `action_payload {label,endpoint,method,body}` → inline button that dispatches via the api client + toasts + "✓ Done". Verified end-to-end on a seeded stack (screenshot: live categorizer/simplefin/embedding events + a working Recategorize button).
+
+**Tests:** `test_agent_logger.py` (3, DB-backed) + `TaskReelWidget.test.tsx` (4). tsc clean; **383 frontend tests**; backend import sanity clean.
+
+**Verification gotcha (already known):** SSE keeps the connection open → Playwright `networkidle` never fires on `/dashboard`; capture with `domcontentloaded`+delay. Also: relative timestamps in the reel that looked "off" were just real wall-clock elapsed across a long session — host/DB clocks match, no bug.
+
+**Branch `feat/dashboard-v2-phase2`** (off `main`); PR opened.
+- [Next] **Task 6 — Action Center** (R2.1): cache-driven trigger logic in `dashboard_stream.py` (e.g. disk > 95%, uncategorized txns) → `actions` array → dismissible cards above the grid, hidden when empty. Then Phase 3 (Hardware HUD, Generative UI).
