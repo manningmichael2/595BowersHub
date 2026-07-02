@@ -1705,3 +1705,17 @@ Owner: "merge as you go. proceed to task 7 too." Merged Phase 2 (#68 Tasks 4–5
 - **Tests:** `test_task_registry.py` (5, incl. a monkeypatched-CPU strain assertion) + `SystemHealthWidget.test.tsx` (3). 390 frontend tests; tsc clean; import sanity clean.
 
 - [Next] Merge this (Task 7). Then **Task 8 — Generative UI** (`render_dashboard_widget` LLM tool → ephemeral `bh_dashboard_layouts` layout → SSE layout push → `DynamicWidgetRenderer`) = the last dashboard-v2 task. Then the whole of dashboard-v2 is done; **owner still needs to (a) approve the prod deploy of Phases 2–3, (b) run `/spec admin-redesign`.**
+
+## [2026-07-02] Dashboard V2 Task 8 — Generative UI (LLM-rendered widgets) — DONE — Claude Code
+
+Final dashboard-v2 task. Owner: "task 8". Branch `feat/dashboard-v2-generative-ui` (off main).
+
+- `DynamicWidgetRenderer.tsx`: renders a strict spec — `metric` / `list` / `bar` (proportional bars); TS shape mirrors the server validator; unsupported → fallback, never throws.
+- LLM tool `render_dashboard_widget` in `tool_router.get_l3_tools()` + dispatched in `execute_l3_tool` (has `user_id`). Validates via `generated_widgets.validate_spec`; bad spec → friendly message.
+- `services/generated_widgets.py`: validate + per-user persist to `bh_dashboard_layouts` page `_generated` (bounded 3, newest-first); `GET /api/dashboard/generated` + `DELETE /…/{id}`.
+- **Scoping-safe live display** (key design call): the global SSE stream must stay household-global (`_SYSTEM_CTX` invariant), but generated widgets are per-user. So the tool bumps a GLOBAL `layout_epoch` on the SSE cache (not user data); `DashboardV2`'s `GeneratedWidgets` refetches its OWN `/generated` whenever the epoch changes. Deviation from the spec's literal "ephemeral layout in the stream," made deliberately to preserve the invariant.
+- **Verified end-to-end** (seeded stack: a generated bar chart + a metric widget render with dismiss buttons).
+- **Tests:** `test_generated_widgets.py` (11) + `DynamicWidgetRenderer.test.tsx` (4). 394 frontend tests; tsc clean; import sanity clean (tool registered).
+
+**dashboard-v2 is now COMPLETE (all 8 tasks, Phases 1–3).** No migration in Task 8 (reuses `bh_dashboard_layouts`).
+- [Next] Merge this; deploy (owner-approved deploys). Then dashboard-v2 is fully shipped. Remaining big items: **admin redesign** (needs its own `/spec`), and the finance north-star. Task 8 follow-ups if wanted: richer spec types (line/area chart), and letting generated widgets live in the normal grid (currently a dedicated section above the grid).

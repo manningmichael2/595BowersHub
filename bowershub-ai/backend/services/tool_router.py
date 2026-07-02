@@ -371,6 +371,33 @@ def get_l3_tools() -> list[dict]:
                 "required": ["action"],
             },
         },
+        {
+            "name": "render_dashboard_widget",
+            "description": (
+                "Pin a small custom widget to the user's dashboard, built from data you've gathered. "
+                "Use when the user asks to show/pin/add something to their dashboard, or wants an at-a-glance "
+                "visual they can keep. It appears on their dashboard immediately. Pick the shape: "
+                "'metric' (one big number + caption), 'list' (short bullet list), or 'bar' (labeled values as bars)."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["metric", "list", "bar"], "description": "Widget shape"},
+                    "title": {"type": "string", "description": "Widget title"},
+                    "value": {"type": "string", "description": "metric: the big value, e.g. '$1,240' or '87%'"},
+                    "label": {"type": "string", "description": "metric: caption under the value"},
+                    "delta": {"type": "string", "description": "metric: optional change, e.g. '+3.2% vs last month'"},
+                    "delta_positive": {"type": "boolean", "description": "metric: is the delta good (green) vs bad (red)"},
+                    "items": {"type": "array", "items": {"type": "string"}, "description": "list: the bullet items"},
+                    "rows": {
+                        "type": "array",
+                        "items": {"type": "object", "properties": {"label": {"type": "string"}, "value": {"type": "number"}}},
+                        "description": "bar: labeled numeric rows",
+                    },
+                },
+                "required": ["type", "title"],
+            },
+        },
     ]
 
 
@@ -452,5 +479,15 @@ async def execute_l3_tool(tool_name: str, tool_input: dict, user_id: Optional[in
         else:
             result = await get_list(list_name or "")
         return result.get("_display", json.dumps(result))
+
+    elif tool_name == "render_dashboard_widget":
+        if not user_id:
+            return "I can't pin a dashboard widget without a signed-in user."
+        from backend.services.generated_widgets import upsert_generated
+        try:
+            await upsert_generated(user_id, tool_input)
+        except ValueError as e:
+            return f"I couldn't build that widget: {e}"
+        return f"✅ Pinned '{tool_input.get('title', 'widget')}' to your dashboard."
 
     return f"Unknown tool: {tool_name}"

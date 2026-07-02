@@ -228,6 +228,23 @@ async def list_widgets(user: dict = Depends(get_current_user)) -> list[dict[str,
     return [dict(r) for r in rows]
 
 
+# ---- Generative UI: LLM-produced ephemeral widgets (per-user) ----------------
+
+@router.get("/generated")
+async def get_generated_widgets(user: dict = Depends(get_current_user)) -> list[dict[str, Any]]:
+    """The signed-in user's LLM-generated widgets (Dashboard V2 Task 8)."""
+    from backend.services.generated_widgets import list_generated
+    return await list_generated(user["id"])
+
+
+@router.delete("/generated/{widget_id}")
+async def delete_generated_widget(widget_id: str, user: dict = Depends(get_current_user)) -> dict[str, bool]:
+    """Dismiss one generated widget for the signed-in user."""
+    from backend.services.generated_widgets import remove_generated
+    await remove_generated(user["id"], widget_id)
+    return {"ok": True}
+
+
 @router.get("/layouts")
 async def get_layouts(user: dict = Depends(get_current_user)) -> dict[str, Any]:
     """
