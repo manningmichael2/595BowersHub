@@ -1,5 +1,6 @@
 import { Menu, Search } from 'lucide-react'
 import { useUIStore } from '../../stores/ui'
+import { Logo } from '../ui/Logo'
 
 interface MobileTopBarProps {
   onMenuClick: () => void
@@ -36,6 +37,7 @@ export default function MobileTopBar({ onMenuClick }: MobileTopBarProps) {
         >
           <Menu size={20} aria-hidden />
         </button>
+        <Logo size={22} className="shrink-0" />
         <span className="text-sm font-semibold text-text">BowersHub</span>
       </div>
 

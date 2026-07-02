@@ -6,6 +6,7 @@ import { isNavItemVisible } from '../../lib/featureNav'
 import { NAV_ITEMS, TOOL_ITEMS } from '../../lib/navItems'
 import { useAuthStore } from '../../stores/auth'
 import { cn } from '../ui/cn'
+import { Logo } from '../ui/Logo'
 
 interface NavDrawerProps {
   open: boolean
@@ -63,7 +64,10 @@ export default function NavDrawer({ open, onOpenChange }: NavDrawerProps) {
         <SheetTitle>Navigation</SheetTitle>
 
         <div className="flex h-11 shrink-0 items-center justify-between px-4">
-          <span className="text-sm font-semibold text-text">BowersHub</span>
+          <div className="flex items-center gap-2">
+            <Logo size={22} className="shrink-0" />
+            <span className="text-sm font-semibold text-text">BowersHub</span>
+          </div>
           <SheetClose
             aria-label="Close navigation"
             className="rounded-md p-1 text-text-muted transition-colors hover:bg-surface-light hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
