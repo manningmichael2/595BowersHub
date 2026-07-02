@@ -7,6 +7,7 @@ import { WidgetInstance, WidgetType, useDashboardStore } from '../../stores/dash
 import { getWidgetComponent } from './WidgetRegistry'
 import WidgetShell from './WidgetShell'
 import { useDashboardWidget } from '../../hooks/useDashboardWidget'
+import { endpointToStreamKey } from './streamKey'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -15,6 +16,12 @@ interface WidgetGridProps {
   availableWidgets: WidgetType[]
   editMode?: boolean
   onRemove?: (widgetKey: string) => void
+  /**
+   * When provided (Dashboard V2), widgets read their data from this SSE cache
+   * keyed by stream key instead of each polling its own endpoint. Absent →
+   * legacy per-widget polling (V1).
+   */
+  streamData?: Record<string, unknown>
 }
 
 // Default sizes for widget types (w in grid units out of 6, h in grid units)
@@ -34,9 +41,18 @@ const DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
   news: { w: 2, h: 3 },
 }
 
-function WidgetCard({ instance, widgetDef, editMode, onRemove }: {
+/** Presentational card shell — data-source-agnostic (fed by polling or stream). */
+function WidgetBody({
+  instance, widgetDef, data, error, isLoading, isStale, lastFetched, onRefresh, editMode, onRemove,
+}: {
   instance: WidgetInstance
   widgetDef: WidgetType
+  data: unknown
+  error: string | null
+  isLoading: boolean
+  isStale: boolean
+  lastFetched: Date | null
+  onRefresh?: () => void
   editMode: boolean
   onRemove?: (key: string) => void
 }) {
@@ -45,11 +61,6 @@ function WidgetCard({ instance, widgetDef, editMode, onRemove }: {
 
   const Component = definition.component
   const config = { ...widgetDef.default_config, ...instance.config_overrides }
-  const pollingInterval = config.polling_interval_ms || 60000
-  const { data, error, isLoading, isStale, lastFetched, refresh } = useDashboardWidget({
-    endpoint: widgetDef.data_endpoint,
-    pollingInterval,
-  })
 
   return (
     <div className="h-full relative overflow-hidden">
@@ -69,7 +80,7 @@ function WidgetCard({ instance, widgetDef, editMode, onRemove }: {
         error={error}
         isStale={isStale}
         lastFetched={lastFetched}
-        onRefresh={refresh}
+        onRefresh={onRefresh}
       >
         <Suspense fallback={<div className="animate-pulse h-16 rounded" style={{ backgroundColor: 'var(--color-surface)' }} />}>
           <Component config={config} widgetDef={widgetDef} data={data} />
@@ -79,7 +90,28 @@ function WidgetCard({ instance, widgetDef, editMode, onRemove }: {
   )
 }
 
-export function WidgetGrid({ widgets, availableWidgets, editMode = false, onRemove }: WidgetGridProps) {
+/** V1: each widget polls its own endpoint. */
+function PollingWidgetCard(props: { instance: WidgetInstance; widgetDef: WidgetType; editMode: boolean; onRemove?: (key: string) => void }) {
+  const { instance, widgetDef } = props
+  const config = { ...widgetDef.default_config, ...instance.config_overrides }
+  const pollingInterval = config.polling_interval_ms || 60000
+  const { data, error, isLoading, isStale, lastFetched, refresh } = useDashboardWidget({
+    endpoint: widgetDef.data_endpoint,
+    pollingInterval,
+  })
+  return <WidgetBody {...props} data={data} error={error} isLoading={isLoading} isStale={isStale} lastFetched={lastFetched} onRefresh={refresh} />
+}
+
+/** V2: widget data comes from the shared SSE cache — no per-widget request. */
+function StreamWidgetCard(props: { instance: WidgetInstance; widgetDef: WidgetType; editMode: boolean; onRemove?: (key: string) => void; streamData: Record<string, unknown> }) {
+  const { widgetDef, streamData } = props
+  const data = streamData[endpointToStreamKey(widgetDef.data_endpoint)]
+  // Undefined = the publisher hasn't produced this key yet (pre-hydration);
+  // the widget's own `!data` branch renders its loading state.
+  return <WidgetBody {...props} data={data} error={null} isLoading={data === undefined} isStale={false} lastFetched={null} />
+}
+
+export function WidgetGrid({ widgets, availableWidgets, editMode = false, onRemove, streamData }: WidgetGridProps) {
   const widgetDefMap = useMemo(() => new Map(availableWidgets.map((w) => [w.widget_key, w])), [availableWidgets])
   const { reorderWidgets, activePage } = useDashboardStore()
 
@@ -138,12 +170,9 @@ export function WidgetGrid({ widgets, availableWidgets, editMode = false, onRemo
           return (
             <div key={instance.widget_key} className={editMode ? 'ring-1 ring-[var(--color-primary)] rounded-lg' : ''} style={{ overflow: 'hidden' }}>
               <div className="h-full w-full">
-                <WidgetCard
-                  instance={instance}
-                  widgetDef={widgetDef}
-                  editMode={editMode}
-                  onRemove={onRemove}
-                />
+                {streamData
+                  ? <StreamWidgetCard instance={instance} widgetDef={widgetDef} editMode={editMode} onRemove={onRemove} streamData={streamData} />
+                  : <PollingWidgetCard instance={instance} widgetDef={widgetDef} editMode={editMode} onRemove={onRemove} />}
               </div>
             </div>
           )

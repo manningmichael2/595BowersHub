@@ -1632,3 +1632,20 @@ Owner: "continue updating the GitHub documentation ... screenshots will need to 
 - **Dashboard + admin deliberately omitted** — owner: "we need to redo that anyway ... dashboards and admin settings both need to be redone." The dashboard also pulls live host data (docker container list, news) unfit for a public README.
 - Cleanup: isolated backend stopped, `bh_shots` dropped, staged `bowershub-ai/static/` build artifact removed.
 - [Next] Redo dashboard + admin views (redesign pending), then recapture those two.
+
+## [2026-07-01] Dashboard V2 Phase 1 — real SSE-fed dashboard UI (was a stub) — Claude Code
+
+Owner green-lit executing the `dashboard-v2` spec (SSE Command Center). Discovered Phase 1 (Tasks 1–3) was **already built but unlogged on `main`** — the SSE plumbing all existed (`services/dashboard_stream.py` cache+publisher wired into lifespan, `GET /api/dashboard/stream`, `hooks/useDashboardStream.ts`, the `use_experimental_dashboard` opt-in flag + Settings toggle) — but `DashboardV2.tsx` was a **23-line status stub** ("🟢 Connected / N keys in cache"), not a dashboard. (This is the 4th time this session a spec's checkboxes were stale vs. reality — verify code, not boxes.)
+
+**Built the real Phase 1 UI:**
+- `DashboardV2.tsx` → the actual per-user widget grid fed by the stream: `DashboardNav` tabs + `WidgetGrid` + a "● Live" SSE-status pill. Verified end-to-end on a seeded throwaway stack (weather/finance/containers/sports/news widgets render live from the single stream; the green Live pill confirms the SSE connection).
+- `WidgetGrid.tsx` parameterized with an optional `streamData` prop — extracted a shared `WidgetBody`; V1 path = `PollingWidgetCard` (per-widget `useDashboardWidget`, unchanged), V2 = `StreamWidgetCard` (reads `streamData[key]`, no request). Key mapping in `streamKey.ts` (`endpointToStreamKey`: `/api/dashboard/finance/recent-transactions` → `finance_recent_transactions`, `system-health` → `system_health`, …).
+- `WidgetShell.onRefresh` made optional (stream widgets have no per-widget refresh → the ↻ button hides).
+- **Scoping hardened (owner-approved item):** confirmed NOT a live bug — all 13 dashboard data endpoints return household-global data (system stats, single household IMAP, finance over shared `real_activity`); none filter by caller. Renamed the publisher's `_mock_user={"id":0}` → `_SYSTEM_CTX` with an INVARIANT comment: no per-user endpoint may join the global publisher (a per-user widget must be fetched per-connection in the stream generator). Per-user *layout* still comes from the store's own endpoint.
+
+**Gotcha logged:** the SSE stream keeps the connection open, so Playwright `waitUntil:'networkidle'` never fires on `/dashboard` — capture with `domcontentloaded`+delay instead.
+
+**Tests:** `streamKey.test.ts` (14 — all 13 endpoint→cache-key mappings + idempotency). tsc clean; **369 frontend tests** green; build green.
+
+**Branch `feat/dashboard-v2-phase1`** (off `main`); PR opened. NOT deployed.
+- [Next] Phase 2 (Tasks 4–6): `bh_agent_events` + `agent_logger`, interactive Task Reel, Action Center. Then Phase 3 (Hardware HUD, Generative UI). Admin redesign still needs its own `/spec` (owner to run). Dashboard/admin public-mirror screenshots still deferred until these land.

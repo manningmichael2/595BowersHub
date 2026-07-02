@@ -43,7 +43,17 @@ class DashboardStateCache:
         async with self.condition:
             return self.state.copy()
 
-_mock_user = {"id": 0}
+# The publisher writes ONE shared cache that the stream serves to every
+# connected user. That is correct only because every dashboard data endpoint
+# below returns household-global data — none filter by the caller (system stats,
+# containers, weather/news, the single household IMAP inbox, and finance over
+# the shared `real_activity`). This sentinel context is passed as `user` but is
+# intentionally unused by those endpoints.
+#
+# INVARIANT: do NOT add a per-user endpoint to this global publisher. A widget
+# whose data varies by user must be fetched per-connection in the stream
+# generator (which has the real authenticated `user`), not cached globally here.
+_SYSTEM_CTX = {"id": 0, "email": "system@dashboard", "role": "system"}
 
 async def _poll_endpoint(cache: DashboardStateCache, key: str, func, interval: float):
     """Generic polling wrapper for dashboard endpoints."""
@@ -52,7 +62,7 @@ async def _poll_endpoint(cache: DashboardStateCache, key: str, func, interval: f
     
     while True:
         try:
-            data = await func(user=_mock_user)
+            data = await func(user=_SYSTEM_CTX)
             await cache.update(key, data)
         except Exception as e:
             logger.error(f"Error polling {key} for dashboard stream: {e}")
