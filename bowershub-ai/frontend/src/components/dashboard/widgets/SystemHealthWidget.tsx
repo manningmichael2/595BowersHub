@@ -37,10 +37,21 @@ function Bar({ percent, label, detail }: { percent: number; label: string; detai
 export default function SystemHealthWidget({ data }: WidgetProps) {
   if (!data) return <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>No data</div>
 
-  const h = data as { cpu_percent: number; memory: { used_bytes: number; total_bytes: number; percent: number }; disk: { mount: string; used_bytes: number; total_bytes: number; percent: number }[]; uptime_seconds: number; errors?: Record<string, string> }
+  const h = data as { cpu_percent: number; memory: { used_bytes: number; total_bytes: number; percent: number }; disk: { mount: string; used_bytes: number; total_bytes: number; percent: number }[]; uptime_seconds: number; strain?: { cpu_percent: number; culprit: string | null }; errors?: Record<string, string> }
 
   return (
     <div className="flex flex-col gap-3">
+      {h.strain && (
+        <div
+          className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium"
+          style={{ backgroundColor: 'rgb(var(--color-danger-rgb) / 0.12)', color: 'var(--color-danger)' }}
+        >
+          <span aria-hidden>⚡</span>
+          <span>
+            High load{h.strain.culprit ? <> — <strong>{h.strain.culprit}</strong></> : ''}
+          </span>
+        </div>
+      )}
       <Bar percent={h.cpu_percent} label="CPU" detail={`${h.cpu_percent.toFixed(1)}%`} />
       {h.memory && <Bar percent={h.memory.percent} label="Memory" detail={`${formatBytes(h.memory.used_bytes)} / ${formatBytes(h.memory.total_bytes)}`} />}
       {h.disk?.map((d) => <Bar key={d.mount} percent={d.percent} label={`Disk ${d.mount}`} detail={`${formatBytes(d.used_bytes)} / ${formatBytes(d.total_bytes)}`} />)}

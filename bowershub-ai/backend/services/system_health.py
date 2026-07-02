@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 # Mount points to check for disk usage
 DISK_MOUNT_POINTS = ["/", "/files", "/knowledge"]
 
+# CPU% at/above which the Hardware HUD reports the straining background task.
+STRAIN_CPU_PCT = 90.0
+
 
 async def _read_cpu_percent() -> float:
     """
@@ -168,5 +171,17 @@ async def get_system_health() -> dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to read uptime: {e}")
         result["errors"]["uptime"] = str(e)
+
+    # Hardware HUD (Dashboard V2 Task 7): when the box is pegged, correlate the
+    # load to whichever heavy background job is running so the UI can name the
+    # culprit ("Embedding worker backfill") instead of just showing a red bar.
+    if result["cpu_percent"] >= STRAIN_CPU_PCT:
+        from backend.services.task_registry import active_tasks
+        tasks = active_tasks()
+        result["strain"] = {
+            "cpu_percent": result["cpu_percent"],
+            "culprit": tasks[0]["name"] if tasks else None,
+            "active_tasks": tasks,
+        }
 
     return result

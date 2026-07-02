@@ -24,6 +24,7 @@ import httpx
 from backend.http_client import get_http_client
 
 from ..database import get_pool
+from backend.services.task_registry import tracked
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ BATCH_SIZE = 50
 MAX_TRANSACTIONS = 500
 
 
+@tracked("Categorizer")
 async def run_categorizer() -> dict:
     """
     Main entry point, dispatched by the `categorizer_engine` feature-gate

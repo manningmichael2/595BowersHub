@@ -275,6 +275,10 @@ class EmbeddingWorker:
 
 
 # Helper to be called by apscheduler
+from backend.services.task_registry import tracked
+
+
+@tracked("Embedding worker")
 async def run_embedding_worker():
     """Singleton-like runner for the EmbeddingWorker."""
     try:

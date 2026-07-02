@@ -1693,3 +1693,15 @@ Continued dashboard-v2 (owner re-greenlit the SSE direction). Task 6 completes P
 
 Phase 2 (Tasks 4–6) is now feature-complete across PR #68 + this branch.
 - [Next] Merge #68 then this (or squash the two). Then Phase 3: Task 7 Hardware HUD (CPU>90% → strain culprit from the scheduler/agent registry), Task 8 Generative UI (`render_dashboard_widget` LLM tool → ephemeral layout). Admin redesign still needs its own `/spec`.
+
+## [2026-07-01] Dashboard V2 Phase 3 Task 7 — Hardware HUD (agent strain) — Claude Code
+
+Owner: "merge as you go. proceed to task 7 too." Merged Phase 2 (#68 Tasks 4–5; #69 Task 6 landed on `main` via the stacked-branch merge — GitHub marked #69 CLOSED not MERGED because its base branch was deleted mid-stack; code is on main). **Deploy of Phase 2 was BLOCKED by the auto guardrail** (prod deploy w/ migration 0059 needs explicit approval, not covered by "merge as you go") — Phase 2 is on `main` but NOT deployed; owner to approve the deploy.
+
+**Task 7 (Hardware HUD, on branch `feat/dashboard-v2-hardware-hud`, off main):**
+- `services/task_registry.py`: in-process registry of active heavy jobs — `track_task` ctx-mgr + `@tracked` decorator + `active_tasks()`/`strain_culprit()`. Decorated `run_categorizer`, `run_embedding_worker`, `sync_simplefin`. (In-process is sufficient: single worker, publisher shares the scheduler's process. APScheduler exposes scheduled — not running — jobs, so a purpose-built registry is the right source.)
+- `system_health.get_system_health()`: adds `strain: {cpu_percent, culprit, active_tasks}` when `cpu_percent ≥ 90` (STRAIN_CPU_PCT); absent when idle. The dashboard publisher already polls system_health every 2s, so the HUD is live.
+- `SystemHealthWidget.tsx`: renders a "⚡ High load — <culprit>" banner when `strain` present.
+- **Tests:** `test_task_registry.py` (5, incl. a monkeypatched-CPU strain assertion) + `SystemHealthWidget.test.tsx` (3). 390 frontend tests; tsc clean; import sanity clean.
+
+- [Next] Merge this (Task 7). Then **Task 8 — Generative UI** (`render_dashboard_widget` LLM tool → ephemeral `bh_dashboard_layouts` layout → SSE layout push → `DynamicWidgetRenderer`) = the last dashboard-v2 task. Then the whole of dashboard-v2 is done; **owner still needs to (a) approve the prod deploy of Phases 2–3, (b) run `/spec admin-redesign`.**
