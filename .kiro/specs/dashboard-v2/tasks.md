@@ -4,26 +4,31 @@
 
 ## Phase 1: Core Plumbing (SSE Stream)
 
+> **Phase 1 status (2026-07-01):** DONE. The SSE plumbing (Tasks 1–3) existed
+> unlogged on `main`, but `DashboardV2` was a status-only stub. This pass built
+> the real V2 UI (per-user layout fed by the stream), hardened the publisher
+> scoping, and verified end-to-end (streamed widgets render live, "● Live" pill).
+
 ### Task 1: Opt-In Configuration
 - **Effort:** S
 - **Requirements:** R1.5
-- [ ] Add `use_experimental_dashboard` to the frontend `SettingsSchema` and `useSettingsStore`.
-- [ ] Update `DashboardPage.tsx` to read the setting: render `<DashboardV2 />` if true, fallback to the existing `<WidgetGrid />` if false.
+- [x] Add `use_experimental_dashboard` to the frontend `SettingsSchema` and `useSettingsStore` (present + `settings.py` PATCH field + Settings toggle).
+- [x] Update `DashboardPage.tsx` to read the setting: render `<DashboardV2 />` if true, fallback to the existing `<WidgetGrid />` if false.
 
 ### Task 2: Backend SSE Stream Engine
 - **Effort:** M
 - **Requirements:** R1.1, R1.2, R1.3
-- [ ] Create `backend/services/dashboard_stream.py`. Implement a singleton `DashboardStateCache` to hold the latest widget data.
-- [ ] Implement an `asyncio` background publisher loop that polls existing data functions (e.g., `get_system_health()`) and updates the cache.
-- [ ] Create `GET /api/dashboard/stream` returning a FastAPI `EventSourceResponse` (via `sse-starlette` or custom generator) that immediately yields the cache (Hydration) and then yields updates via `asyncio.Queue` or `Condition` variables.
-- [ ] Wire the background loop into `main.py`'s lifespan.
+- [x] Create `backend/services/dashboard_stream.py` — singleton `DashboardStateCache` (asyncio `Condition`-backed).
+- [x] `asyncio` background publisher loop polls the 13 dashboard data functions on staggered schedules → cache. **Scoping hardened this pass:** the shared cache is correct only because every dashboard endpoint returns household-global data (verified — none filter by caller); the `_SYSTEM_CTX` sentinel documents + guards that invariant (no per-user endpoint may join the global publisher).
+- [x] `GET /api/dashboard/stream` — custom `StreamingResponse` generator: immediate hydration event, then `Condition`-driven update events (1 s disconnect poll).
+- [x] Wired into `main.py` lifespan (`start_/stop_dashboard_stream_loop`).
 
 ### Task 3: Frontend SSE Subscriber & Resilience
 - **Effort:** M
 - **Requirements:** R1.4
-- [ ] Create a new hook `useDashboardStream.ts` that uses the native `EventSource` API.
-- [ ] Implement `visibilitychange` event listeners in the hook to `close()` the EventSource when hidden and recreate it when visible.
-- [ ] Update the `useDashboardStore` to accept data pushed from the hook instead of managing its own `setInterval` fetch loops.
+- [x] `useDashboardStream.ts` — streams via `fetch`+`ReadableStream` (Authorization header; native `EventSource` can't send it), parses `data:` frames into `widgetData`.
+- [x] `visibilitychange` closes the stream when hidden, reconnects + re-hydrates when visible.
+- [x] Widget data now flows from the stream, not per-widget polling: `WidgetGrid` gained a `streamData` prop (V2 renders `StreamWidgetCard`, keyed via `endpointToStreamKey`); `useDashboardStore` keeps owning the per-user *layout* only. `DashboardV2` is now the real streamed grid + `DashboardNav` + a "● Live" indicator (was a status stub). Verified end-to-end on a seeded stack. tsc clean; 369 frontend tests + 14 new `streamKey` cases.
 
 ---
 

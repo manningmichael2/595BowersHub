@@ -8,7 +8,9 @@ export interface WidgetShellProps {
   error: string | null
   isStale: boolean
   lastFetched: Date | null
-  onRefresh: () => void
+  /** Manual refresh. Omitted for stream-fed widgets (V2), which have no
+   *  per-widget fetch — the refresh control is then hidden. */
+  onRefresh?: () => void
   children: React.ReactNode
 }
 
@@ -70,7 +72,7 @@ function ErrorState({ message }: { message: string }) {
 
 interface WidgetErrorBoundaryProps {
   children: React.ReactNode
-  onRetry: () => void
+  onRetry?: () => void
 }
 
 interface WidgetErrorBoundaryState {
@@ -106,7 +108,7 @@ class WidgetErrorBoundary extends React.Component<
           <button
             onClick={() => {
               this.setState({ hasError: false })
-              this.props.onRetry()
+              this.props.onRetry?.()
             }}
             className="min-h-[44px] min-w-[44px] rounded-md px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
             style={{
@@ -157,14 +159,16 @@ function WidgetShell({
 
         {isStale && <StaleBadge lastFetched={lastFetched} />}
 
-        <button
-          onClick={onRefresh}
-          aria-label={`Refresh ${displayName}`}
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-lg transition-opacity hover:opacity-70"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          ↻
-        </button>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            aria-label={`Refresh ${displayName}`}
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-lg transition-opacity hover:opacity-70"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            ↻
+          </button>
+        )}
       </div>
 
       {/* Body */}
