@@ -4,6 +4,7 @@ import { WidgetGrid } from './WidgetGrid'
 import DashboardNav from './DashboardNav'
 import { TaskReelWidget, type AgentEvent } from './TaskReelWidget'
 import { ActionCenter, type DashboardAction } from './ActionCenter'
+import { GeneratedWidgets } from './GeneratedWidgets'
 
 /**
  * Dashboard V2 — the same per-user widget layout as V1, but every widget is fed
@@ -21,6 +22,7 @@ export default function DashboardV2() {
   const widgets = layouts[activePage]?.widgets || []
   const events = (widgetData.agent_events as AgentEvent[] | undefined) ?? []
   const actions = (widgetData.actions as DashboardAction[] | undefined) ?? []
+  const layoutEpoch = Number(widgetData.layout_epoch ?? 0)
 
   return (
     <div
@@ -38,6 +40,8 @@ export default function DashboardV2() {
       </div>
 
       <ActionCenter actions={actions} />
+
+      <GeneratedWidgets epoch={layoutEpoch} />
 
       <WidgetGrid widgets={widgets} availableWidgets={availableWidgets} streamData={widgetData} />
 

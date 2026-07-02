@@ -70,9 +70,12 @@
 - [x] `SystemHealthWidget.tsx` renders a "⚡ High load — <culprit>" banner when `strain` is present (generic when no culprit is tracked).
 - [x] **Tests:** `test_task_registry.py` (5 — add/remove, decorator, exception-safety, strain-when-pegged via CPU monkeypatch, no-strain-when-idle) + `SystemHealthWidget.test.tsx` (3 — culprit banner, generic banner, none when idle). 390 frontend tests; tsc clean.
 
-### Task 8: Generative UI Rendering Pipeline
+### Task 8: Generative UI Rendering Pipeline — DONE (2026-07-02)
 - **Effort:** H
 - **Requirements:** R2.5
-- [ ] Build a `<DynamicWidgetRenderer />` component in the frontend capable of taking a strict JSON schema (e.g., defining a simple chart, a list, or a metric block) and rendering it.
-- [ ] Add a new LLM tool (`render_dashboard_widget`) to the `router_engine.py` context.
-- [ ] When the LLM calls the tool, save the generated widget JSON to `bh_dashboard_layouts` under a special "ephemeral" layout, triggering an SSE layout update to instantly display the generated UI to the user.
+- [x] `DynamicWidgetRenderer.tsx` renders a strict spec — `metric` (big value + caption + colored delta), `list` (bullets), `bar` (labeled proportional bars); unsupported types render a fallback, never throw. TS shape mirrors the server validator.
+- [x] LLM tool `render_dashboard_widget` added to `tool_router.get_l3_tools()` + dispatched in `execute_l3_tool` (which already carries `user_id`). Validates via `generated_widgets.validate_spec` and returns a friendly message on bad specs.
+- [x] Persisted per-user in `bh_dashboard_layouts` under the reserved `_generated` page (bounded to 3, newest-first); served by `GET /api/dashboard/generated` (+ `DELETE /…/{id}` to dismiss). **Scoping-safe live display:** the tool bumps a *global* `layout_epoch` on the SSE cache (not user data), and `DashboardV2`'s `GeneratedWidgets` refetches its OWN `/generated` on each epoch change — so the household-global stream never carries per-user widgets (upholds the `_SYSTEM_CTX` invariant). Deviation from the spec's literal "ephemeral layout in the stream," made to preserve that invariant.
+- [x] **Verified end-to-end** on a seeded stack (screenshot: a generated bar chart + a metric widget render with dismiss buttons).
+- [x] **Tests:** `test_generated_widgets.py` (11 — validate metric/list/bar, reject 6 bad specs, truncation/junk-drop, upsert/list/remove + epoch bump + per-user scoping, cap-keeps-newest) + `DynamicWidgetRenderer.test.tsx` (4 — metric/list/bar + fallback). 394 frontend tests; tsc clean.
+- **Note:** placed the tool in `tool_router` (the actual L3 tool registry), not `router_engine` as the spec said — that's where `get_l3_tools`/`execute_l3_tool` live.
